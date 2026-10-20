@@ -1,0 +1,38 @@
+# Build
+engine/build/
+build/
+*.o
+*.a
+*.dylib
+*.so
+*.xcframework/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# Flutter / Dart
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Dữ liệu audio có bản quyền – KHÔNG commit
+datasets/private/
+*.wav
+*.mp3
+*.m4a
+!engine/tests/golden/**/*.wav
+
+# FVM Version Cache
+.fvm/

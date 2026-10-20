@@ -1,0 +1,66 @@
+name: engine
+
+on:
+  push:
+    paths: ["engine/**", ".github/workflows/engine.yml"]
+  pull_request:
+    paths: ["engine/**", ".github/workflows/engine.yml"]
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, ${{ matrix.preset }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, preset: host }
+          - { os: ubuntu-24.04, preset: host-asan }
+          - { os: ubuntu-24.04, preset: host-ubsan }
+          - { os: ubuntu-24.04, preset: host-tsan }
+          - { os: macos-15, preset: host }
+    env:
+      CC: clang
+      CXX: clang++
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cài Ninja
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then sudo apt-get update && sudo apt-get install -y ninja-build; else brew install ninja; fi
+      - name: Sửa entropy ASLR cho ThreadSanitizer (Ubuntu 24.04)
+        if: matrix.preset == 'host-tsan'
+        run: sudo sysctl vm.mmap_rnd_bits=28
+      - name: Configure
+        working-directory: engine
+        run: cmake --preset ${{ matrix.preset }}
+      - name: Build
+        working-directory: engine
+        run: cmake --build --preset ${{ matrix.preset }}
+      - name: Test
+        working-directory: engine
+        run: ctest --preset ${{ matrix.preset }}
+
+  bench:
+    runs-on: ubuntu-24.04
+    env:
+      CC: clang
+      CXX: clang++
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - working-directory: engine
+        run: |
+          cmake --preset host-release
+          cmake --build --preset host-release
+          ./build/host-release/bench/tonecore_bench --benchmark_min_time=0.1s --benchmark_format=console | tee bench.txt
+      - uses: actions/upload-artifact@v4
+        with: { name: bench-linux, path: engine/bench.txt }
+
+  format:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: clang-format
+        run: |
+          find engine/src engine/include engine/tests engine/bench -name '*.h' -o -name '*.cpp' -o -name '*.c' \
+            | xargs clang-format --dry-run --Werror

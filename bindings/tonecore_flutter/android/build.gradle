@@ -1,0 +1,56 @@
+// Gradle build engine ToneCore bằng NDK + CMake, đóng gói libtonecore.so vào APK.
+
+group = "vn.chuantone.tonecore_flutter"
+version = "0.1.0"
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath("com.android.tools.build:gradle:9.1.0")
+    }
+}
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+apply plugin: "com.android.library"
+
+android {
+    namespace = "vn.chuantone.tonecore_flutter"
+    compileSdk = 36
+
+    // NDK do app khai báo (app/android/app/build.gradle.kts).
+    ndkVersion = android.ndkVersion
+
+    externalNativeBuild {
+        cmake {
+            // Dùng thẳng CMakeLists của engine – không sao chép mã nguồn.
+            path = "../../../engine/CMakeLists.txt"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        minSdk = 28 // Android 9
+
+        externalNativeBuild {
+            cmake {
+                targets "tonecore"
+                arguments "-DANDROID_STL=c++_static", "-DTC_BUILD_TESTS=OFF"
+                cppFlags "-fexceptions"
+            }
+        }
+    }
+}

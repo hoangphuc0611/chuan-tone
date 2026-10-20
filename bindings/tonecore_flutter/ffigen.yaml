@@ -1,0 +1,36 @@
+# Sinh binding từ C API. Chạy: fvm dart run ffigen --config ffigen.yaml
+name: ToneCoreBindings
+description: Binding sinh tự động cho ToneCore C API. KHÔNG sửa tay – sửa engine/include/tonecore/tonecore.h rồi sinh lại.
+output: lib/src/tonecore_bindings_generated.dart
+headers:
+  entry-points:
+    - ../../engine/include/tonecore/tonecore.h
+  include-directives:
+    - ../../engine/include/tonecore/tonecore.h
+functions:
+  include:
+    - tc_.*
+  symbol-address:
+    include:
+      - tc_engine_destroy
+structs:
+  include:
+    - tc_.*
+enums:
+  as-int:
+    include:
+      - .*
+macros:
+  include:
+    - TC_API_VERSION.*
+preamble: |
+  // ignore_for_file: always_specify_types, camel_case_types, non_constant_identifier_names, unused_field
+comments:
+  style: any
+  length: full
+# libclang: ffigen thử lần lượt các đường dẫn (Command Line Tools, Xcode, Linux CI).
+llvm-path:
+  - /Library/Developer/CommandLineTools/usr
+  - /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr
+  - /usr/lib/llvm-18
+  - /usr/lib/llvm-17
