@@ -43,10 +43,23 @@ class _LatencyPageState extends State<LatencyPage> {
   }
 
   Future<void> _init() async {
-    await _service.ensureStarted();
-    await _loadDevice();
-    final prefs = await SharedPreferences.getInstance();
-    _history = prefs.getStringList(_historyKey) ?? [];
+    // Mỗi bước có thể lỗi riêng (thiết bị âm thanh, plugin) → không để màn quay mãi.
+    try {
+      await _service.ensureStarted();
+    } catch (err) {
+      _error = 'Không mở được âm thanh: $err';
+    }
+    try {
+      await _loadDevice();
+    } catch (_) {
+      // Thiếu tên máy không chặn việc đo.
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _history = prefs.getStringList(_historyKey) ?? [];
+    } catch (err) {
+      _error ??= 'Không đọc được lịch sử đo: $err';
+    }
     if (mounted) setState(() => _starting = false);
   }
 
@@ -112,8 +125,12 @@ class _LatencyPageState extends State<LatencyPage> {
 
   Future<void> _save(LatencyResult r, EngineMetrics m) async {
     _history = [_csv(r, m), ..._history].take(50).toList();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(_historyKey, _history);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_historyKey, _history);
+    } catch (_) {
+      // Không lưu được thì vẫn giữ trong bộ nhớ để sao chép.
+    }
   }
 
   Future<void> _copy({bool all = false}) async {
