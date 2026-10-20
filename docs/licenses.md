@@ -13,19 +13,25 @@ Quy tắc (CLAUDE.md mục 0.2): chỉ MIT / BSD / Apache-2.0 / Zlib / ISC. LGPL
 | Flutter SDK | 3.47.7 (ghim bằng `.fvmrc`) | BSD-3-Clause | `app`, `bindings` | Có |
 | cupertino_icons | ^1.0.8 | MIT | `app` | Có |
 | flutter_lints | ^6.0.0 | BSD-3-Clause | kiểm tra code (dev) | Không |
+| Oboe | 1.11.0 (Gradle prefab) | Apache-2.0 | `engine/src/io/android` | Có |
+| dr_wav / dr_mp3 | commit `dfe8377` (`engine/third_party/dr_libs/COMMIT`) | Public domain / MIT-0 | giải mã cho bản host (test, CI) | Không |
+| permission_handler | ^13.0.2 | MIT | `app` – xin quyền micro | Có |
+| file_picker | ^13.1.0 | MIT | `app` – chọn file beat | Có |
+| shared_preferences | ^2.5.6 | BSD-3-Clause | `app` – lưu lịch sử đo độ trễ | Có |
+| device_info_plus | ^13.3.0 | BSD-3-Clause | `app` – tên máy trong báo cáo độ trễ | Có |
+
+**Phụ thuộc gián tiếp cần lưu ý:** `dbus` (MPL-2.0) bị kéo vào bởi `file_picker_linux` – chỉ dùng cho bản Linux desktop, **không** được build vào app Android/iOS. Toàn bộ phụ thuộc Dart khác là MIT/BSD/Apache-2.0 (kiểm tra ngày 2026-10-20).
 
 ## Dự kiến (chưa thêm)
 
 | Thư viện | License | Milestone | Ghi chú |
 |---|---|---|---|
-| Oboe | Apache-2.0 | M1 | Audio I/O Android |
 | PFFFT | BSD-like (FFTPACK) | M2 | FFT SIMD; iOS có thể dùng vDSP |
-| dr_wav / dr_mp3 / dr_flac | Public domain / MIT-0 | M1 | chỉ cho test/CLI |
 | nlohmann/json | MIT | M5 | preset JSON |
 | libFLAC | BSD-3-Clause | M6 | nén trước khi upload |
 | ONNX Runtime | MIT | sau MVP | model on-device |
-| riverpod, drift, permission_handler | MIT | M1+ | app |
-| path_provider, camera, share_plus, go_router | BSD-3-Clause | M1+ | app |
+| riverpod, drift | MIT | M5+ | app |
+| path_provider, camera, share_plus, go_router | BSD-3-Clause | M5+ | app |
 | FastAPI / uvicorn / PyTorch / Demucs (code) | MIT / BSD-3 / BSD-3 / MIT | M6 | server – **trọng số htdemucs cần xác minh license** |
 | arq / Valkey | MIT / BSD-3 | M6 | hàng đợi job |
 | numpy / mir_eval / matplotlib | BSD / MIT / PSF-BSD | M3 | chỉ trong `tools/` |

@@ -56,6 +56,8 @@ const char* tc_result_to_string(tc_result result) {
       return "TC_ERR_NOT_SUPPORTED";
     case TC_ERR_INTERNAL:
       return "TC_ERR_INTERNAL";
+    case TC_ERR_DEVICE:
+      return "TC_ERR_DEVICE";
   }
   return "TC_ERR_UNKNOWN";
 }
@@ -86,7 +88,6 @@ tc_result tc_engine_create(const tc_engine_config* config, tc_engine** out_engin
     std::memcpy(&c, config, config->struct_size);
   }
   if (!configIsValid(c)) return TC_ERR_INVALID_ARG;
-  if (c.backend == TC_BACKEND_PLATFORM) return TC_ERR_NOT_SUPPORTED;  // có từ M1
 
   tonecore::EngineConfig ec;
   ec.sampleRate = c.sample_rate;
@@ -107,18 +108,32 @@ tc_result tc_engine_create(const tc_engine_config* config, tc_engine** out_engin
 
 tc_result tc_engine_start(tc_engine* engine) {
   if (engine == nullptr) return TC_ERR_INVALID_ARG;
-  return engine->impl.start();
+  try {
+    return engine->impl.start();
+  } catch (const std::bad_alloc&) {
+    return TC_ERR_OUT_OF_MEMORY;
+  } catch (...) {
+    return TC_ERR_INTERNAL;
+  }
 }
 
 tc_result tc_engine_stop(tc_engine* engine) {
   if (engine == nullptr) return TC_ERR_INVALID_ARG;
-  return engine->impl.stop();
+  try {
+    return engine->impl.stop();
+  } catch (...) {
+    return TC_ERR_INTERNAL;
+  }
 }
 
 void tc_engine_destroy(tc_engine* engine) {
   if (engine == nullptr) return;
-  if (engine->impl.state() == TC_STATE_RUNNING) engine->impl.stop();
-  delete engine;
+  try {
+    if (engine->impl.state() == TC_STATE_RUNNING) engine->impl.stop();
+    delete engine;
+  } catch (...) {
+    // Không để exception vượt ranh giới C; trường hợp này chỉ xảy ra khi hệ thống hỏng nặng.
+  }
 }
 
 tc_result tc_set_param(tc_engine* engine, int32_t node_id, int32_t param_id, float value) {
@@ -144,9 +159,87 @@ tc_result tc_engine_process_offline(tc_engine* engine, const float* input, float
 
 tc_result tc_get_metrics(tc_engine* engine, tc_metrics* out_metrics) {
   if (engine == nullptr || out_metrics == nullptr) return TC_ERR_INVALID_ARG;
-  if (out_metrics->struct_size != sizeof(tc_metrics)) return TC_ERR_INVALID_ARG;
-  engine->impl.fillMetrics(*out_metrics);
+  // Chấp nhận struct của binding cũ hơn (v0.1 kết thúc ở cpu_load): chỉ ghi phần người gọi có.
+  constexpr uint32_t kMinSize = offsetof(tc_metrics, cpu_load) + sizeof(float);
+  const uint32_t size = out_metrics->struct_size;
+  if (size < kMinSize || size > sizeof(tc_metrics)) return TC_ERR_INVALID_ARG;
+  tc_metrics full{};
+  full.struct_size = size;
+  engine->impl.fillMetrics(full);
+  std::memcpy(out_metrics, &full, size);
   return TC_OK;
+}
+
+tc_result tc_load_beat(tc_engine* engine, const char* path_utf8) {
+  if (engine == nullptr || path_utf8 == nullptr) return TC_ERR_INVALID_ARG;
+  try {
+    return engine->impl.loadBeat(path_utf8);
+  } catch (const std::bad_alloc&) {
+    return TC_ERR_OUT_OF_MEMORY;
+  } catch (...) {
+    return TC_ERR_INTERNAL;
+  }
+}
+
+tc_result tc_play(tc_engine* engine) {
+  if (engine == nullptr) return TC_ERR_INVALID_ARG;
+  return engine->impl.play();
+}
+
+tc_result tc_pause(tc_engine* engine) {
+  if (engine == nullptr) return TC_ERR_INVALID_ARG;
+  return engine->impl.pause();
+}
+
+tc_result tc_seek(tc_engine* engine, double position_ms) {
+  if (engine == nullptr) return TC_ERR_INVALID_ARG;
+  return engine->impl.seekMs(position_ms);
+}
+
+tc_result tc_get_playback_state(tc_engine* engine, tc_playback_state* out_state) {
+  if (engine == nullptr || out_state == nullptr) return TC_ERR_INVALID_ARG;
+  if (out_state->struct_size != sizeof(tc_playback_state)) return TC_ERR_INVALID_ARG;
+  engine->impl.fillPlayback(*out_state);
+  return TC_OK;
+}
+
+tc_result tc_set_route_hint(tc_engine* engine, int32_t route) {
+  if (engine == nullptr) return TC_ERR_INVALID_ARG;
+  try {
+    return engine->impl.setRouteHint(route);
+  } catch (...) {
+    return TC_ERR_INTERNAL;
+  }
+}
+
+tc_result tc_measure_latency_start(tc_engine* engine) {
+  if (engine == nullptr) return TC_ERR_INVALID_ARG;
+  try {
+    return engine->impl.startLatencyMeasurement();
+  } catch (...) {
+    return TC_ERR_INTERNAL;
+  }
+}
+
+tc_result tc_get_latency_result(tc_engine* engine, tc_latency_result* out_result) {
+  if (engine == nullptr || out_result == nullptr) return TC_ERR_INVALID_ARG;
+  if (out_result->struct_size == 0 || out_result->struct_size > sizeof(tc_latency_result)) {
+    return TC_ERR_INVALID_ARG;
+  }
+  try {
+    return engine->impl.latencyResult(*out_result);
+  } catch (...) {
+    return TC_ERR_INTERNAL;
+  }
+}
+
+int32_t tc_poll_events(tc_engine* engine, tc_event* out_events, uint32_t max_events) {
+  if (engine == nullptr || (out_events == nullptr && max_events > 0)) return TC_ERR_INVALID_ARG;
+  try {
+    return static_cast<int32_t>(engine->impl.pollEvents(out_events, max_events));
+  } catch (...) {
+    return TC_ERR_INTERNAL;
+  }
 }
 
 }  // extern "C"

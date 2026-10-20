@@ -89,6 +89,7 @@ class ToneCoreBindings {
         )
       >();
 
+  /// Với TC_BACKEND_PLATFORM: mở thiết bị âm thanh. Cần quyền micro (app xin trước).
   int tc_engine_start(ffi.Pointer<tc_engine> engine) {
     return _tc_engine_start(engine);
   }
@@ -172,6 +173,158 @@ class ToneCoreBindings {
         int Function(ffi.Pointer<tc_engine>, int, int, ffi.Pointer<ffi.Float>)
       >();
 
+  /// ---- Beat ----
+  /// tc_load_beat chạy nền; kết quả đến qua sự kiện TC_EVENT_BEAT_LOADED.
+  /// Hỗ trợ định dạng mà codec của hệ điều hành đọc được (MP3, M4A/AAC, WAV...).
+  int tc_load_beat(
+    ffi.Pointer<tc_engine> engine,
+    ffi.Pointer<ffi.Char> path_utf8,
+  ) {
+    return _tc_load_beat(engine, path_utf8);
+  }
+
+  late final _tc_load_beatPtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(ffi.Pointer<tc_engine>, ffi.Pointer<ffi.Char>)
+        >
+      >('tc_load_beat');
+  late final _tc_load_beat = _tc_load_beatPtr
+      .asFunction<
+        int Function(ffi.Pointer<tc_engine>, ffi.Pointer<ffi.Char>)
+      >();
+
+  int tc_play(ffi.Pointer<tc_engine> engine) {
+    return _tc_play(engine);
+  }
+
+  late final _tc_playPtr =
+      _lookup<ffi.NativeFunction<tc_result Function(ffi.Pointer<tc_engine>)>>(
+        'tc_play',
+      );
+  late final _tc_play = _tc_playPtr
+      .asFunction<int Function(ffi.Pointer<tc_engine>)>();
+
+  int tc_pause(ffi.Pointer<tc_engine> engine) {
+    return _tc_pause(engine);
+  }
+
+  late final _tc_pausePtr =
+      _lookup<ffi.NativeFunction<tc_result Function(ffi.Pointer<tc_engine>)>>(
+        'tc_pause',
+      );
+  late final _tc_pause = _tc_pausePtr
+      .asFunction<int Function(ffi.Pointer<tc_engine>)>();
+
+  int tc_seek(ffi.Pointer<tc_engine> engine, double position_ms) {
+    return _tc_seek(engine, position_ms);
+  }
+
+  late final _tc_seekPtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(ffi.Pointer<tc_engine>, ffi.Double)
+        >
+      >('tc_seek');
+  late final _tc_seek = _tc_seekPtr
+      .asFunction<int Function(ffi.Pointer<tc_engine>, double)>();
+
+  int tc_get_playback_state(
+    ffi.Pointer<tc_engine> engine,
+    ffi.Pointer<tc_playback_state> out_state,
+  ) {
+    return _tc_get_playback_state(engine, out_state);
+  }
+
+  late final _tc_get_playback_statePtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(
+            ffi.Pointer<tc_engine>,
+            ffi.Pointer<tc_playback_state>,
+          )
+        >
+      >('tc_get_playback_state');
+  late final _tc_get_playback_state = _tc_get_playback_statePtr
+      .asFunction<
+        int Function(ffi.Pointer<tc_engine>, ffi.Pointer<tc_playback_state>)
+      >();
+
+  /// ---- Route ----
+  /// Android: lớp Kotlin báo loại thiết bị (NDK không đọc được). iOS: engine tự phát hiện.
+  int tc_set_route_hint(ffi.Pointer<tc_engine> engine, int route) {
+    return _tc_set_route_hint(engine, route);
+  }
+
+  late final _tc_set_route_hintPtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(ffi.Pointer<tc_engine>, ffi.Int32)
+        >
+      >('tc_set_route_hint');
+  late final _tc_set_route_hint = _tc_set_route_hintPtr
+      .asFunction<int Function(ffi.Pointer<tc_engine>, int)>();
+
+  /// ---- Đo độ trễ ----
+  /// Engine phải đang RUNNING. Trong lúc đo (~1,5 s) beat và nghe lại giọng bị tắt tiếng.
+  /// Kết thúc → sự kiện TC_EVENT_LATENCY_DONE, đọc chi tiết bằng tc_get_latency_result.
+  int tc_measure_latency_start(ffi.Pointer<tc_engine> engine) {
+    return _tc_measure_latency_start(engine);
+  }
+
+  late final _tc_measure_latency_startPtr =
+      _lookup<ffi.NativeFunction<tc_result Function(ffi.Pointer<tc_engine>)>>(
+        'tc_measure_latency_start',
+      );
+  late final _tc_measure_latency_start = _tc_measure_latency_startPtr
+      .asFunction<int Function(ffi.Pointer<tc_engine>)>();
+
+  int tc_get_latency_result(
+    ffi.Pointer<tc_engine> engine,
+    ffi.Pointer<tc_latency_result> out_result,
+  ) {
+    return _tc_get_latency_result(engine, out_result);
+  }
+
+  late final _tc_get_latency_resultPtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(
+            ffi.Pointer<tc_engine>,
+            ffi.Pointer<tc_latency_result>,
+          )
+        >
+      >('tc_get_latency_result');
+  late final _tc_get_latency_result = _tc_get_latency_resultPtr
+      .asFunction<
+        int Function(ffi.Pointer<tc_engine>, ffi.Pointer<tc_latency_result>)
+      >();
+
+  /// ---- Sự kiện ----
+  /// Gọi định kỳ từ luồng UI (vd. mỗi khung hình). Trả về số sự kiện đã ghi (>= 0) hoặc mã lỗi.
+  int tc_poll_events(
+    ffi.Pointer<tc_engine> engine,
+    ffi.Pointer<tc_event> out_events,
+    int max_events,
+  ) {
+    return _tc_poll_events(engine, out_events, max_events);
+  }
+
+  late final _tc_poll_eventsPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Int32 Function(
+            ffi.Pointer<tc_engine>,
+            ffi.Pointer<tc_event>,
+            ffi.Uint32,
+          )
+        >
+      >('tc_poll_events');
+  late final _tc_poll_events = _tc_poll_eventsPtr
+      .asFunction<
+        int Function(ffi.Pointer<tc_engine>, ffi.Pointer<tc_event>, int)
+      >();
+
   /// ---- Xử lý offline (chỉ với TC_BACKEND_NULL, engine phải đang RUNNING) ----
   /// input: interleaved, input_channels kênh; được phép NULL (coi như im lặng).
   /// output: interleaved, output_channels kênh.
@@ -248,13 +401,16 @@ sealed class tc_result_code {
   static const TC_ERR_INVALID_STATE = -3;
   static const TC_ERR_NOT_SUPPORTED = -4;
   static const TC_ERR_INTERNAL = -5;
+
+  /// Không mở được thiết bị âm thanh (thiếu quyền micro, thiết bị bận...).
+  static const TC_ERR_DEVICE = -6;
 }
 
 sealed class tc_backend {
   /// Không có thiết bị âm thanh; xử lý bằng tc_engine_process_offline (test, render).
   static const TC_BACKEND_NULL = 0;
 
-  /// Oboe trên Android, RemoteIO trên iOS (từ M1).
+  /// Oboe trên Android, RemoteIO trên iOS.
   static const TC_BACKEND_PLATFORM = 1;
 }
 
@@ -263,14 +419,78 @@ sealed class tc_engine_state {
   static const TC_STATE_RUNNING = 1;
 }
 
+/// API âm thanh thực tế của hệ điều hành đang dùng.
+sealed class tc_audio_api {
+  static const TC_AUDIO_API_NONE = 0;
+  static const TC_AUDIO_API_AAUDIO = 1;
+  static const TC_AUDIO_API_OPENSLES = 2;
+  static const TC_AUDIO_API_REMOTEIO = 3;
+}
+
+/// Đường ra/vào âm thanh hiện tại.
+sealed class tc_route {
+  static const TC_ROUTE_UNKNOWN = 0;
+
+  /// loa ngoài của máy
+  static const TC_ROUTE_SPEAKER = 1;
+
+  /// tai nghe có dây (3.5 mm hoặc USB-C analog)
+  static const TC_ROUTE_WIRED = 2;
+
+  /// tai nghe Bluetooth – không nghe lại giọng được
+  static const TC_ROUTE_BLUETOOTH = 3;
+
+  /// soundcard / micro USB (OTG)
+  static const TC_ROUTE_USB = 4;
+
+  /// loa thoại
+  static const TC_ROUTE_RECEIVER = 5;
+}
+
 /// Định danh node / tham số dùng cho tc_set_param. Danh sách sẽ mở rộng theo milestone.
 sealed class tc_node_id {
+  /// tổng đầu ra
   static const TC_NODE_MASTER = 0;
+
+  /// nghe lại giọng (micro → tai nghe)
+  static const TC_NODE_MONITOR = 1;
+
+  /// nhạc beat
+  static const TC_NODE_BEAT = 2;
 }
 
 sealed class tc_param_id {
   /// Hệ số khuếch đại tuyến tính, 0..4. Được làm mượt trong audio thread.
   static const TC_PARAM_GAIN = 0;
+
+  /// Bật/tắt: 0 hoặc 1 (chỉ TC_NODE_MONITOR).
+  static const TC_PARAM_ENABLED = 1;
+}
+
+/// Sự kiện gửi lên UI, lấy bằng tc_poll_events.
+sealed class tc_event_type {
+  static const TC_EVENT_NONE = 0;
+
+  /// code = tc_result; value = thời lượng (ms)
+  static const TC_EVENT_BEAT_LOADED = 1;
+
+  /// phát hết bài
+  static const TC_EVENT_BEAT_ENDED = 2;
+
+  /// code = tc_route mới
+  static const TC_EVENT_ROUTE_CHANGED = 3;
+
+  /// code = 1 bắt đầu bị ngắt (cuộc gọi...), 0 kết thúc
+  static const TC_EVENT_INTERRUPTED = 4;
+
+  /// code = tc_result; value = độ trễ (ms) nếu thành công
+  static const TC_EVENT_LATENCY_DONE = 5;
+
+  /// code = tc_result của lần mở lại stream
+  static const TC_EVENT_STREAM_RESTARTED = 6;
+
+  /// nghe lại giọng bị chặn vì đang dùng Bluetooth
+  static const TC_EVENT_MONITOR_BLOCKED = 7;
 }
 
 final class tc_engine extends ffi.Opaque {}
@@ -301,8 +521,9 @@ final class tc_engine_config extends ffi.Struct {
   external int backend;
 }
 
+/// struct_size: người gọi điền sizeof(tc_metrics) của header họ dùng; engine chỉ ghi phần
+/// nằm trong struct_size → binding cũ (v0.1) vẫn dùng được.
 final class tc_metrics extends ffi.Struct {
-  /// người gọi điền = sizeof(tc_metrics)
   @ffi.Uint32()
   external int struct_size;
 
@@ -321,19 +542,127 @@ final class tc_metrics extends ffi.Struct {
   @ffi.Uint64()
   external int callbacks;
 
-  /// số lần thiếu/tràn buffer (từ M1)
+  /// số lần thiếu/tràn buffer
   @ffi.Uint32()
   external int xruns;
 
   /// 0..1 – tỉ lệ thời gian xử lý / thời lượng block gần nhất
   @ffi.Float()
   external double cpu_load;
+
+  /// kích thước buffer đầu ra hiện tại
+  @ffi.Uint32()
+  external int buffer_frames;
+
+  /// số frame mỗi lần callback của thiết bị
+  @ffi.Uint32()
+  external int burst_frames;
+
+  /// độ trễ vào do hệ điều hành báo (ước lượng)
+  @ffi.Double()
+  external double reported_input_latency_ms;
+
+  /// độ trễ ra do hệ điều hành báo (ước lượng)
+  @ffi.Double()
+  external double reported_output_latency_ms;
+
+  /// tc_route
+  @ffi.Int32()
+  external int route;
+
+  /// tc_audio_api
+  @ffi.Int32()
+  external int audio_api;
+
+  /// 1 nếu đang nghe lại giọng
+  @ffi.Int32()
+  external int monitor_active;
+
+  /// số kênh micro thực tế
+  @ffi.Int32()
+  external int input_channels;
+}
+
+final class tc_playback_state extends ffi.Struct {
+  @ffi.Uint32()
+  external int struct_size;
+
+  @ffi.Int32()
+  external int has_beat;
+
+  @ffi.Int32()
+  external int playing;
+
+  @ffi.Double()
+  external double position_ms;
+
+  @ffi.Double()
+  external double duration_ms;
+}
+
+final class tc_latency_result extends ffi.Struct {
+  @ffi.Uint32()
+  external int struct_size;
+
+  /// 1 nếu đo thành công
+  @ffi.Int32()
+  external int valid;
+
+  /// round-trip đo được (trung vị)
+  @ffi.Double()
+  external double latency_ms;
+
+  @ffi.Double()
+  external double latency_frames;
+
+  /// 0..1
+  @ffi.Float()
+  external double confidence;
+
+  /// số lần đo hợp lệ
+  @ffi.Int32()
+  external int valid_bursts;
+
+  @ffi.Int32()
+  external int total_bursts;
+
+  /// chênh lệch giữa các lần hợp lệ
+  @ffi.Double()
+  external double spread_ms;
+
+  /// HĐH báo lúc đo, để so sánh
+  @ffi.Double()
+  external double reported_input_latency_ms;
+
+  @ffi.Double()
+  external double reported_output_latency_ms;
+
+  @ffi.Uint32()
+  external int buffer_frames;
+
+  @ffi.Uint32()
+  external int burst_frames;
+
+  @ffi.Int32()
+  external int route;
+}
+
+final class tc_event extends ffi.Struct {
+  /// tc_event_type
+  @ffi.Int32()
+  external int type;
+
+  @ffi.Int32()
+  external int code;
+
+  @ffi.Double()
+  external double value;
 }
 
 const int TC_API_VERSION_MAJOR = 0;
 
-const int TC_API_VERSION_MINOR = 1;
+const int TC_API_VERSION_MINOR = 2;
 
 const int TC_API_VERSION_PATCH = 0;
 
-const int TC_API_VERSION = 256;
+const int TC_API_VERSION = 512;

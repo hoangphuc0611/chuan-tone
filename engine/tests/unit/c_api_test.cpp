@@ -61,12 +61,21 @@ TEST(CApi, CreateRejectsBadArguments) {
   EXPECT_EQ(tc_engine_create(&c, &e), TC_ERR_INVALID_ARG);
 }
 
-TEST(CApi, PlatformBackendNotYetSupported) {
+// Bản host không có thiết bị âm thanh: tạo được engine nhưng start() báo không hỗ trợ.
+TEST(CApi, PlatformBackendUnavailableOnHost) {
   tc_engine_config c;
   tc_engine_config_init(&c);
   c.backend = TC_BACKEND_PLATFORM;
-  tc_engine* e = nullptr;
-  EXPECT_EQ(tc_engine_create(&c, &e), TC_ERR_NOT_SUPPORTED);
+  EngineHolder h;
+  ASSERT_EQ(tc_engine_create(&c, &h.e), TC_OK);
+  EXPECT_EQ(tc_engine_start(h.e), TC_ERR_NOT_SUPPORTED);
+  tc_metrics m{};
+  m.struct_size = sizeof(m);
+  ASSERT_EQ(tc_get_metrics(h.e, &m), TC_OK);
+  EXPECT_EQ(m.state, TC_STATE_STOPPED);
+  // Xử lý offline chỉ dành cho backend NULL.
+  std::vector<float> out(2 * 64);
+  EXPECT_EQ(tc_engine_process_offline(h.e, nullptr, out.data(), 64), TC_ERR_INVALID_STATE);
 }
 
 TEST(CApi, NullEngineIsHandled) {
@@ -101,11 +110,18 @@ TEST(CApi, ProcessCopiesMonoInputToStereoWithGain) {
   std::vector<float> in(kFrames, 0.5f);
   std::vector<float> out(kFrames * 2, -1.0f);
 
-  // Gain mặc định 1.0 → đầu ra = đầu vào ở cả hai kênh.
+  // Nghe lại giọng mặc định TẮT (tránh hú khi đang dùng loa ngoài).
   ASSERT_EQ(tc_engine_process_offline(h.e, in.data(), out.data(), kFrames), TC_OK);
+  for (float v : out) EXPECT_EQ(v, 0.0f);
+
+  // Bật nghe lại; chờ chuyển dần 10 ms xong rồi kiểm tra: gain 1.0 → đầu ra = đầu vào.
+  ASSERT_EQ(tc_set_param(h.e, TC_NODE_MONITOR, TC_PARAM_ENABLED, 1.0f), TC_OK);
+  for (int b = 0; b < 20; ++b) {
+    ASSERT_EQ(tc_engine_process_offline(h.e, in.data(), out.data(), kFrames), TC_OK);
+  }
   for (uint32_t i = 0; i < kFrames; ++i) {
-    EXPECT_FLOAT_EQ(out[2 * i], 0.5f);
-    EXPECT_FLOAT_EQ(out[2 * i + 1], 0.5f);
+    EXPECT_NEAR(out[2 * i], 0.5f, 1e-4f);
+    EXPECT_NEAR(out[2 * i + 1], 0.5f, 1e-4f);
   }
 
   // Đổi gain → đầu ra tiến dần (làm mượt), sau ~0.5 s phải đạt đúng đích.

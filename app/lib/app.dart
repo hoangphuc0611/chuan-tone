@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'engine_info.dart';
+import 'pages/latency_page.dart';
+import 'pages/test_room_page.dart';
 
 class ChuanToneApp extends StatelessWidget {
   const ChuanToneApp({super.key, required this.engineInfo});
@@ -46,11 +48,74 @@ class HomePage extends StatelessWidget {
               const SizedBox(height: 8),
               Text('Bấm bài là hát', style: theme.textTheme.titleLarge),
               const Spacer(),
+              _BigButton(
+                icon: Icons.mic_external_on,
+                label: 'Phòng thử',
+                subtitle: 'Phát nhạc, nghe lại giọng',
+                enabled: engineInfo.ok,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => const TestRoomPage()),
+                ),
+              ),
+              const SizedBox(height: 12),
+              _BigButton(
+                icon: Icons.speed,
+                label: 'Đo độ trễ',
+                subtitle: 'Kiểm tra máy có hát mượt không',
+                enabled: engineInfo.ok,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => const LatencyPage()),
+                ),
+              ),
+              const SizedBox(height: 24),
               _EngineStatusCard(info: engineInfo),
               const SizedBox(height: 24),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _BigButton extends StatelessWidget {
+  const _BigButton({
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return FilledButton.tonal(
+      onPressed: enabled ? onTap : null,
+      style: FilledButton.styleFrom(
+        minimumSize: const Size.fromHeight(80),
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 36),
+          const SizedBox(width: 16),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label, style: theme.textTheme.titleLarge),
+              Text(subtitle, style: theme.textTheme.bodyMedium),
+            ],
+          ),
+        ],
       ),
     );
   }

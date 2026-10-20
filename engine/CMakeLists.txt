@@ -36,7 +36,49 @@ configure_file(cmake/tonecore_version.h.in ${CMAKE_CURRENT_BINARY_DIR}/generated
 add_library(tonecore_core STATIC
   src/core/engine.cpp
   src/api/tonecore.cpp
+  src/latency/mls.cpp
+  src/latency/latency_probe.cpp
+  src/dsp/resampler.cpp
+  src/player/track.cpp
+  src/player/beat_player.cpp
 )
+
+# Mã theo nền tảng: backend âm thanh + bộ giải mã file.
+if(ANDROID)
+  target_sources(tonecore_core PRIVATE
+    src/io/android/oboe_backend.cpp
+    src/decode/decoder_android.cpp)
+  find_package(oboe REQUIRED CONFIG)  # Oboe qua Gradle prefab (Apache-2.0)
+  target_link_libraries(tonecore_core PUBLIC oboe::oboe mediandk log)
+elseif(IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS")
+  enable_language(OBJCXX)
+  target_sources(tonecore_core PRIVATE
+    src/io/ios/remoteio_backend.mm
+    src/decode/decoder_apple.cpp)
+  set_source_files_properties(src/io/ios/remoteio_backend.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+  target_link_libraries(tonecore_core PUBLIC
+    "-framework AudioToolbox" "-framework AVFAudio" "-framework CoreFoundation" "-framework Foundation")
+elseif(APPLE)
+  # macOS host: giải mã bằng ExtAudioFile (cùng mã với iOS → kiểm được trên máy dev),
+  # dr_libs để test so sánh; chưa có backend âm thanh thật.
+  target_sources(tonecore_core PRIVATE
+    src/io/host_backend.cpp
+    src/decode/decoder_apple.cpp
+    src/decode/decoder_drlibs.cpp)
+  target_link_libraries(tonecore_core PUBLIC "-framework AudioToolbox" "-framework CoreFoundation")
+else()
+  target_sources(tonecore_core PRIVATE
+    src/io/host_backend.cpp
+    src/decode/decoder_drlibs.cpp)
+endif()
+
+if(NOT ANDROID AND NOT (IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS"))
+  # dr_libs chỉ dùng cho bản host (test/CLI), không ship trong app.
+  target_include_directories(tonecore_core SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/dr_libs)
+  find_package(Threads REQUIRED)
+  target_link_libraries(tonecore_core PUBLIC Threads::Threads)
+endif()
+
 target_include_directories(tonecore_core
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include

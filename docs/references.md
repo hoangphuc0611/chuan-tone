@@ -10,8 +10,19 @@ Mọi thuật toán trong ToneCore được viết từ các nguồn công khai 
 | T. Doumler, các bài nói CppCon/ADC về lock-free cho audio | SPSC, atomic param | `core/spsc_ring.h`, `core/smoothed_param.h` |
 | L. Lamport, *Specifying Concurrent Program Modules*, ACM TOPLAS 1983 | Hàng đợi SPSC không khóa | `core/spsc_ring.h` |
 | Arm Architecture Reference Manual (FPCR.FZ); Intel SDM (MXCSR FTZ/DAZ) | Chống denormal | `core/denormal.h` |
-| Android Developers – *Audio latency*, tài liệu Oboe/AAudio | Audio I/O Android (M1) | |
-| Apple – *Audio Session Programming Guide*, *Core Audio Overview* | Audio I/O iOS (M1) | |
+| Android Developers – *Audio latency*; Oboe docs (*FullDuplexStream*, *Getting Started*) | Audio I/O Android | `io/android/oboe_backend.cpp` |
+| Android NDK – *Media* (`AMediaExtractor`, `AMediaCodec`) | Giải mã beat Android | `decode/decoder_android.cpp` |
+| Apple – *Audio Session Programming Guide*; *Audio Unit Hosting Guide for iOS* (RemoteIO) | Audio I/O iOS | `io/ios/remoteio_backend.mm` |
+| Apple – *Extended Audio File Services Reference* | Giải mã beat iOS/macOS | `decode/decoder_apple.cpp` |
+
+## Đo độ trễ & resample (M1)
+
+| Nguồn | Dùng cho | File |
+|---|---|---|
+| D. Rife, J. Vanderkooy, *Transfer-Function Measurement with Maximum-Length Sequences*, JAES 1989 | Chuỗi MLS đo độ trễ | `latency/mls.cpp`, `latency/latency_probe.cpp` |
+| Xilinx XAPP052, *Efficient Shift Registers, LFSR Counters, and Long Pseudo-Random Sequence Generators* | Bảng đa thức nguyên thủy | `latency/mls.cpp` |
+| J. O. Smith, *Digital Audio Resampling Home Page* (CCRMA) | Resample sinc có cửa sổ | `dsp/resampler.cpp` |
+| J. F. Kaiser, *Nonrecursive digital filter design using the I0-sinh window function*, 1974 | Cửa sổ Kaiser | `dsp/resampler.cpp` |
 
 ## Dò cao độ & chỉnh giọng (M2)
 

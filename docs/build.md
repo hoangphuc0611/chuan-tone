@@ -10,7 +10,13 @@ fvm install            # cài đúng bản Flutter ghi trong .fvmrc
 
 Thêm cho mobile:
 - **iOS**: Xcode 16+ (App Store), sau đó `sudo xcode-select -s /Applications/Xcode.app` và `sudo gem install cocoapods` (hoặc `brew install cocoapods`).
-- **Android**: Android Studio, trong SDK Manager cài *Android SDK Platform 35*, *NDK (Side by side) 27.x*, *CMake*. JDK 17 (đi kèm Android Studio).
+- **Android** (cách đã dùng trên máy dev, không cần Android Studio):
+  ```bash
+  brew install openjdk@17 && brew install --cask android-commandlinetools
+  export JAVA_HOME=/opt/homebrew/opt/openjdk@17 ANDROID_HOME=/opt/homebrew/share/android-commandlinetools
+  sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" "cmake;3.22.1" "ndk;28.2.13676358"
+  ```
+  Hoặc Android Studio, trong SDK Manager cài *Android SDK Platform 36*, *NDK (Side by side) 28.2.13676358* (bản Flutter 3.47 yêu cầu), *CMake*. JDK 17 (đi kèm Android Studio).
 
 ## Engine (C++)
 
@@ -23,10 +29,9 @@ cmake --preset host-release && cmake --build --preset host-release
 ./build/host-release/bench/tonecore_bench                                     # benchmark
 ```
 
-Build riêng cho Android (không cần thiết khi build qua Flutter, Gradle tự gọi CMake):
+Android: engine chỉ build qua Gradle (Gradle cung cấp Oboe dạng prefab cho CMake):
 ```bash
-export ANDROID_NDK_HOME=~/Library/Android/sdk/ndk/27.x.y
-cmake --preset android-arm64 && cmake --build --preset android-arm64
+cd app && fvm flutter build apk --debug
 ```
 
 iOS framework (cần Xcode đầy đủ) — **phải chạy trước** `pod install` / `flutter build ios`:

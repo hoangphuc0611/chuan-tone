@@ -1,7 +1,7 @@
 // Gradle build engine ToneCore bằng NDK + CMake, đóng gói libtonecore.so vào APK.
 
 group = "vn.chuantone.tonecore_flutter"
-version = "0.1.0"
+version = "0.2.0"
 
 buildscript {
     repositories {
@@ -30,6 +30,11 @@ android {
     // NDK do app khai báo (app/android/app/build.gradle.kts).
     ndkVersion = android.ndkVersion
 
+    // Oboe phát hành dạng prefab trong AAR → CMake tìm bằng find_package(oboe CONFIG).
+    buildFeatures {
+        prefab = true
+    }
+
     externalNativeBuild {
         cmake {
             // Dùng thẳng CMakeLists của engine – không sao chép mã nguồn.
@@ -48,9 +53,13 @@ android {
         externalNativeBuild {
             cmake {
                 targets "tonecore"
-                arguments "-DANDROID_STL=c++_static", "-DTC_BUILD_TESTS=OFF"
-                cppFlags "-fexceptions"
+                // c++_shared: bắt buộc khi dùng Oboe dạng prefab (Oboe là thư viện động).
+                arguments "-DANDROID_STL=c++_shared", "-DTC_BUILD_TESTS=OFF"
             }
         }
     }
+}
+
+dependencies {
+    implementation("com.google.oboe:oboe:1.11.0") // Apache-2.0
 }

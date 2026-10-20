@@ -14,9 +14,16 @@ add_executable(tonecore_tests
   unit/spsc_ring_test.cpp
   unit/smoothed_param_test.cpp
   unit/c_api_test.cpp
+  unit/mls_test.cpp
+  unit/latency_probe_test.cpp
+  unit/resampler_test.cpp
+  unit/decoder_test.cpp
+  unit/engine_m1_test.cpp
 )
 target_link_libraries(tonecore_tests PRIVATE tonecore_core GTest::gtest_main)
 tc_set_warnings(tonecore_tests)
+# Test chủ ý tính sai số bằng double; giữ cảnh báo này cho mã engine.
+target_compile_options(tonecore_tests PRIVATE $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wno-double-promotion>)
 tc_apply_sanitizer(tonecore_tests)
 
 include(GoogleTest)
