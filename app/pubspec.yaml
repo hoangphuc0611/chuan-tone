@@ -37,7 +37,6 @@ dependencies:
   tonecore_flutter:
     path: ../bindings/tonecore_flutter
   file_picker: ^13.1.0
-  shared_preferences: ^2.5.6
   device_info_plus: ^13.3.0
 
 dev_dependencies:

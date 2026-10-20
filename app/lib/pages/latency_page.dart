@@ -3,9 +3,9 @@ import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tonecore_flutter/tonecore_flutter.dart';
 
+import '../data/latency_history.dart';
 import '../engine/audio_service.dart';
 import '../engine/labels.dart';
 
@@ -24,9 +24,8 @@ class LatencyPage extends StatefulWidget {
 }
 
 class _LatencyPageState extends State<LatencyPage> {
-  static const _historyKey = 'latency_history_csv';
-
   final _service = AudioService.instance;
+  final _store = LatencyHistory();
   bool _starting = true;
   bool _measuring = false;
   LatencyResult? _result;
@@ -54,12 +53,7 @@ class _LatencyPageState extends State<LatencyPage> {
     } catch (_) {
       // Thiếu tên máy không chặn việc đo.
     }
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      _history = prefs.getStringList(_historyKey) ?? [];
-    } catch (err) {
-      _error ??= 'Không đọc được lịch sử đo: $err';
-    }
+    _history = await _store.load();
     if (mounted) setState(() => _starting = false);
   }
 
@@ -124,12 +118,12 @@ class _LatencyPageState extends State<LatencyPage> {
   }
 
   Future<void> _save(LatencyResult r, EngineMetrics m) async {
-    _history = [_csv(r, m), ..._history].take(50).toList();
+    final line = _csv(r, m);
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setStringList(_historyKey, _history);
+      _history = await _store.add(line, _history);
     } catch (_) {
-      // Không lưu được thì vẫn giữ trong bộ nhớ để sao chép.
+      // Không ghi được file thì vẫn giữ trong bộ nhớ để sao chép.
+      _history = [line, ..._history].take(LatencyHistory.maxEntries).toList();
     }
   }
 
