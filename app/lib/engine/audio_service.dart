@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:tonecore_flutter/tonecore_flutter.dart';
 
 /// Giữ một engine ToneCore dùng chung cho cả app (thiết bị âm thanh thật).
@@ -29,8 +28,7 @@ class AudioService extends ChangeNotifier {
   /// Xin quyền micro và mở thiết bị âm thanh. Trả về true nếu chạy được.
   Future<bool> ensureStarted() async {
     if (_engine != null) return true;
-    final status = await Permission.microphone.request();
-    micGranted = status.isGranted;
+    micGranted = await MicPermission.request();
     if (!micGranted) {
       lastError = 'Chưa cấp quyền micro. Vào Cài đặt của máy để bật quyền micro cho ChuẩnTone.';
       notifyListeners();

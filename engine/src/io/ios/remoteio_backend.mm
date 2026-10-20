@@ -14,6 +14,7 @@
 #import <AudioToolbox/AudioToolbox.h>
 #import <Foundation/Foundation.h>
 
+#include <algorithm>
 #include <atomic>
 #include <mutex>
 #include <vector>
@@ -124,11 +125,23 @@ class RemoteIOBackend final : public AudioBackend {
     [s setPreferredSampleRate:sampleRate_ error:nil];
     [s setPreferredIOBufferDuration:kPreferredBufferFrames / sampleRate_ error:nil];
     if (![s setActive:YES error:&err]) return TC_ERR_DEVICE;
-    if (s.recordPermission != AVAudioSessionRecordPermissionGranted) {
-      // Không có quyền micro: vẫn chạy (phát beat được) nhưng micro im lặng.
-      micAllowed_ = false;
-    } else {
-      micAllowed_ = true;
+    switch (s.recordPermission) {
+      case AVAudioSessionRecordPermissionGranted:
+        micAllowed_ = true;
+        break;
+      case AVAudioSessionRecordPermissionUndetermined: {
+        // Lần đầu: iOS hiện hộp thoại xin quyền; micro bật ngay khi người dùng đồng ý.
+        micAllowed_ = false;
+        std::atomic<bool>* flag = &micAllowed_;
+        [s requestRecordPermission:^(BOOL granted) {
+          flag->store(granted == YES, std::memory_order_relaxed);
+        }];
+        break;
+      }
+      default:
+        // Bị từ chối: vẫn chạy (phát beat được) nhưng micro im lặng.
+        micAllowed_ = false;
+        break;
     }
     return TC_OK;
   }

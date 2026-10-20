@@ -15,10 +15,11 @@ Quy tắc (CLAUDE.md mục 0.2): chỉ MIT / BSD / Apache-2.0 / Zlib / ISC. LGPL
 | flutter_lints | ^6.0.0 | BSD-3-Clause | kiểm tra code (dev) | Không |
 | Oboe | 1.11.0 (Gradle prefab) | Apache-2.0 | `engine/src/io/android` | Có |
 | dr_wav / dr_mp3 | commit `dfe8377` (`engine/third_party/dr_libs/COMMIT`) | Public domain / MIT-0 | giải mã cho bản host (test, CI) | Không |
-| permission_handler | ^13.0.2 | MIT | `app` – xin quyền micro | Có |
 | file_picker | ^13.1.0 | MIT | `app` – chọn file beat | Có |
 | shared_preferences | ^2.5.6 | BSD-3-Clause | `app` – lưu lịch sử đo độ trễ | Có |
 | device_info_plus | ^13.3.0 | BSD-3-Clause | `app` – tên máy trong báo cáo độ trễ | Có |
+
+Quyền micro tự làm trong plugin (Java + AVAudioSession), không dùng `permission_handler`: bản mới nhất đòi Android SDK 37 mà bộ build hiện tại (AGP 9.1) chưa hỗ trợ.
 
 **Phụ thuộc gián tiếp cần lưu ý:** `dbus` (MPL-2.0) bị kéo vào bởi `file_picker_linux` – chỉ dùng cho bản Linux desktop, **không** được build vào app Android/iOS. Toàn bộ phụ thuộc Dart khác là MIT/BSD/Apache-2.0 (kiểm tra ngày 2026-10-20).
 

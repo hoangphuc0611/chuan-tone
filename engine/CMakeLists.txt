@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(ToneCore VERSION 0.1.0 LANGUAGES C CXX)
+project(ToneCore VERSION 0.2.0 LANGUAGES C CXX)
 
 # ---- Tùy chọn ----
 option(TC_BUILD_TESTS "Build unit test (GoogleTest)" ON)

@@ -47,7 +47,7 @@ class _TestRoomPageState extends State<TestRoomPage> {
     _monitorGain = e.monitorGain;
     _sub = _service.events.listen(_onEvent);
     _ticker = Timer.periodic(
-      const Duration(milliseconds: 100),
+      const Duration(milliseconds: 250),
       (_) => _refresh(),
     );
   }
@@ -283,10 +283,7 @@ class _MetricsCard extends StatelessWidget {
         'Buffer',
         '${m.bufferFrames} mẫu (${m.bufferMs.toStringAsFixed(1)} ms), burst ${m.burstFrames}',
       ),
-      (
-        'HĐH báo trễ',
-        '${(m.reportedInputLatencyMs + m.reportedOutputLatencyMs).toStringAsFixed(1)} ms',
-      ),
+      ('HĐH báo trễ', _reported(m)),
       ('CPU', '${(m.cpuLoad * 100).toStringAsFixed(1)} %'),
       ('Xrun (rè)', '${m.xruns}'),
     ];
@@ -321,6 +318,13 @@ class _MetricsCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Độ trễ do hệ điều hành tự báo; một số máy (và máy ảo) trả số vô lý → hiện "không rõ".
+String _reported(EngineMetrics m) {
+  final ms = m.reportedInputLatencyMs + m.reportedOutputLatencyMs;
+  if (ms <= 0 || ms > 1000) return 'không rõ';
+  return '${ms.toStringAsFixed(1)} ms';
 }
 
 class _ErrorView extends StatelessWidget {

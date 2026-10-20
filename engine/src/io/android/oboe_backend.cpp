@@ -47,9 +47,21 @@ tc_result toResult(oboe::Result r) {
   }
 }
 
-class OboeBackend final : public AudioBackend,
-                          public oboe::FullDuplexStream,
-                          public oboe::AudioStreamErrorCallback {
+class OboeBackend;
+
+// FullDuplexStream có start()/stop() riêng trùng tên với AudioBackend → tách thành lớp nhỏ,
+// chỉ chuyển callback về OboeBackend.
+class DuplexStream final : public oboe::FullDuplexStream {
+ public:
+  explicit DuplexStream(OboeBackend& owner) : owner_(owner) {}
+  oboe::DataCallbackResult onBothStreamsReady(const void* inputData, int numInputFrames,
+                                              void* outputData, int numOutputFrames) override;
+
+ private:
+  OboeBackend& owner_;
+};
+
+class OboeBackend final : public AudioBackend, public oboe::AudioStreamErrorCallback {
  public:
   OboeBackend(BackendHost& host, const EngineConfig& config)
       : host_(host), sampleRate_(static_cast<int32_t>(config.sampleRate)) {}
@@ -92,8 +104,8 @@ class OboeBackend final : public AudioBackend,
   }
 
   // [RT] Callback chính – cả micro và loa đã sẵn sàng.
-  oboe::DataCallbackResult onBothStreamsReady(const void* inputData, int numInputFrames,
-                                              void* outputData, int numOutputFrames) override {
+  oboe::DataCallbackResult onAudio(const void* inputData, int numInputFrames, void* outputData,
+                                   int numOutputFrames) noexcept {
     const auto frames = static_cast<uint32_t>(numOutputFrames);
     float* in = inBuf_.data();
     if (frames > inBuf_.size()) {
@@ -157,7 +169,7 @@ class OboeBackend final : public AudioBackend,
         ->setChannelConversionAllowed(true)
         ->setUsage(oboe::Usage::Media)
         ->setContentType(oboe::ContentType::Music)
-        ->setDataCallback(this)
+        ->setDataCallback(&duplex_)
         ->setErrorCallback(this);
     oboe::Result r = out.openStream(output_);
     if (r != oboe::Result::OK) return toResult(r);
@@ -194,9 +206,9 @@ class OboeBackend final : public AudioBackend,
     lastXruns_ = 0;
     currentXruns_.store(0, std::memory_order_relaxed);
 
-    setSharedInputStream(input_);
-    setSharedOutputStream(output_);
-    r = oboe::FullDuplexStream::start();
+    duplex_.setSharedInputStream(input_);
+    duplex_.setSharedOutputStream(output_);
+    r = duplex_.start();
     if (r != oboe::Result::OK) {
       closeLocked();
       return toResult(r);
@@ -223,6 +235,7 @@ class OboeBackend final : public AudioBackend,
 
   BackendHost& host_;
   const int32_t sampleRate_;
+  DuplexStream duplex_{*this};
   mutable std::mutex mutex_;  // bảo vệ mở/đóng stream (không dùng trong callback)
   bool stopping_ = false;
   std::shared_ptr<oboe::AudioStream> output_;
@@ -232,6 +245,12 @@ class OboeBackend final : public AudioBackend,
   std::atomic<uint32_t> currentXruns_{0};
   uint32_t xrunsBase_ = 0;  // xrun của các stream đã đóng (khi mở lại)
 };
+
+oboe::DataCallbackResult DuplexStream::onBothStreamsReady(const void* inputData,
+                                                         int numInputFrames, void* outputData,
+                                                         int numOutputFrames) {
+  return owner_.onAudio(inputData, numInputFrames, outputData, numOutputFrames);
+}
 
 }  // namespace
 
