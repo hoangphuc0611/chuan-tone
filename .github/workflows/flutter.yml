@@ -1,6 +1,7 @@
 name: flutter
 
 on:
+  workflow_dispatch:
   push:
     paths: ["engine/**", "bindings/**", "app/**", ".fvmrc", ".github/workflows/flutter.yml"]
   pull_request:
@@ -56,17 +57,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with: { name: chuantone-debug-apk, path: app/build/app/outputs/flutter-apk/app-debug.apk }
 
-  ios:
-    name: build iOS simulator
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v4
-      - id: fvm
-        run: echo "version=$(jq -r .flutter .fvmrc)" >> "$GITHUB_OUTPUT"
-      - uses: subosito/flutter-action@v2
-        with: { flutter-version: "${{ steps.fvm.outputs.version }}", cache: true }
-      - name: Build tonecore.xcframework
-        run: engine/scripts/build_xcframework.sh
-      - name: Build app cho simulator
-        working-directory: app
-        run: flutter build ios --simulator --debug
+  # Build iOS: xem workflow ios-ipa.yml (tránh chạy trùng máy macOS – tốn phút CI).

@@ -1,6 +1,7 @@
 name: engine
 
 on:
+  workflow_dispatch:
   push:
     paths: ["engine/**", ".github/workflows/engine.yml"]
   pull_request:
