@@ -30,6 +30,8 @@ add_executable(tonecore_tests
   unit/pitch_detect_test.cpp
   unit/corrector_test.cpp
   unit/psola_test.cpp
+  unit/voice_pitch_node_test.cpp
+  unit/rt_alloc_test.cpp
 )
 target_link_libraries(tonecore_tests PRIVATE tonecore_core tonecore_testutil GTest::gtest_main)
 tc_set_warnings(tonecore_tests)

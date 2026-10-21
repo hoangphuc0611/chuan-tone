@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstring>
 
 #include "core/denormal.h"
@@ -17,6 +18,7 @@ constexpr double kMonitorFadeSec = 0.01;
 Engine::Engine(const EngineConfig& config)
     : config_(config),
       player_(config.sampleRate),
+      pitch_(config.sampleRate, config.maxBlockFrames),
       probe_(config.sampleRate),
       micBuf_(config.maxBlockFrames, 0.0f),
       beatBuf_(2 * static_cast<std::size_t>(config.maxBlockFrames), 0.0f),
@@ -103,6 +105,31 @@ tc_result Engine::setParam(int32_t nodeId, int32_t paramId, float value) noexcep
         return TC_OK;
       }
       break;
+    case TC_NODE_PITCH:
+      if (!std::isfinite(value)) return TC_ERR_INVALID_ARG;
+      switch (paramId) {
+        case TC_PARAM_ENABLED:
+          pitch_.setEnabled(value >= 0.5f);
+          return TC_OK;
+        case TC_PARAM_RETUNE_MS:
+          pitch_.setRetuneMs(value);
+          return TC_OK;
+        case TC_PARAM_HUMANIZE:
+          pitch_.setHumanize(value);
+          return TC_OK;
+        case TC_PARAM_FLEX_CENTS:
+          pitch_.setFlexCents(value);
+          return TC_OK;
+        case TC_PARAM_VIBRATO_PRESERVE:
+          pitch_.setVibratoPreserve(value);
+          return TC_OK;
+        case TC_PARAM_HYSTERESIS_CENTS:
+          pitch_.setHysteresisCents(value);
+          return TC_OK;
+        default:
+          break;
+      }
+      break;
     default:
       break;
   }
@@ -129,7 +156,65 @@ tc_result Engine::getParam(int32_t nodeId, int32_t paramId, float* outValue) con
     *outValue = monitorEnabled_.load(std::memory_order_relaxed) ? 1.0f : 0.0f;
     return TC_OK;
   }
+  if (nodeId == TC_NODE_PITCH) {
+    const CorrectorParams p = pitch_.params();
+    switch (paramId) {
+      case TC_PARAM_ENABLED:
+        *outValue = pitch_.enabled() ? 1.0f : 0.0f;
+        return TC_OK;
+      case TC_PARAM_RETUNE_MS:
+        *outValue = p.retuneMs;
+        return TC_OK;
+      case TC_PARAM_HUMANIZE:
+        *outValue = p.humanize;
+        return TC_OK;
+      case TC_PARAM_FLEX_CENTS:
+        *outValue = p.flexCents;
+        return TC_OK;
+      case TC_PARAM_VIBRATO_PRESERVE:
+        *outValue = p.vibratoPreserve;
+        return TC_OK;
+      case TC_PARAM_HYSTERESIS_CENTS:
+        *outValue = p.hysteresisCents;
+        return TC_OK;
+      default:
+        break;
+    }
+  }
   return TC_ERR_INVALID_ARG;
+}
+
+// ---------------------------------------------------------------------------
+// Tự chỉnh giọng
+
+tc_result Engine::setKey(int32_t root, int32_t scale) noexcept {
+  if (root < 0 || root > 11 || scale < 0 || scale >= kScaleCount) return TC_ERR_INVALID_ARG;
+  pitch_.setKey(root, static_cast<Scale>(scale));
+  return TC_OK;
+}
+
+void Engine::key(int32_t& root, int32_t& scale) const noexcept {
+  root = pitch_.keyRoot();
+  scale = static_cast<int32_t>(pitch_.keyScale());
+}
+
+tc_result Engine::setCorrectionPreset(int32_t preset) noexcept {
+  if (preset < TC_PRESET_NATURAL || preset > TC_PRESET_ROBOT) return TC_ERR_INVALID_ARG;
+  pitch_.applyPreset(static_cast<CorrectionPreset>(preset));
+  return TC_OK;
+}
+
+void Engine::fillPitchState(tc_pitch_state& s) const noexcept {
+  PitchSnapshot snap;
+  pitch_.readState(snap);
+  s.voiced = snap.voiced ? 1 : 0;
+  s.f0_hz = snap.f0;
+  s.confidence = snap.confidence;
+  s.input_note = snap.inputMidi;
+  s.target_note = snap.targetNote;
+  s.cents_off = snap.centsOff;
+  s.correction_cents = snap.correctionCents;
+  s.enabled = pitch_.enabled() ? 1 : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -296,7 +381,16 @@ void Engine::processAudio(const float* in, uint32_t inChannels, float* out, uint
       std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
   const double blockSec = static_cast<double>(frames) / config_.sampleRate;
   if (blockSec > 0.0) {
-    cpuLoad_.store(static_cast<float>(elapsed / blockSec), std::memory_order_relaxed);
+    const auto load = static_cast<float>(elapsed / blockSec);
+    cpuLoad_.store(load, std::memory_order_relaxed);
+    // Đỉnh theo cửa sổ 1 giây: phát hiện block tốn bất thường dễ gây xrun.
+    cpuPeakAccum_ = std::max(cpuPeakAccum_, load);
+    cpuPeakFrames_ += frames;
+    if (cpuPeakFrames_ >= config_.sampleRate) {
+      cpuPeak_.store(cpuPeakAccum_, std::memory_order_relaxed);
+      cpuPeakAccum_ = 0.0f;
+      cpuPeakFrames_ = 0;
+    }
   }
   framesProcessed_.fetch_add(frames, std::memory_order_relaxed);
   callbacks_.fetch_add(1, std::memory_order_relaxed);
@@ -316,6 +410,9 @@ void Engine::processChunk(const float* in, uint32_t inChannels, float* out, uint
     }
     return;
   }
+
+  // Giọng: lọc thông cao, dò cao độ, tự chỉnh giọng (tại chỗ).
+  pitch_.process(mic, frames);
 
   float* beat = beatBuf_.data();
   player_.render(beat, frames);
@@ -350,6 +447,9 @@ void Engine::fillMetrics(tc_metrics& m) const noexcept {
   m.route = route_.load(std::memory_order_relaxed);
   m.monitor_active = monitorMix_.target() > 0.5f ? 1 : 0;
   m.input_channels = static_cast<int32_t>(inputChannelsSeen_.load(std::memory_order_relaxed));
+  m.cpu_load_peak =
+      std::max(cpuPeak_.load(std::memory_order_relaxed), cpuLoad_.load(std::memory_order_relaxed));
+  m.algorithm_latency_frames = pitch_.algorithmLatency();
   if (backend_) {
     const BackendInfo info = backend_->info();
     m.xruns = backend_->xruns();

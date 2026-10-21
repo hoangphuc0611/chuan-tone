@@ -203,6 +203,29 @@ tc_result tc_get_playback_state(tc_engine* engine, tc_playback_state* out_state)
   return TC_OK;
 }
 
+tc_result tc_set_key(tc_engine* engine, int32_t root, int32_t scale) {
+  if (engine == nullptr) return TC_ERR_INVALID_ARG;
+  return engine->impl.setKey(root, scale);
+}
+
+tc_result tc_get_key(tc_engine* engine, int32_t* out_root, int32_t* out_scale) {
+  if (engine == nullptr || out_root == nullptr || out_scale == nullptr) return TC_ERR_INVALID_ARG;
+  engine->impl.key(*out_root, *out_scale);
+  return TC_OK;
+}
+
+tc_result tc_set_correction_preset(tc_engine* engine, int32_t preset) {
+  if (engine == nullptr) return TC_ERR_INVALID_ARG;
+  return engine->impl.setCorrectionPreset(preset);
+}
+
+tc_result tc_get_pitch_state(tc_engine* engine, tc_pitch_state* out_state) {
+  if (engine == nullptr || out_state == nullptr) return TC_ERR_INVALID_ARG;
+  if (out_state->struct_size != sizeof(tc_pitch_state)) return TC_ERR_INVALID_ARG;
+  engine->impl.fillPitchState(*out_state);
+  return TC_OK;
+}
+
 tc_result tc_set_route_hint(tc_engine* engine, int32_t route) {
   if (engine == nullptr) return TC_ERR_INVALID_ARG;
   try {

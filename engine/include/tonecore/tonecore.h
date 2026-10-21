@@ -31,7 +31,7 @@ extern "C" {
 /* Phiên bản API: (major << 16) | (minor << 8) | patch.
  * Tăng major khi phá vỡ ABI; tăng minor khi thêm hàm. */
 #define TC_API_VERSION_MAJOR 0
-#define TC_API_VERSION_MINOR 2
+#define TC_API_VERSION_MINOR 3
 #define TC_API_VERSION_PATCH 0
 #define TC_API_VERSION \
   ((TC_API_VERSION_MAJOR << 16) | (TC_API_VERSION_MINOR << 8) | TC_API_VERSION_PATCH)
@@ -82,15 +82,39 @@ typedef enum tc_route {
 typedef enum tc_node_id {
   TC_NODE_MASTER = 0,  /* tổng đầu ra */
   TC_NODE_MONITOR = 1, /* nghe lại giọng (micro → tai nghe) */
-  TC_NODE_BEAT = 2     /* nhạc beat */
+  TC_NODE_BEAT = 2,    /* nhạc beat */
+  TC_NODE_PITCH = 3    /* tự chỉnh giọng (từ v0.3) */
 } tc_node_id;
 
 typedef enum tc_param_id {
   /* Hệ số khuếch đại tuyến tính, 0..4. Được làm mượt trong audio thread. */
   TC_PARAM_GAIN = 0,
-  /* Bật/tắt: 0 hoặc 1 (chỉ TC_NODE_MONITOR). */
-  TC_PARAM_ENABLED = 1
+  /* Bật/tắt: 0 hoặc 1 (TC_NODE_MONITOR, TC_NODE_PITCH). */
+  TC_PARAM_ENABLED = 1,
+  /* ---- TC_NODE_PITCH (từ v0.3) ---- */
+  TC_PARAM_RETUNE_MS = 2,        /* 0..200 ms: thời gian kéo về nốt đích (0 = tức thì) */
+  TC_PARAM_HUMANIZE = 3,         /* 0..1: nốt ngân dài thì chỉnh chậm dần */
+  TC_PARAM_FLEX_CENTS = 4,       /* 0..100 cent: lệch dưới ngưỡng này thì không chỉnh */
+  TC_PARAM_VIBRATO_PRESERVE = 5, /* 0..1: giữ rung giọng / luyến láy */
+  TC_PARAM_HYSTERESIS_CENTS = 6  /* 0..50 cent: vùng trễ khi chuyển nốt đích */
 } tc_param_id;
+
+/* Thang âm cho tự chỉnh giọng (từ v0.3). */
+typedef enum tc_scale {
+  TC_SCALE_MAJOR = 0,            /* trưởng */
+  TC_SCALE_NATURAL_MINOR = 1,    /* thứ tự nhiên */
+  TC_SCALE_HARMONIC_MINOR = 2,   /* thứ hoà âm */
+  TC_SCALE_PENTATONIC_MAJOR = 3, /* ngũ cung trưởng */
+  TC_SCALE_PENTATONIC_MINOR = 4, /* ngũ cung thứ */
+  TC_SCALE_CHROMATIC = 5         /* 12 nốt */
+} tc_scale;
+
+/* 3 mức tự chỉnh giọng người dùng thấy (từ v0.3). */
+typedef enum tc_correction_preset {
+  TC_PRESET_NATURAL = 0, /* Tự nhiên */
+  TC_PRESET_SINGER = 1,  /* Ca sĩ */
+  TC_PRESET_ROBOT = 2    /* Robot */
+} tc_correction_preset;
 
 /* Sự kiện gửi lên UI, lấy bằng tc_poll_events. */
 typedef enum tc_event_type {
@@ -134,6 +158,9 @@ typedef struct tc_metrics {
   int32_t audio_api;                 /* tc_audio_api */
   int32_t monitor_active;            /* 1 nếu đang nghe lại giọng */
   int32_t input_channels;            /* số kênh micro thực tế */
+  /* ---- từ v0.3 ---- */
+  float cpu_load_peak;              /* 0..1 – tải cao nhất trong 1 giây gần nhất */
+  int32_t algorithm_latency_frames; /* độ trễ thêm do xử lý (480 khi bật chỉnh giọng ở 48 kHz) */
 } tc_metrics;
 
 typedef struct tc_playback_state {
@@ -159,6 +186,19 @@ typedef struct tc_latency_result {
   uint32_t burst_frames;
   int32_t route;
 } tc_latency_result;
+
+/* Trạng thái cao độ cho đồng hồ cao độ (từ v0.3). */
+typedef struct tc_pitch_state {
+  uint32_t struct_size;
+  int32_t voiced;         /* 1 nếu đang có giọng hát */
+  float f0_hz;            /* cao độ người hát (Hz), 0 khi không có giọng */
+  float confidence;       /* 0..1 */
+  float input_note;       /* cao độ người hát dạng số MIDI thực (69 = La 440 Hz) */
+  int32_t target_note;    /* nốt đích (MIDI), -1 nếu chưa có */
+  float cents_off;        /* người hát lệch bao nhiêu cent so với nốt đích */
+  float correction_cents; /* engine đang dịch bao nhiêu cent */
+  int32_t enabled;        /* 1 nếu tự chỉnh giọng đang bật */
+} tc_pitch_state;
 
 typedef struct tc_event {
   int32_t type; /* tc_event_type */
@@ -214,6 +254,18 @@ TC_EXPORT int32_t tc_poll_events(tc_engine* engine, tc_event* out_events, uint32
  * frames: <= max_block_frames. */
 TC_EXPORT tc_result tc_engine_process_offline(tc_engine* engine, const float* input, float* output,
                                               uint32_t frames);
+
+/* ---- Tự chỉnh giọng (từ v0.3) ----
+ * Dò cao độ luôn chạy khi engine RUNNING (đồng hồ cao độ dùng được cả khi tắt chỉnh giọng).
+ * Bật/tắt bằng tc_set_param(TC_NODE_PITCH, TC_PARAM_ENABLED, 0|1). Khi bật, giọng nghe lại
+ * trễ thêm 10 ms (xem tc_metrics.algorithm_latency_frames); chuyển bật/tắt có crossfade 20 ms. */
+/* root: 0 = Đô (C) … 11 = Si (B); scale: tc_scale. */
+TC_EXPORT tc_result tc_set_key(tc_engine* engine, int32_t root, int32_t scale);
+TC_EXPORT tc_result tc_get_key(tc_engine* engine, int32_t* out_root, int32_t* out_scale);
+/* preset: tc_correction_preset. Ghi đè các tham số RETUNE_MS…HYSTERESIS_CENTS. */
+TC_EXPORT tc_result tc_set_correction_preset(tc_engine* engine, int32_t preset);
+/* out_state->struct_size phải = sizeof(tc_pitch_state). Gọi từ luồng UI (~30 lần/giây). */
+TC_EXPORT tc_result tc_get_pitch_state(tc_engine* engine, tc_pitch_state* out_state);
 
 /* ---- Đo lường ---- */
 TC_EXPORT tc_result tc_get_metrics(tc_engine* engine, tc_metrics* out_metrics);

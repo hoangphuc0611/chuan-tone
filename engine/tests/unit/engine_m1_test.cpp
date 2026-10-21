@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -15,6 +16,13 @@ namespace {
 
 constexpr uint32_t kBlock = 256;
 
+// Đỉnh của kênh `ch` trong block stereo interleaved.
+float peakOf(const std::vector<float>& out, int ch) {
+  float p = 0.0f;
+  for (std::size_t i = 0; i < out.size() / 2; ++i) p = std::max(p, std::fabs(out[2 * i + ch]));
+  return p;
+}
+
 struct Fixture {
   tc_engine* e = nullptr;
   explicit Fixture(uint32_t maxBlock = 1024) {
@@ -26,15 +34,21 @@ struct Fixture {
   }
   ~Fixture() { tc_engine_destroy(e); }
 
-  // Chạy n block, trả block cuối.
+  // Chạy n block với micro là sin 1 kHz biên độ `micLevel` (đường micro có lọc thông cao
+  // 80 Hz nên không dùng DC), trả block cuối.
   std::vector<float> run(int blocks, float micLevel = 0.0f) {
-    std::vector<float> in(kBlock, micLevel);
+    std::vector<float> in(kBlock);
     std::vector<float> out(2 * kBlock);
     for (int b = 0; b < blocks; ++b) {
+      for (uint32_t i = 0; i < kBlock; ++i) {
+        in[i] = micLevel * static_cast<float>(std::sin(2.0 * 3.14159265358979323846 * 1000.0 *
+                                                       static_cast<double>(phase_++) / 48000.0));
+      }
       EXPECT_EQ(tc_engine_process_offline(e, in.data(), out.data(), kBlock), TC_OK);
     }
     return out;
   }
+  uint64_t phase_ = 0;
 
   std::vector<tc_event> poll() {
     tc_event buf[32];
@@ -81,8 +95,8 @@ TEST(EngineM1, MonitorMixesVoiceWithGain) {
   ASSERT_EQ(tc_set_param(f.e, TC_NODE_MONITOR, TC_PARAM_ENABLED, 1.0f), TC_OK);
   ASSERT_EQ(tc_set_param(f.e, TC_NODE_MONITOR, TC_PARAM_GAIN, 0.5f), TC_OK);
   const auto out = f.run(40, 0.4f);
-  EXPECT_NEAR(out[0], 0.2f, 1e-5f);
-  EXPECT_NEAR(out[1], 0.2f, 1e-5f);
+  EXPECT_NEAR(peakOf(out, 0), 0.2f, 0.003f);
+  EXPECT_NEAR(peakOf(out, 1), 0.2f, 0.003f);
 }
 
 TEST(EngineM1, OutputIsClippedToUnity) {
@@ -90,7 +104,7 @@ TEST(EngineM1, OutputIsClippedToUnity) {
   tc_set_param(f.e, TC_NODE_MONITOR, TC_PARAM_ENABLED, 1.0f);
   tc_set_param(f.e, TC_NODE_MONITOR, TC_PARAM_GAIN, 4.0f);
   const auto out = f.run(40, 0.9f);
-  EXPECT_EQ(out[0], 1.0f);
+  EXPECT_EQ(peakOf(out, 0), 1.0f);
 }
 
 TEST(EngineM1, BluetoothRouteBlocksMonitorAndNotifies) {
@@ -102,7 +116,7 @@ TEST(EngineM1, BluetoothRouteBlocksMonitorAndNotifies) {
   EXPECT_TRUE(hasEvent(evs, TC_EVENT_MONITOR_BLOCKED));
 
   const auto out = f.run(40, 0.5f);
-  EXPECT_EQ(out[0], 0.0f);  // giọng không ra tai nghe Bluetooth
+  EXPECT_EQ(peakOf(out, 0), 0.0f);  // giọng không ra tai nghe Bluetooth
 
   tc_metrics m{};
   m.struct_size = sizeof(m);
@@ -113,7 +127,7 @@ TEST(EngineM1, BluetoothRouteBlocksMonitorAndNotifies) {
   // Cắm tai nghe có dây → nghe lại hoạt động trở lại.
   ASSERT_EQ(tc_set_route_hint(f.e, TC_ROUTE_WIRED), TC_OK);
   const auto out2 = f.run(40, 0.5f);
-  EXPECT_NEAR(out2[0], 0.5f, 1e-5f);
+  EXPECT_NEAR(peakOf(out2, 0), 0.5f, 0.005f);
   EXPECT_EQ(tc_set_route_hint(f.e, 42), TC_ERR_INVALID_ARG);
 }
 

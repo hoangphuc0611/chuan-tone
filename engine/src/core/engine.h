@@ -12,6 +12,7 @@
 #include "core/worker.h"
 #include "io/audio_backend.h"
 #include "latency/latency_probe.h"
+#include "pitch/voice_pitch_node.h"
 #include "player/beat_player.h"
 #include "tonecore/tonecore.h"
 
@@ -27,8 +28,8 @@ struct EngineConfig {
 
 // Lõi engine.
 //
-// Chuỗi xử lý M1 (mỗi block, trong audio thread):
-//   mic (kênh 0) ─× monitorGain × monitorMix ─┐
+// Chuỗi xử lý (mỗi block, trong audio thread):
+//   mic (kênh 0) → VoicePitchNode (HPF, dò cao độ, tự chỉnh giọng) ─× monitorGain × monitorMix ─┐
 //   beat (stereo) ─× beatGain ────────────────┼─ cộng → × masterGain → kẹp ±1 → loa/tai nghe
 //   (khi đang đo độ trễ: chỉ phát tín hiệu MLS, tắt mọi nguồn khác)
 //
@@ -55,6 +56,12 @@ class Engine : public BackendHost {
   void fillPlayback(tc_playback_state& s) const noexcept;
 
   tc_result setRouteHint(int32_t route);
+
+  // Tự chỉnh giọng
+  tc_result setKey(int32_t root, int32_t scale) noexcept;
+  void key(int32_t& root, int32_t& scale) const noexcept;
+  tc_result setCorrectionPreset(int32_t preset) noexcept;
+  void fillPitchState(tc_pitch_state& s) const noexcept;
   tc_result startLatencyMeasurement();
   tc_result latencyResult(tc_latency_result& out) const;
 
@@ -96,6 +103,7 @@ class Engine : public BackendHost {
 
   // Thành phần
   BeatPlayer player_;
+  VoicePitchNode pitch_;
   LatencyProbe probe_;
   std::unique_ptr<AudioBackend> backend_;
   EventQueue events_;
@@ -115,6 +123,9 @@ class Engine : public BackendHost {
   std::atomic<uint64_t> framesProcessed_{0};
   std::atomic<uint64_t> callbacks_{0};
   std::atomic<float> cpuLoad_{0.0f};
+  std::atomic<float> cpuPeak_{0.0f};  // đỉnh của cửa sổ 1 giây gần nhất đã xong
+  float cpuPeakAccum_ = 0.0f;         // audio thread
+  uint64_t cpuPeakFrames_ = 0;        // audio thread
   std::atomic<uint32_t> inputChannelsSeen_{0};
 
   // Luồng nền – khai báo cuối để bị huỷ đầu tiên (join trước khi các thành viên khác mất).

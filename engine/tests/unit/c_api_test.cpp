@@ -4,11 +4,20 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <string>
 #include <vector>
 
 namespace {
+
+// Đỉnh của kênh `ch` trong đoạn frame [from, to) của buffer stereo interleaved.
+float peak(const std::vector<float>& out, int ch, std::size_t from, std::size_t to) {
+  float p = 0.0f;
+  for (std::size_t i = from; i < to; ++i) p = std::max(p, std::fabs(out[2 * i + ch]));
+  return p;
+}
 
 struct EngineHolder {
   tc_engine* e = nullptr;
@@ -106,8 +115,14 @@ TEST(CApi, ProcessCopiesMonoInputToStereoWithGain) {
   ASSERT_EQ(tc_engine_create(nullptr, &h.e), TC_OK);
   ASSERT_EQ(tc_engine_start(h.e), TC_OK);
 
-  constexpr uint32_t kFrames = 256;
-  std::vector<float> in(kFrames, 0.5f);
+  // Sin 1 kHz (đường micro có lọc thông cao 80 Hz nên không dùng tín hiệu DC). 256 mẫu = đúng
+  // 16/3 chu kỳ → dùng 240 mẫu (5 chu kỳ) để mọi block giống hệt nhau.
+  constexpr uint32_t kFrames = 240;
+  std::vector<float> in(kFrames);
+  for (uint32_t i = 0; i < kFrames; ++i) {
+    in[i] =
+        0.25f * static_cast<float>(std::sin(2.0 * 3.14159265358979323846 * 1000.0 * i / 48000.0));
+  }
   std::vector<float> out(kFrames * 2, -1.0f);
 
   // Nghe lại giọng mặc định TẮT (tránh hú khi đang dùng loa ngoài).
@@ -119,10 +134,8 @@ TEST(CApi, ProcessCopiesMonoInputToStereoWithGain) {
   for (int b = 0; b < 20; ++b) {
     ASSERT_EQ(tc_engine_process_offline(h.e, in.data(), out.data(), kFrames), TC_OK);
   }
-  for (uint32_t i = 0; i < kFrames; ++i) {
-    EXPECT_NEAR(out[2 * i], 0.5f, 1e-4f);
-    EXPECT_NEAR(out[2 * i + 1], 0.5f, 1e-4f);
-  }
+  EXPECT_NEAR(peak(out, 0, 0, kFrames), 0.25f, 0.005f);
+  for (uint32_t i = 0; i < kFrames; ++i) EXPECT_EQ(out[2 * i], out[2 * i + 1]);
 
   // Đổi gain → đầu ra tiến dần (làm mượt), sau ~0.5 s phải đạt đúng đích.
   ASSERT_EQ(tc_set_param(h.e, TC_NODE_MASTER, TC_PARAM_GAIN, 2.0f), TC_OK);
@@ -131,15 +144,17 @@ TEST(CApi, ProcessCopiesMonoInputToStereoWithGain) {
   EXPECT_EQ(g, 2.0f);
 
   ASSERT_EQ(tc_engine_process_offline(h.e, in.data(), out.data(), kFrames), TC_OK);
-  EXPECT_GT(out[0], 0.5f);                    // đã bắt đầu tăng
-  EXPECT_LT(out[0], 1.0f);                    // nhưng chưa nhảy thẳng tới đích
-  EXPECT_GT(out[2 * (kFrames - 1)], out[0]);  // tăng dần trong block
+  const float first = peak(out, 0, 0, kFrames / 2);
+  const float second = peak(out, 0, kFrames / 2, kFrames);
+  EXPECT_GT(first, 0.255f);  // đã bắt đầu tăng
+  EXPECT_LT(second, 0.5f);   // nhưng chưa nhảy thẳng tới đích
+  EXPECT_GT(second, first);  // tăng dần trong block
 
   for (int b = 0; b < 100; ++b) {
     ASSERT_EQ(tc_engine_process_offline(h.e, in.data(), out.data(), kFrames), TC_OK);
   }
-  EXPECT_FLOAT_EQ(out[0], 1.0f);
-  EXPECT_FLOAT_EQ(out[1], 1.0f);
+  EXPECT_NEAR(peak(out, 0, 0, kFrames), 0.5f, 0.01f);
+  EXPECT_NEAR(peak(out, 1, 0, kFrames), 0.5f, 0.01f);
 }
 
 TEST(CApi, ProcessWithNullInputOutputsSilence) {
