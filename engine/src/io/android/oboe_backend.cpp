@@ -246,9 +246,8 @@ class OboeBackend final : public AudioBackend, public oboe::AudioStreamErrorCall
   uint32_t xrunsBase_ = 0;  // xrun của các stream đã đóng (khi mở lại)
 };
 
-oboe::DataCallbackResult DuplexStream::onBothStreamsReady(const void* inputData,
-                                                         int numInputFrames, void* outputData,
-                                                         int numOutputFrames) {
+oboe::DataCallbackResult DuplexStream::onBothStreamsReady(const void* inputData, int numInputFrames,
+                                                          void* outputData, int numOutputFrames) {
   return owner_.onAudio(inputData, numInputFrames, outputData, numOutputFrames);
 }
 

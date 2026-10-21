@@ -19,7 +19,7 @@ class ScopedFlushDenormals {
   ScopedFlushDenormals() noexcept {
 #if defined(TC_DENORMAL_X86)
     saved_ = _mm_getcsr();
-    _mm_setcsr(saved_ | 0x8040u);  // FTZ (bit 15) | DAZ (bit 6)
+    _mm_setcsr(static_cast<unsigned>(saved_) | 0x8040u);  // FTZ (bit 15) | DAZ (bit 6)
 #elif defined(__aarch64__)
     uint64_t fpcr;
     __asm__ __volatile__("mrs %0, fpcr" : "=r"(fpcr));
