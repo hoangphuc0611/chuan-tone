@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <random>
 #include <vector>
 
 #include "pitch/corrector.h"
@@ -221,4 +222,124 @@ TEST(Corrector, NaturalPreservesVietnameseToneShape) {
     EXPECT_GT(corr, 0.9);
     EXPECT_GT(range, 0.6);
   }
+}
+
+// ---------------- Mô phỏng người hát nghiệp dư ----------------
+// Giai điệu ngẫu nhiên trong Đô trưởng, mỗi nốt lệch ±20–45 cent, có đoạn vuốt từ dưới lên
+// (−80 cent, 60 ms) và rung giọng ±35 cent ở nốt dài; đôi chỗ có khoảng lặng 40 ms (phụ âm).
+namespace {
+
+struct SimNote {
+  double start, dur;
+  int target;
+  double detune;
+  bool vib;
+};
+
+struct SimScore {
+  double centerErr;  // trung vị |tâm nốt − nốt đúng| (cent), bỏ 80 ms đầu nốt
+  double dryErr;
+  double vibKeep;  // trung vị (biên độ rung ra / vào) trên nốt dài
+};
+
+SimScore simulateAmateur(const CorrectorParams& params) {
+  std::vector<double> errs, dry, keeps;
+  for (unsigned seed = 1; seed <= 5; ++seed) {
+    std::mt19937 rng(seed);
+    const int scale[] = {60, 62, 64, 65, 67, 69, 71, 72};
+    std::uniform_real_distribution<double> dur(0.2, 0.7), det(20, 45), u(0, 1);
+    std::vector<SimNote> notes;
+    double t = 0.1;
+    for (int i = 0; i < 60; ++i) {
+      SimNote n{t, dur(rng), scale[rng() % 8], 0.0, false};
+      n.detune = det(rng) * (u(rng) < 0.5 ? -1 : 1);
+      n.vib = n.dur > 0.45;
+      notes.push_back(n);
+      t += n.dur + (u(rng) < 0.3 ? 0.04 : 0.0);
+    }
+    PitchCorrector c(kFrameRate);
+    c.setParams(params);
+    c.setKeyMask(keyMask(0, Scale::Major));
+    std::vector<double> in, out;
+    std::vector<int> who;
+    for (int i = 0; i < static_cast<int>(t * kFrameRate); ++i) {
+      const double time = i / kFrameRate;
+      int idx = -1;
+      double m = std::nan("");
+      for (int k = 0; k < static_cast<int>(notes.size()); ++k) {
+        const auto& n = notes[static_cast<std::size_t>(k)];
+        if (time < n.start || time >= n.start + n.dur) continue;
+        const double x = time - n.start;
+        m = n.target + n.detune / 100.0;
+        if (x < 0.06) m -= 0.8 * (1.0 - x / 0.06);
+        if (n.vib && x > 0.25)
+          m += 0.35 * std::min(1.0, (x - 0.25) / 0.15) * std::sin(2 * kPi * 5.5 * x);
+        idx = k;
+      }
+      TrackedPitch tp;
+      if (idx >= 0) {
+        tp.voiced = true;
+        tp.midi = static_cast<float>(m);
+      }
+      const auto f = c.update(tp);
+      in.push_back(m);
+      out.push_back(m + f.correction);
+      who.push_back(idx);
+    }
+    for (int k = 0; k < static_cast<int>(notes.size()); ++k) {
+      const auto& n = notes[static_cast<std::size_t>(k)];
+      double so = 0, si = 0;
+      int cnt = 0;
+      std::vector<double> vo, vi;
+      for (std::size_t i = 0; i < out.size(); ++i) {
+        if (who[i] != k) continue;
+        const double x = static_cast<double>(i) / kFrameRate - n.start;
+        if (x < 0.08) continue;
+        so += out[i];
+        si += in[i];
+        ++cnt;
+        if (n.vib && x > 0.4) {
+          vo.push_back(out[i]);
+          vi.push_back(in[i]);
+        }
+      }
+      if (cnt < 5) continue;
+      errs.push_back(std::fabs(so / cnt - n.target) * 100);
+      dry.push_back(std::fabs(si / cnt - n.target) * 100);
+      if (vo.size() > 20) {
+        auto sd = [](const std::vector<double>& v) {
+          double mu = 0;
+          for (double x : v) mu += x;
+          mu /= static_cast<double>(v.size());
+          double s = 0;
+          for (double x : v) s += (x - mu) * (x - mu);
+          return std::sqrt(s / static_cast<double>(v.size()));
+        };
+        keeps.push_back(sd(vo) / sd(vi));
+      }
+    }
+  }
+  auto median = [](std::vector<double> v) {
+    std::sort(v.begin(), v.end());
+    return v[v.size() / 2];
+  };
+  return {median(errs), median(dry), median(keeps)};
+}
+
+}  // namespace
+
+TEST(Corrector, AmateurSingerSimulation) {
+  // Số đo khi viết test (2026-10-21): gốc 31,5 cent; Tự nhiên 1,9 / giữ rung 1,04;
+  // Ca sĩ 0,8 / 0,75; Robot 0,0 / 0,00.
+  const auto natural = simulateAmateur(correctionPreset(CorrectionPreset::Natural));
+  const auto singer = simulateAmateur(correctionPreset(CorrectionPreset::Singer));
+  const auto robot = simulateAmateur(correctionPreset(CorrectionPreset::Robot));
+  EXPECT_GT(natural.dryErr, 25.0);
+  EXPECT_LT(natural.centerErr, 5.0);
+  EXPECT_GT(natural.vibKeep, 0.9);
+  EXPECT_LT(singer.centerErr, 3.0);
+  EXPECT_GT(singer.vibKeep, 0.6);
+  EXPECT_LT(singer.vibKeep, 0.9);
+  EXPECT_LT(robot.centerErr, 1.0);
+  EXPECT_LT(robot.vibKeep, 0.1);
 }

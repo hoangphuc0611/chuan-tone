@@ -24,12 +24,12 @@
 #define TC_SANITIZED 1
 #endif
 
+#ifndef TC_SANITIZED
 namespace {
 thread_local bool g_counting = false;
 std::atomic<int> g_allocs{0};
 }  // namespace
 
-#ifndef TC_SANITIZED
 void* operator new(std::size_t size) {
   if (g_counting) g_allocs.fetch_add(1, std::memory_order_relaxed);
   if (void* p = std::malloc(size == 0 ? 1 : size)) return p;
