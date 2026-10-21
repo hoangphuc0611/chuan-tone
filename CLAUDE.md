@@ -247,6 +247,7 @@ Kế hoạch kỹ thuật (cây thư mục, thư viện, thuật toán, rủi ro
 - **Chỉ tiêu độ trễ** (ADR-002): mục 7 áp dụng khi tắt chỉnh giọng. Khi bật chỉnh giọng: iOS ≤ 25 ms, Android flagship ≤ 30 ms, tầm trung ≤ 40 ms. Khối pitch có độ trễ cố định 10 ms. Chỉ tiêu Android tầm trung chốt lại sau khi đo thật ở M1.
 - **C API & FFI** (ADR-001): handle mờ, mã lỗi `tc_result`, sự kiện theo kiểu kéo (`tc_poll_events`), không gọi ngược từ audio thread.
 - **Không dùng**: ffmpeg / ffmpeg_kit / libsndfile (LGPL), Rubber Band, SoundTouch, aubio, Essentia, libKeyFinder, Chromaprint. Xuất video bằng API native (AVAssetWriter / MediaCodec+MediaMuxer).
+- **Thứ tự nền tảng** (2026-10-21): làm và nghiệm thu trên **iPhone trước**; Android (đo độ trễ ≥ 2 máy, chốt chỉ tiêu tầm trung) làm sau. Code Android vẫn giữ build được trong CI.
 - **Upload tách vocal**: máy người dùng giải mã bằng codec OS rồi nén FLAC (libFLAC, BSD-3) — chốt lại ở M6.
 
 ## 12. QUY ƯỚC CODE
