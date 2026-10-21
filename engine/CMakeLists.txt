@@ -48,6 +48,8 @@ add_library(tonecore_core STATIC
   src/pitch/yin.cpp
   src/pitch/f0_tracker.cpp
   src/pitch/pitch_analyzer.cpp
+  src/pitch/scales.cpp
+  src/pitch/corrector.cpp
   src/player/track.cpp
   src/player/beat_player.cpp
 )

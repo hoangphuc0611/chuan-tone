@@ -56,9 +56,19 @@ class Biquad {
   void setCoeffs(const BiquadCoeffs& c) noexcept { c_ = c; }
   void reset() noexcept { s1_ = s2_ = 0.0; }
 
+  // Đặt trạng thái như thể đầu vào đã đứng yên ở `x` từ lâu (đầu ra = x·độ lợi DC). Dùng khi bắt
+  // đầu một đoạn mới để bộ lọc không phải "chạy lên" từ 0.
+  void resetSteady(float x) noexcept {
+    const auto v = static_cast<double>(x);
+    s2_ = (c_.b2 - c_.a2 * dcGain()) * v;
+    s1_ = (c_.b1 - c_.a1 * dcGain()) * v + s2_;
+  }
+
+  double dcGain() const noexcept { return (c_.b0 + c_.b1 + c_.b2) / (1.0 + c_.a1 + c_.a2); }
+
   // [RT]
   float process(float x) noexcept {
-    const double in = x;
+    const auto in = static_cast<double>(x);
     const double y = c_.b0 * in + s1_;
     s1_ = c_.b1 * in - c_.a1 * y + s2_;
     s2_ = c_.b2 * in - c_.a2 * y;

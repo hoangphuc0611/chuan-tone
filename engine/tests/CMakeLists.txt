@@ -28,6 +28,7 @@ add_executable(tonecore_tests
   unit/engine_m1_test.cpp
   unit/dsp_test.cpp
   unit/pitch_detect_test.cpp
+  unit/corrector_test.cpp
 )
 target_link_libraries(tonecore_tests PRIVATE tonecore_core tonecore_testutil GTest::gtest_main)
 tc_set_warnings(tonecore_tests)
