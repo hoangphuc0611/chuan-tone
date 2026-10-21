@@ -13,9 +13,11 @@ struct TrackerConfig {
   float onsetClarity = 0.90f;  // khung đầu đoạn dưới mức này phải được khung kế tiếp xác nhận
   float zcrMax = 0.30f;        // tỉ lệ qua 0 cao + clarity thấp → tiếng xát/gió
   float zcrClarity = 0.85f;
-  float jumpCents = 700.0f;   // nhảy lớn hơn mức này cần xác nhận
-  int jumpConfirmFrames = 3;  // số khung liên tiếp ổn định để chấp nhận bước nhảy lớn
-  int medianFrames = 3;       // lọc trung vị (1, 3 hoặc 5); mỗi khung thêm trễ ~nửa hop
+  float jumpCents = 700.0f;        // nhảy lớn hơn mức này cần xác nhận
+  int jumpConfirmFrames = 3;       // số khung liên tiếp ổn định để chấp nhận bước nhảy lớn
+  float octaveFixClarity = 0.88f;  // dưới mức này, khung lệch đúng ±1 quãng 8 so với giá trị
+  int octaveMemoryFrames = 25;     // tin cậy gần nhất (≤ 100 ms trước) thì được sửa về quãng đó
+  int medianFrames = 3;            // lọc trung vị (1, 3 hoặc 5); mỗi khung thêm trễ ~nửa hop
 };
 
 struct TrackedPitch {
@@ -35,6 +37,9 @@ struct TrackedPitch {
 //    trị đầu tiên chính là giá trị dễ sai nhất.
 //  - Bắt đầu đoạn: khung đầu tiên chỉ được tin ngay nếu rất rõ (clarity ≥ 0,9); nếu không phải
 //    chờ khung kế tiếp cho cùng nốt (±100 cent) → thêm tối đa 1 hop trễ khi bắt đầu hát.
+//  - Sửa lỗi quãng 8 theo trí nhớ ngắn: nhớ cao độ "tin cậy" gần nhất (clarity ≥ 0,88) trong
+//    100 ms, kể cả qua khoảng lặng ngắn; khung clarity thấp lệch đúng ±12 nửa cung (±60 cent) so
+//    với giá trị đó được đưa về cùng quãng 8 (lỗi kinh điển của MPM ở chỗ chuyển nốt đột ngột).
 //  - Lọc trung vị trên thang log (cent) để bỏ giá trị lẻ loi.
 // Mọi trạng thái là mảng cố định → dùng được trong audio thread.
 class F0Tracker {
@@ -56,6 +61,8 @@ class F0Tracker {
   float onsetMidi_ = 0.0f;
   float lastMidi_ = 0.0f;  // giá trị đã chấp nhận gần nhất (trước median)
   int pendingCount_ = 0;
+  float goodMidi_ = 0.0f;
+  int sinceGood_ = 1 << 20;
   float pendingMidi_ = 0.0f;
   float hist_[5] = {};
   int histCount_ = 0;

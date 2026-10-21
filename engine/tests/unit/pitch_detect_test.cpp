@@ -232,15 +232,21 @@ TEST(PitchAnalyzer, TracksVibratoAndGlide) {
 }
 
 TEST(PitchAnalyzer, VietnameseTones) {
+  // Nhiều seed: nhiễu/jitter khác nhau (libc++ và libstdc++ sinh số ngẫu nhiên khác nhau, nên
+  // một seed duy nhất không đủ đại diện).
   using tonecore::test::VietTone;
   for (VietTone t : {VietTone::Ngang, VietTone::Huyen, VietTone::Sac, VietTone::Hoi, VietTone::Nga,
                      VietTone::Nang}) {
-    const auto s = tonecore::test::synthVoice(tonecore::test::vietTone(t, 196.0), 2.0);
-    const Stats st = evaluate(s.audio, s.f0);
-    SCOPED_TRACE(testing::Message() << "tone=" << static_cast<int>(t));
-    EXPECT_LE(st.medianCents, 12.0);
-    EXPECT_EQ(st.octaveErrors, 0);
-    EXPECT_GT(st.recall, 0.9);
+    for (uint32_t seed = 1; seed <= 6; ++seed) {
+      VoiceSpec spec;
+      spec.seed = seed;
+      const auto s = tonecore::test::synthVoice(tonecore::test::vietTone(t, 196.0), 2.0, spec);
+      const Stats st = evaluate(s.audio, s.f0);
+      SCOPED_TRACE(testing::Message() << "tone=" << static_cast<int>(t) << " seed=" << seed);
+      EXPECT_LE(st.medianCents, 12.0);
+      EXPECT_EQ(st.octaveErrors, 0);
+      EXPECT_GT(st.recall, 0.9);
+    }
   }
 }
 

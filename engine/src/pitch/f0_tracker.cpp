@@ -21,12 +21,15 @@ void F0Tracker::reset() noexcept {
   run_ = 0;
   onsetPending_ = false;
   lastMidi_ = 0.0f;
+  sinceGood_ = 1 << 20;
   pendingCount_ = 0;
   histCount_ = 0;
 }
 
 // [RT]
 TrackedPitch F0Tracker::update(const PitchEstimate& est, float rmsDb, float zcr) noexcept {
+  if (sinceGood_ < (1 << 20)) ++sinceGood_;
+
   // ---- 1. Hữu thanh hay vô thanh ----
   const float clarityNeed = voiced_ ? cfg_.clarityOff : cfg_.clarityOn;
   bool voicedNow = est.f0 > 0.0f && rmsDb > cfg_.silenceDb && est.clarity >= clarityNeed;
@@ -42,7 +45,17 @@ TrackedPitch F0Tracker::update(const PitchEstimate& est, float rmsDb, float zcr)
   }
 
   // ---- 2. Chống nhảy bất thường (thường là lỗi quãng 8) ----
-  const float midi = hzToMidi(est.f0);
+  float midi = hzToMidi(est.f0);
+  if (est.clarity >= cfg_.octaveFixClarity) {
+    goodMidi_ = midi;
+    sinceGood_ = 0;
+  } else if (sinceGood_ <= cfg_.octaveMemoryFrames) {
+    if (std::fabs(midi - goodMidi_ - 12.0f) < 0.6f) {
+      midi -= 12.0f;
+    } else if (std::fabs(midi - goodMidi_ + 12.0f) < 0.6f) {
+      midi += 12.0f;
+    }
+  }
   if (!voiced_ && est.clarity < cfg_.onsetClarity) {
     const bool confirmed = onsetPending_ && std::fabs(midi - onsetMidi_) < 1.0f;
     if (!confirmed) {
