@@ -3,28 +3,16 @@
 #include <algorithm>
 #include <cmath>
 
+#include "dsp/kaiser.h"
+
 namespace tonecore {
 
 namespace {
 
-constexpr double kPi = 3.14159265358979323846;
 constexpr double kZeroCrossings = 32.0;  // Z
 constexpr double kKaiserBeta = 8.0;
 constexpr double kRolloff = 0.92;      // dải thông tới 92% Nyquist (≈ 20,3 kHz ở 44,1 kHz)
 constexpr int kTableResolution = 512;  // điểm bảng trên mỗi mẫu đầu vào
-
-// Hàm Bessel biến dạng loại 1 bậc 0, khai triển chuỗi — dùng cho cửa sổ Kaiser.
-double besselI0(double x) {
-  double sum = 1.0;
-  double term = 1.0;
-  const double half = x * 0.5;
-  for (int k = 1; k < 50; ++k) {
-    term *= (half / k) * (half / k);
-    sum += term;
-    if (term < sum * 1e-12) break;
-  }
-  return sum;
-}
 
 }  // namespace
 
@@ -36,7 +24,6 @@ Resampler::Resampler(double srcRate, double dstRate) : srcRate_(srcRate), dstRat
   // Lập bảng h(x) với x ∈ [0, L] (h đối xứng).
   const auto size = static_cast<std::size_t>(std::ceil(halfWidth_ * kTableResolution)) + 2;
   table_.resize(size);
-  const double i0Beta = besselI0(kKaiserBeta);
   for (std::size_t i = 0; i < size; ++i) {
     const double x = static_cast<double>(i) / kTableResolution;
     const double u = x / halfWidth_;
@@ -44,10 +31,8 @@ Resampler::Resampler(double srcRate, double dstRate) : srcRate_(srcRate), dstRat
       table_[i] = 0.0f;
       continue;
     }
-    const double arg = 2.0 * fc * x;
-    const double sinc = x == 0.0 ? 1.0 : std::sin(kPi * arg) / (kPi * arg);
-    const double window = besselI0(kKaiserBeta * std::sqrt(1.0 - u * u)) / i0Beta;
-    table_[i] = static_cast<float>(2.0 * fc * sinc * window);
+    const double window = dsp::kaiserWindow(u, kKaiserBeta);
+    table_[i] = static_cast<float>(2.0 * fc * dsp::sinc(2.0 * fc * x) * window);
   }
 }
 

@@ -39,6 +39,8 @@ add_library(tonecore_core STATIC
   src/latency/mls.cpp
   src/latency/latency_probe.cpp
   src/dsp/resampler.cpp
+  src/dsp/fft.cpp
+  src/dsp/decimator.cpp
   src/player/track.cpp
   src/player/beat_player.cpp
 )

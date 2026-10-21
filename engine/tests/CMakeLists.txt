@@ -19,6 +19,7 @@ add_executable(tonecore_tests
   unit/resampler_test.cpp
   unit/decoder_test.cpp
   unit/engine_m1_test.cpp
+  unit/dsp_test.cpp
 )
 target_link_libraries(tonecore_tests PRIVATE tonecore_core GTest::gtest_main)
 tc_set_warnings(tonecore_tests)
