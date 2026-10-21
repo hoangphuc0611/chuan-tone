@@ -41,6 +41,10 @@ add_library(tonecore_core STATIC
   src/dsp/resampler.cpp
   src/dsp/fft.cpp
   src/dsp/decimator.cpp
+  src/pitch/mpm.cpp
+  src/pitch/yin.cpp
+  src/pitch/f0_tracker.cpp
+  src/pitch/pitch_analyzer.cpp
   src/player/track.cpp
   src/player/beat_player.cpp
 )
