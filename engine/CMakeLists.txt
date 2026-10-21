@@ -50,6 +50,7 @@ add_library(tonecore_core STATIC
   src/pitch/pitch_analyzer.cpp
   src/pitch/scales.cpp
   src/pitch/corrector.cpp
+  src/pitch/psola.cpp
   src/player/track.cpp
   src/player/beat_player.cpp
 )
