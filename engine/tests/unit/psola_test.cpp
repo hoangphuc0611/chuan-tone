@@ -59,7 +59,8 @@ std::vector<double> envelopeDb(const std::vector<float>& x, std::size_t from, st
   std::vector<double> power(fft.bins(), 0.0);
   for (std::size_t start = from; start + n <= to; start += n / 2) {
     for (std::size_t i = 0; i < n; ++i) {
-      const double w = 0.5 - 0.5 * std::cos(2.0 * 3.14159265358979323846 * i / n);
+      const double w = 0.5 - 0.5 * std::cos(2.0 * 3.14159265358979323846 * static_cast<double>(i) /
+                                            static_cast<double>(n));
       frame[i] = static_cast<float>(x[start + i] * w);
     }
     fft.forward(frame.data(), spec.data());
