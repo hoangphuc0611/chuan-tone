@@ -1,0 +1,51 @@
+# Build file IPA iOS CHƯA KÝ để cài lên iPhone bằng Sideloadly (Apple ID miễn phí, 7 ngày)
+# khi máy dev chưa có Xcode. Tải ở tab Actions → ios-ipa → Artifacts → ChuanTone-ipa.
+name: ios-ipa
+
+on:
+  workflow_dispatch: # chạy tay: Actions → ios-ipa → Run workflow
+  push:
+    branches: [main]
+    paths: ["engine/**", "bindings/**", "app/**", ".fvmrc", ".github/workflows/ios-ipa.yml"]
+
+jobs:
+  ipa:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Đọc phiên bản Flutter từ .fvmrc
+        id: fvm
+        run: echo "version=$(jq -r .flutter .fvmrc)" >> "$GITHUB_OUTPUT"
+
+      - uses: subosito/flutter-action@v2
+        with: { flutter-version: "${{ steps.fvm.outputs.version }}", cache: true }
+
+      - name: Thông tin Xcode
+        run: xcodebuild -version
+
+      - name: Build tonecore.xcframework (engine C++ cho iPhone + Simulator)
+        run: engine/scripts/build_xcframework.sh
+
+      - name: Build app iOS release (không ký)
+        working-directory: app
+        run: flutter build ios --release --no-codesign
+
+      - name: Đóng gói IPA
+        run: |
+          set -euo pipefail
+          APP_DIR=app/build/ios/iphoneos
+          test -d "$APP_DIR/Runner.app"
+          # Kiểm tra engine đã được nhúng vào app
+          test -f "$APP_DIR/Runner.app/Frameworks/tonecore.framework/tonecore"
+          rm -rf ipa && mkdir -p ipa/Payload
+          cp -R "$APP_DIR/Runner.app" ipa/Payload/
+          (cd ipa && zip -qry ../ChuanTone.ipa Payload)
+          ls -la ChuanTone.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ChuanTone-ipa
+          path: ChuanTone.ipa
+          retention-days: 14
