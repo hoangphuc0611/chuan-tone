@@ -1,7 +1,12 @@
 # Kết quả đo độ trễ round-trip
 
-Chưa có số đo trên máy thật. Cách thu thập:
+Cập nhật: 2026-10-21 · 6 lần đo · 2 cấu hình máy.
 
-1. Cài app, mở **Đo độ trễ**, bấm **Đo** (loa ngoài, nơi yên tĩnh; hoặc dongle loopback cho đường tai nghe).
-2. Bấm **Sao chép kết quả** và gửi dòng CSV cho nhóm phát triển.
-3. Gộp: `python3 tools/latency/aggregate.py ketqua*.csv > docs/latency-results.md`
+Đo bằng màn "Đo độ trễ" của app (chuỗi MLS, tương quan chéo, trung vị 5 lần). Chỉ tiêu theo `docs/adr/002-latency-targets.md` cho trường hợp **tắt chỉnh giọng**: iOS ≤ 15 ms, Android flagship ≤ 20 ms, tầm trung ≤ 30 ms. Khi bật chỉnh giọng cộng thêm 10 ms.
+
+Lưu ý: đo bằng loa ngoài → micro khác đường tai nghe; số chính xác nhất cho đường tai nghe là đo bằng dongle loopback.
+
+| Máy | HĐH | Đường | API | Buffer (burst) | Số lần | Trễ đo (trung vị) | Thấp–cao | HĐH báo | Đánh giá |
+|---|---|---|---|---|---|---|---|---|---|
+| Apple iPhone14,2 | iOS 26.6.2 | Bluetooth | remoteio | 128 (128) | 3 | **212.6 ms** | 211.0–215.1 | 177.9 ms | Không áp dụng (Bluetooth) |
+| Apple iPhone14,2 | iOS 26.6.2 | Loa ngoài | remoteio | 128 (128) | 3 | **12.6 ms** | 12.6–12.7 | 4.0 ms | Đạt |

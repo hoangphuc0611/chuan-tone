@@ -1,0 +1,7 @@
+date,brand,model,os,route,api,sample_rate,burst_frames,buffer_frames,measured_ms,reported_ms,confidence,valid_bursts,spread_ms
+2026-10-21T14:13:04.869846,"Apple","iPhone14,2","iOS 26.6.2",speaker,remoteio,48000,128,128,12.73,4.02,0.91,5,0.001
+2026-10-21T14:12:56.084986,"Apple","iPhone14,2","iOS 26.6.2",speaker,remoteio,48000,128,128,12.58,4.02,0.91,5,0.148
+2026-10-21T14:12:41.269881,"Apple","iPhone14,2","iOS 26.6.2",speaker,remoteio,48000,128,128,12.58,4.02,0.92,5,0.154
+2026-10-21T14:11:21.540493,"Apple","iPhone14,2","iOS 26.6.2",bluetooth,remoteio,48000,128,128,210.96,177.87,0.77,5,0.574
+2026-10-21T14:11:14.020303,"Apple","iPhone14,2","iOS 26.6.2",bluetooth,remoteio,48000,128,128,212.59,177.87,0.30,5,0.589
+2026-10-21T14:11:02.820189,"Apple","iPhone14,2","iOS 26.6.2",bluetooth,remoteio,48000,128,128,215.05,177.87,0.77,5,0.593

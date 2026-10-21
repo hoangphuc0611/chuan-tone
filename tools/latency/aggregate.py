@@ -2,7 +2,7 @@
 """Gộp kết quả đo độ trễ (CSV sao chép từ màn "Đo độ trễ" của app) thành báo cáo Markdown.
 
 Dùng:
-    python3 tools/latency/aggregate.py ketqua1.csv ketqua2.csv ... > docs/latency-results.md
+    python3 tools/latency/aggregate.py tools/latency/data/*.csv > docs/latency-results.md
     pbpaste | python3 tools/latency/aggregate.py -          # đọc từ clipboard (macOS)
 
 Mỗi file có thể chứa nhiều dòng header (khi dán nhiều lần) — các dòng header lặp được bỏ qua.
@@ -49,7 +49,10 @@ def read_rows(paths: list[str]) -> list[dict[str, str]]:
     return rows
 
 
-def verdict(os_name: str, ms: float) -> str:
+def verdict(os_name: str, route: str, ms: float) -> str:
+    # Bluetooth có độ trễ codec ~150–250 ms, nằm ngoài chỉ tiêu (app tắt nghe lại giọng khi dùng BT).
+    if route == "bluetooth":
+        return "Không áp dụng (Bluetooth)"
     if os_name.lower().startswith("ios"):
         return "Đạt" if ms <= TARGET_IOS else f"Chưa đạt (> {TARGET_IOS:g})"
     if ms <= TARGET_ANDROID_FLAGSHIP:
@@ -98,7 +101,7 @@ def main(argv: list[str]) -> int:
             f"| {brand} {model} | {os_name} | {ROUTE_VI.get(route, route)} | {api} | "
             f"{buf} ({burst}) | {len(rs)} | **{med:.1f} ms** | "
             f"{min(measured):.1f}–{max(measured):.1f} | {statistics.median(reported):.1f} ms | "
-            f"{verdict(os_name, med)} |"
+            f"{verdict(os_name, route, med)} |"
         )
     print("\n".join(out))
     return 0
