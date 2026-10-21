@@ -26,11 +26,17 @@ Mọi thuật toán trong ToneCore được viết từ các nguồn công khai 
 
 ## Dò cao độ & chỉnh giọng (M2)
 
-- P. McLeod, G. Wyvill, *A Smarter Way to Find Pitch*, ICMC 2005 — MPM.
-- A. de Cheveigné, H. Kawahara, *YIN, a fundamental frequency estimator for speech and music*, JASA 2002.
-- M. Mauch, S. Dixon, *pYIN: A fundamental frequency estimator using probabilistic threshold distributions*, ICASSP 2014.
-- E. Moulines, F. Charpentier, *Pitch-synchronous waveform processing techniques for text-to-speech synthesis using diphones*, Speech Communication 1990 — PSOLA.
-- U. Zölzer (ed.), *DAFX: Digital Audio Effects*, 2nd ed., Wiley 2011 — chương pitch shifting.
+| Nguồn | Dùng cho | File |
+|---|---|---|
+| J. W. Cooley, J. W. Tukey, *An algorithm for the machine calculation of complex Fourier series*, Math. Comp. 1965; A. V. Oppenheim, R. W. Schafer, *Discrete-Time Signal Processing*, 3rd ed. (ch. 9: FFT; mục 7.6: cửa sổ Kaiser) | FFT số thực radix-2, thiết kế FIR | `dsp/fft.cpp`, `dsp/kaiser.h`, `dsp/decimator.cpp` |
+| R. Bristow-Johnson, *Cookbook formulae for audio EQ biquad filter coefficients* (W3C Audio EQ Cookbook) | Lọc thông cao 80 Hz, thông thấp | `dsp/biquad.h` |
+| P. McLeod, G. Wyvill, *A Smarter Way to Find Pitch*, ICMC 2005 | Dò cao độ MPM (NSDF, đỉnh khoá, ngưỡng k) | `pitch/mpm.cpp` |
+| A. de Cheveigné, H. Kawahara, *YIN, a fundamental frequency estimator for speech and music*, JASA 2002 | Đối chứng YIN | `pitch/yin.cpp` |
+| M. Mauch, S. Dixon, *pYIN: A fundamental frequency estimator using probabilistic threshold distributions*, ICASSP 2014 | Ý tưởng phân loại hữu/vô thanh | `pitch/f0_tracker.cpp` |
+| J. Salamon, E. Gómez, D. Ellis, G. Richard, *Melody Extraction from Polyphonic Music Signals*, IEEE SPM 2014 | Chỉ số VR/VFA/RPA/RCA/OA | `tools/pitch/eval_f0.py` |
+| A. Rosenberg, *Effect of glottal pulse shape on the quality of natural vowels*, JASA 1971; G. Fant, *Acoustic Theory of Speech Production*, 1960; G. Peterson, H. Barney, *Control methods used in a study of the vowels*, JASA 1952 | Giọng tổng hợp cho test (nguồn–lọc, formant) | `tests/util/synth_voice.cpp` |
+| E. Moulines, F. Charpentier, *Pitch-synchronous waveform processing techniques for text-to-speech synthesis using diphones*, Speech Communication 1990 | TD-PSOLA | `pitch/psola.cpp` |
+| U. Zölzer (ed.), *DAFX: Digital Audio Effects*, 2nd ed., Wiley 2011 — chương pitch shifting | PSOLA, làm mượt đường chỉnh | `pitch/psola.cpp`, `pitch/corrector.cpp` |
 
 ## Đổi tone beat (M4)
 

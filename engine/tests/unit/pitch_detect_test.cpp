@@ -66,8 +66,7 @@ Stats evaluate(const std::vector<float>& audio, const std::vector<float>& truth,
       ++voicedTruth;
       if (!f.tracked.voiced) return;
       ++hit;
-      const double cents =
-          1200.0 * std::log2(f.tracked.f0 / truth[static_cast<std::size_t>(c)]);
+      const double cents = 1200.0 * std::log2(f.tracked.f0 / truth[static_cast<std::size_t>(c)]);
       errs.push_back(std::fabs(cents));
       if (std::fabs(cents) > 50.0) ++gross;
       if (std::fabs(std::fabs(cents) - 1200.0) < 100.0) ++octave;
@@ -186,8 +185,8 @@ TEST(F0Tracker, VoicingHysteresisAndGates) {
   // Clarity 0,7: chưa đủ để bắt đầu (0,8).
   EXPECT_FALSE(tr.update({200.0f, 0.7f}, -20.0f, 0.05f).voiced);
   EXPECT_TRUE(tr.update({200.0f, 0.9f}, -20.0f, 0.05f).voiced);
-  // Đang hữu thanh: 0,7 vẫn giữ được (ngưỡng giữ 0,6).
-  EXPECT_TRUE(tr.update({200.0f, 0.7f}, -20.0f, 0.05f).voiced);
+  // Đang hữu thanh: 0,78 vẫn giữ được (ngưỡng giữ 0,75) dù dưới ngưỡng bắt đầu.
+  EXPECT_TRUE(tr.update({200.0f, 0.78f}, -20.0f, 0.05f).voiced);
   // Quá nhỏ → vô thanh.
   EXPECT_FALSE(tr.update({200.0f, 0.95f}, -70.0f, 0.05f).voiced);
   // Tỉ lệ qua 0 cao + clarity vừa phải → tiếng xát.
@@ -234,8 +233,8 @@ TEST(PitchAnalyzer, TracksVibratoAndGlide) {
 
 TEST(PitchAnalyzer, VietnameseTones) {
   using tonecore::test::VietTone;
-  for (VietTone t : {VietTone::Ngang, VietTone::Huyen, VietTone::Sac, VietTone::Hoi,
-                     VietTone::Nga, VietTone::Nang}) {
+  for (VietTone t : {VietTone::Ngang, VietTone::Huyen, VietTone::Sac, VietTone::Hoi, VietTone::Nga,
+                     VietTone::Nang}) {
     const auto s = tonecore::test::synthVoice(tonecore::test::vietTone(t, 196.0), 2.0);
     const Stats st = evaluate(s.audio, s.f0);
     SCOPED_TRACE(testing::Message() << "tone=" << static_cast<int>(t));

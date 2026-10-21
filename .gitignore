@@ -36,3 +36,5 @@ datasets/private/
 
 # FVM Version Cache
 .fvm/
+# Bộ dữ liệu test tải về (tools/pitch/fetch_datasets.sh) – KHÔNG commit
+testdata/

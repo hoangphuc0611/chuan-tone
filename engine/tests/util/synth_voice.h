@@ -24,10 +24,10 @@ using F0Contour = std::function<double(double)>;
 struct VoiceSpec {
   double sampleRate = 48000.0;
   Vowel vowel = Vowel::A;
-  double jitter = 0.004;      // độ lệch chuẩn tương đối của mỗi chu kỳ
-  double shimmer = 0.03;      // độ lệch chuẩn tương đối của biên độ mỗi chu kỳ
-  double breathDb = -40.0;    // nhiễu hơi thở so với biên độ đỉnh
-  double amplitude = 0.3;     // biên độ đỉnh sau chuẩn hoá
+  double jitter = 0.004;    // độ lệch chuẩn tương đối của mỗi chu kỳ
+  double shimmer = 0.03;    // độ lệch chuẩn tương đối của biên độ mỗi chu kỳ
+  double breathDb = -40.0;  // nhiễu hơi thở so với biên độ đỉnh
+  double amplitude = 0.3;   // biên độ đỉnh sau chuẩn hoá
   uint32_t seed = 1;
 };
 

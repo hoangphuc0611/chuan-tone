@@ -19,8 +19,8 @@ PitchAnalyzer::PitchAnalyzer(const PitchAnalyzerConfig& cfg)
       factor_(decimationFactor(cfg.inputRate, cfg.targetAnalysisRate)),
       analysisRate_(cfg.inputRate / factor_),
       window_(static_cast<std::size_t>(std::lround(cfg.windowMs * 1e-3 * analysisRate_))),
-      hop_(std::max<std::size_t>(1, static_cast<std::size_t>(
-                                        std::lround(cfg.hopMs * 1e-3 * analysisRate_)))),
+      hop_(std::max<std::size_t>(
+          1, static_cast<std::size_t>(std::lround(cfg.hopMs * 1e-3 * analysisRate_)))),
       decimator_(factor_),
       tracker_(cfg.tracker),
       dec_(kChunk / static_cast<std::size_t>(factor_) + 2),
@@ -76,8 +76,7 @@ void PitchAnalyzer::analyzeFrame(const float* x) noexcept {
   frame_.tracked = tracker_.update(frame_.raw, frame_.rmsDb, frame_.zcr);
 
   // Thời điểm giữa cửa sổ: mẫu phân tích j ứng với mẫu gốc factor·j + (factor−1) − trễ bộ lọc.
-  const double centerJ =
-      static_cast<double>(produced_) - static_cast<double>(window_) / 2.0 - 0.5;
+  const double centerJ = static_cast<double>(produced_) - static_cast<double>(window_) / 2.0 - 0.5;
   const double inputIndex =
       static_cast<double>(factor_) * centerJ + (factor_ - 1) - decimator_.groupDelayInput();
   frame_.timeSec = inputIndex / cfg_.inputRate;

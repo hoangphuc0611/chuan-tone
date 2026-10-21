@@ -71,7 +71,7 @@ TrackedPitch F0Tracker::update(const PitchEstimate& est, float rmsDb, float zcr)
       }
       pendingMidi_ = midi;
       if (pendingCount_ < cfg_.jumpConfirmFrames) {  // gồm cả trường hợp pendingCount_ = 0
-        accepted = lastMidi_;  // giữ giá trị cũ trong lúc chờ xác nhận
+        accepted = lastMidi_;                        // giữ giá trị cũ trong lúc chờ xác nhận
       } else {
         pendingCount_ = 0;
         histCount_ = 0;  // bước nhảy thật (vd. hát quãng 8): bỏ lịch sử để median không kéo lại

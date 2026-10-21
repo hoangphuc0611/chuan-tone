@@ -52,7 +52,8 @@ PitchEstimate Mpm::analyze(const float* frame) noexcept {
 
   // m(τ) và NSDF cho τ = 0..maxLag+1.
   double m = 0.0;
-  for (std::size_t j = 0; j < w; ++j) m += 2.0 * static_cast<double>(frame[j]) * static_cast<double>(frame[j]);
+  for (std::size_t j = 0; j < w; ++j)
+    m += 2.0 * static_cast<double>(frame[j]) * static_cast<double>(frame[j]);
   const std::size_t last = std::min(maxLag_ + 1, w - 1);
   for (std::size_t tau = 0; tau <= last; ++tau) {
     if (tau > 0) {

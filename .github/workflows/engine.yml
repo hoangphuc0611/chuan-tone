@@ -3,9 +3,9 @@ name: engine
 on:
   workflow_dispatch:
   push:
-    paths: ["engine/**", ".github/workflows/engine.yml"]
+    paths: ["engine/**", "tools/pitch/**", ".github/workflows/engine.yml"]
   pull_request:
-    paths: ["engine/**", ".github/workflows/engine.yml"]
+    paths: ["engine/**", "tools/pitch/**", ".github/workflows/engine.yml"]
 
 jobs:
   test:
@@ -57,6 +57,31 @@ jobs:
       - uses: actions/upload-artifact@v4
         with: { name: bench-linux, path: engine/bench.txt }
 
+  # Chấm điểm dò cao độ trên vocadito (CC BY 4.0, 58 MB, cache theo SHA-256 trong script).
+  pitch-eval:
+    runs-on: ubuntu-24.04
+    env:
+      CC: clang
+      CXX: clang++
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - uses: actions/cache@v4
+        with:
+          path: testdata
+          key: testdata-${{ hashFiles('tools/pitch/fetch_datasets.sh') }}
+      - name: Tải vocadito
+        run: tools/pitch/fetch_datasets.sh
+      - name: Build pitchlab (Release)
+        working-directory: engine
+        run: |
+          cmake -S . -B build/rel -G Ninja -DCMAKE_BUILD_TYPE=Release -DTC_BUILD_TESTS=OFF
+          cmake --build build/rel --target pitchlab
+      - name: Chấm điểm (RPA ≥ 0,90)
+        run: python3 tools/pitch/eval_f0.py --pitchlab engine/build/rel/tools/pitchlab --min-rpa 0.90 | tee pitch-eval.md
+      - uses: actions/upload-artifact@v4
+        with: { name: pitch-eval, path: pitch-eval.md }
+
   format:
     runs-on: ubuntu-24.04
     steps:
@@ -67,5 +92,5 @@ jobs:
         run: |
           export PATH="$HOME/.local/bin:$PATH"
           clang-format --version
-          find engine/src engine/include engine/tests engine/bench -name '*.h' -o -name '*.cpp' -o -name '*.c' \
+          find engine/src engine/include engine/tests engine/bench engine/tools -name '*.h' -o -name '*.cpp' -o -name '*.c' \
             | xargs clang-format --dry-run --Werror

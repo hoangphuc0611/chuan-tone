@@ -24,11 +24,22 @@ Quyền micro tự làm trong plugin (Java + AVAudioSession), không dùng `perm
 
 **Phụ thuộc gián tiếp cần lưu ý:** `dbus` (MPL-2.0) bị kéo vào bởi `file_picker_linux` – chỉ dùng cho bản Linux desktop, **không** được build vào app Android/iOS. Toàn bộ phụ thuộc Dart khác là MIT/BSD/Apache-2.0 (kiểm tra ngày 2026-10-20).
 
+## Dữ liệu test (không đóng gói vào app, không commit)
+
+Tải bằng `tools/pitch/fetch_datasets.sh` vào `testdata/` (đã `.gitignore`). Chỉ dùng để chấm điểm và thử nghiệm trên máy dev và CI.
+
+| Bộ dữ liệu | License | Ghi công | Dùng cho |
+|---|---|---|---|
+| vocadito v3 (zenodo.org/records/5578807) | CC BY 4.0 | R. M. Bittner, K. Pasalo, J. J. Bosch, G. Meseguer-Brocal, D. Rubinstein, *vocadito: A dataset of solo vocals with f0, note, and lyric annotations*, arXiv:2110.05580, 2021 | Chấm điểm dò cao độ (`tools/pitch/eval_f0.py`, CI) |
+| VocalSet 1.2 (zenodo.org/records/1442513) | CC BY 4.0 | J. Wilkins, P. Seetharaman, A. Wahl, B. Pardo, *VocalSet: A Singing Voice Dataset*, ISMIR 2018 | Thử giọng nam trầm, rung giọng, nghe A/B (chỉ máy dev, tải thủ công) |
+
+Không dùng các bộ chỉ cho phép phi thương mại / nghiên cứu: MIR-1K, MDB-stem-synth, M4Singer, Opencpop, NUS-48E, GTSinger.
+
 ## Dự kiến (chưa thêm)
 
 | Thư viện | License | Milestone | Ghi chú |
 |---|---|---|---|
-| PFFFT | BSD-like (FFTPACK) | M2 | FFT SIMD; iOS có thể dùng vDSP |
+| PFFFT | BSD-like (FFTPACK) | M4 (nếu cần) | M2 dùng FFT tự viết (`dsp/fft.cpp`); chỉ cân nhắc khi phase vocoder M4 cần FFT nhanh hơn |
 | nlohmann/json | MIT | M5 | preset JSON |
 | libFLAC | BSD-3-Clause | M6 | nén trước khi upload |
 | ONNX Runtime | MIT | sau MVP | model on-device |

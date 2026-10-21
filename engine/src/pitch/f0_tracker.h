@@ -7,15 +7,15 @@
 namespace tonecore {
 
 struct TrackerConfig {
-  float silenceDb = -55.0f;    // RMS khung dưới mức này → vô thanh
+  float silenceDb = -45.0f;    // RMS khung dưới mức này → vô thanh (chỉnh trên vocadito)
   float clarityOn = 0.80f;     // clarity tối thiểu để BẮT ĐẦU một đoạn hữu thanh
-  float clarityOff = 0.60f;    // clarity tối thiểu để GIỮ đoạn hữu thanh (trễ hai ngưỡng)
+  float clarityOff = 0.75f;    // clarity tối thiểu để GIỮ đoạn hữu thanh (trễ hai ngưỡng)
   float onsetClarity = 0.90f;  // khung đầu đoạn dưới mức này phải được khung kế tiếp xác nhận
   float zcrMax = 0.30f;        // tỉ lệ qua 0 cao + clarity thấp → tiếng xát/gió
   float zcrClarity = 0.85f;
-  float jumpCents = 700.0f;    // nhảy lớn hơn mức này cần xác nhận
-  int jumpConfirmFrames = 3;   // số khung liên tiếp ổn định để chấp nhận bước nhảy lớn
-  int medianFrames = 3;        // lọc trung vị (1, 3 hoặc 5); mỗi khung thêm trễ ~nửa hop
+  float jumpCents = 700.0f;   // nhảy lớn hơn mức này cần xác nhận
+  int jumpConfirmFrames = 3;  // số khung liên tiếp ổn định để chấp nhận bước nhảy lớn
+  int medianFrames = 3;       // lọc trung vị (1, 3 hoặc 5); mỗi khung thêm trễ ~nửa hop
 };
 
 struct TrackedPitch {
