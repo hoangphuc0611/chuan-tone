@@ -6,8 +6,9 @@ import 'package:tonecore_flutter/tonecore_flutter.dart';
 
 import '../engine/audio_service.dart';
 import '../engine/labels.dart';
+import '../widgets/pitch_meter.dart';
 
-/// Màn thử M1: phát beat, nghe lại giọng, xem số đo engine.
+/// Màn thử M1–M2: phát beat, nghe lại giọng, tự chỉnh giọng, đồng hồ cao độ, số đo engine.
 class TestRoomPage extends StatefulWidget {
   const TestRoomPage({super.key});
 
@@ -18,6 +19,8 @@ class TestRoomPage extends StatefulWidget {
 class _TestRoomPageState extends State<TestRoomPage> {
   final _service = AudioService.instance;
   Timer? _ticker;
+  Timer? _pitchTicker;
+  PitchState? _pitch;
   StreamSubscription<ToneCoreEvent>? _sub;
   bool _starting = true;
   bool _loading = false;
@@ -50,6 +53,12 @@ class _TestRoomPageState extends State<TestRoomPage> {
       const Duration(milliseconds: 250),
       (_) => _refresh(),
     );
+    // Đồng hồ cao độ cần mượt hơn: ~30 lần/giây.
+    _pitchTicker = Timer.periodic(const Duration(milliseconds: 33), (_) {
+      final eng = _service.engine;
+      if (eng == null || !mounted) return;
+      setState(() => _pitch = eng.pitchState);
+    });
   }
 
   void _refresh() {
@@ -112,6 +121,7 @@ class _TestRoomPageState extends State<TestRoomPage> {
   @override
   void dispose() {
     _ticker?.cancel();
+    _pitchTicker?.cancel();
     _sub?.cancel();
     _service.engine?.pause();
     super.dispose();
@@ -233,8 +243,97 @@ class _TestRoomPageState extends State<TestRoomPage> {
           },
         ),
         const Divider(height: 32),
+        // ---- Tự chỉnh giọng ----
+        Text('Tự chỉnh giọng', style: theme.textTheme.titleLarge),
+        const SizedBox(height: 8),
+        _KeyPicker(
+          value: _service.key,
+          onChanged: (k) => setState(() => _service.setKey(k)),
+        ),
+        const SizedBox(height: 12),
+        SegmentedButton<int>(
+          segments: [
+            const ButtonSegment(value: -1, label: Text('Tắt')),
+            for (final p in CorrectionPreset.values)
+              ButtonSegment(
+                value: p.index,
+                label: Text(correctionPresetLabel(p)),
+              ),
+          ],
+          selected: {_service.correction?.index ?? -1},
+          showSelectedIcon: false,
+          onSelectionChanged: (sel) => setState(() {
+            final v = sel.single;
+            _service.setCorrection(v < 0 ? null : CorrectionPreset.values[v]);
+          }),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          _service.correction == null
+              ? 'Đồng hồ cao độ vẫn hoạt động khi tắt.'
+              : _monitorOn
+              ? 'Giọng nghe lại trễ thêm 10 ms khi bật tự chỉnh giọng.'
+              : 'Bật "Nghe lại giọng" để nghe giọng đã chỉnh.',
+          style: theme.textTheme.bodySmall,
+        ),
+        const SizedBox(height: 8),
+        PitchMeter(state: _pitch),
+        const Divider(height: 32),
         // ---- Số đo ----
         if (m != null) _MetricsCard(metrics: m),
+      ],
+    );
+  }
+}
+
+/// Chọn tone: chủ âm (12 nốt) + thang âm.
+class _KeyPicker extends StatelessWidget {
+  const _KeyPicker({required this.value, required this.onChanged});
+
+  final MusicKey value;
+  final ValueChanged<MusicKey> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Tone: ${keyLabel(value)}',
+          style: theme.textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        Wrap(
+          spacing: 16,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            DropdownButton<int>(
+              value: value.root,
+              items: [
+                for (var r = 0; r < 12; r++)
+                  DropdownMenuItem(
+                    value: r,
+                    child: Text('${noteNameVi(r)} (${noteLetter(r)})'),
+                  ),
+              ],
+              onChanged: (r) {
+                if (r != null) onChanged(MusicKey(r, value.scale));
+              },
+            ),
+            DropdownButton<MusicScale>(
+              value: value.scale,
+              items: [
+                for (final s in MusicScale.values)
+                  DropdownMenuItem(value: s, child: Text(scaleLabel(s))),
+              ],
+              onChanged: (s) {
+                if (s != null) onChanged(MusicKey(value.root, s));
+              },
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -284,7 +383,11 @@ class _MetricsCard extends StatelessWidget {
         '${m.bufferFrames} mẫu (${m.bufferMs.toStringAsFixed(1)} ms), burst ${m.burstFrames}',
       ),
       ('HĐH báo trễ', _reported(m)),
-      ('CPU', '${(m.cpuLoad * 100).toStringAsFixed(1)} %'),
+      (
+        'CPU',
+        '${(m.cpuLoad * 100).toStringAsFixed(1)} % (đỉnh ${(m.cpuLoadPeak * 100).toStringAsFixed(1)} %)',
+      ),
+      ('Trễ xử lý', '${m.algorithmLatencyMs.toStringAsFixed(1)} ms'),
       ('Xrun (rè)', '${m.xruns}'),
     ];
     return Card(

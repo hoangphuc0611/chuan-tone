@@ -36,6 +36,7 @@ Mọi thuật toán trong ToneCore được viết từ các nguồn công khai 
 | J. Salamon, E. Gómez, D. Ellis, G. Richard, *Melody Extraction from Polyphonic Music Signals*, IEEE SPM 2014 | Chỉ số VR/VFA/RPA/RCA/OA | `tools/pitch/eval_f0.py` |
 | A. Rosenberg, *Effect of glottal pulse shape on the quality of natural vowels*, JASA 1971; G. Fant, *Acoustic Theory of Speech Production*, 1960; G. Peterson, H. Barney, *Control methods used in a study of the vowels*, JASA 1952 | Giọng tổng hợp cho test (nguồn–lọc, formant) | `tests/util/synth_voice.cpp` |
 | E. Moulines, F. Charpentier, *Pitch-synchronous waveform processing techniques for text-to-speech synthesis using diphones*, Speech Communication 1990 | TD-PSOLA | `pitch/psola.cpp` |
+| C. Lameter, *Effective synchronization on Linux/NUMA systems* (seqlock), Gelato Conference 2005 | Gửi trạng thái cao độ audio thread → UI không khoá | `pitch/pitch_state.h` |
 | U. Zölzer (ed.), *DAFX: Digital Audio Effects*, 2nd ed., Wiley 2011 — chương pitch shifting | PSOLA, làm mượt đường chỉnh | `pitch/psola.cpp`, `pitch/corrector.cpp` |
 
 ## Đổi tone beat (M4)

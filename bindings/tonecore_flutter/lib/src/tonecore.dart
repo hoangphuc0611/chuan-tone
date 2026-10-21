@@ -27,11 +27,80 @@ abstract final class TcNode {
   static const int master = tc_node_id.TC_NODE_MASTER;
   static const int monitor = tc_node_id.TC_NODE_MONITOR;
   static const int beat = tc_node_id.TC_NODE_BEAT;
+  static const int pitch = tc_node_id.TC_NODE_PITCH;
 }
 
 abstract final class TcParam {
   static const int gain = tc_param_id.TC_PARAM_GAIN;
   static const int enabled = tc_param_id.TC_PARAM_ENABLED;
+  static const int retuneMs = tc_param_id.TC_PARAM_RETUNE_MS;
+  static const int humanize = tc_param_id.TC_PARAM_HUMANIZE;
+  static const int flexCents = tc_param_id.TC_PARAM_FLEX_CENTS;
+  static const int vibratoPreserve = tc_param_id.TC_PARAM_VIBRATO_PRESERVE;
+  static const int hysteresisCents = tc_param_id.TC_PARAM_HYSTERESIS_CENTS;
+}
+
+/// Thang âm (thứ tự khớp `tc_scale`).
+enum MusicScale {
+  major,
+  naturalMinor,
+  harmonicMinor,
+  pentatonicMajor,
+  pentatonicMinor,
+  chromatic,
+}
+
+/// 3 mức "Tự chỉnh giọng" (thứ tự khớp `tc_correction_preset`).
+enum CorrectionPreset { natural, singer, robot }
+
+/// Tone (giọng) của bài: chủ âm 0 = Đô (C) … 11 = Si (B) + thang âm.
+class MusicKey {
+  const MusicKey(this.root, this.scale)
+    : assert(root >= 0 && root < 12, 'root phải trong 0..11');
+
+  final int root;
+  final MusicScale scale;
+
+  @override
+  bool operator ==(Object other) =>
+      other is MusicKey && other.root == root && other.scale == scale;
+
+  @override
+  int get hashCode => Object.hash(root, scale);
+}
+
+/// Trạng thái cao độ để vẽ đồng hồ cao độ.
+class PitchState {
+  const PitchState({
+    required this.voiced,
+    required this.f0Hz,
+    required this.confidence,
+    required this.inputNote,
+    required this.targetNote,
+    required this.centsOff,
+    required this.correctionCents,
+    required this.enabled,
+  });
+
+  /// Đang có giọng hát.
+  final bool voiced;
+  final double f0Hz;
+  final double confidence;
+
+  /// Cao độ người hát dạng số MIDI thực (69 = La 440 Hz).
+  final double inputNote;
+
+  /// Nốt đích (MIDI) hoặc null nếu chưa có.
+  final int? targetNote;
+
+  /// Người hát lệch bao nhiêu cent so với nốt đích (+ cao, − thấp).
+  final double centsOff;
+
+  /// Engine đang dịch bao nhiêu cent.
+  final double correctionCents;
+
+  /// Tự chỉnh giọng đang bật.
+  final bool enabled;
 }
 
 /// Đường âm thanh hiện tại (thứ tự khớp `tc_route`).
@@ -125,6 +194,8 @@ class EngineMetrics {
     required this.audioApi,
     required this.monitorActive,
     required this.inputChannels,
+    required this.cpuLoadPeak,
+    required this.algorithmLatencyFrames,
   });
 
   final EngineState state;
@@ -143,6 +214,15 @@ class EngineMetrics {
   final AudioApi audioApi;
   final bool monitorActive;
   final int inputChannels;
+
+  /// 0..1 – tải cao nhất trong 1 giây gần nhất.
+  final double cpuLoadPeak;
+
+  /// Độ trễ thêm do xử lý (mẫu): 0 khi tắt tự chỉnh giọng.
+  final int algorithmLatencyFrames;
+
+  double get algorithmLatencyMs =>
+      sampleRate == 0 ? 0 : 1000.0 * algorithmLatencyFrames / sampleRate;
 
   /// Độ trễ buffer đầu ra (ms) theo cấu hình hiện tại.
   double get bufferMs =>
@@ -310,6 +390,54 @@ class ToneCoreEngine implements Finalizable {
 
   set beatGain(double g) => setParam(TcNode.beat, TcParam.gain, g);
   double get beatGain => getParam(TcNode.beat, TcParam.gain);
+
+  // ---- Tự chỉnh giọng ----
+
+  /// Bật/tắt tự chỉnh giọng (khi bật giọng nghe lại trễ thêm 10 ms).
+  set pitchCorrectionEnabled(bool on) =>
+      setParam(TcNode.pitch, TcParam.enabled, on ? 1.0 : 0.0);
+  bool get pitchCorrectionEnabled =>
+      getParam(TcNode.pitch, TcParam.enabled) >= 0.5;
+
+  set key(MusicKey k) =>
+      _check('tc_set_key', _bindings.tc_set_key(_h, k.root, k.scale.index));
+
+  MusicKey get key {
+    return using((arena) {
+      final root = arena<Int32>();
+      final scale = arena<Int32>();
+      _check('tc_get_key', _bindings.tc_get_key(_h, root, scale));
+      return MusicKey(
+        root.value,
+        _enumAt(MusicScale.values, scale.value, MusicScale.chromatic),
+      );
+    });
+  }
+
+  /// Áp một trong 3 mức chỉnh (ghi đè retune/humanize/flex/vibrato/hysteresis).
+  void applyCorrectionPreset(CorrectionPreset p) => _check(
+    'tc_set_correction_preset',
+    _bindings.tc_set_correction_preset(_h, p.index),
+  );
+
+  PitchState get pitchState {
+    return using((arena) {
+      final s = arena<tc_pitch_state>();
+      s.ref.struct_size = sizeOf<tc_pitch_state>();
+      _check('tc_get_pitch_state', _bindings.tc_get_pitch_state(_h, s));
+      final v = s.ref;
+      return PitchState(
+        voiced: v.voiced != 0,
+        f0Hz: v.f0_hz,
+        confidence: v.confidence,
+        inputNote: v.input_note,
+        targetNote: v.target_note >= 0 ? v.target_note : null,
+        centsOff: v.cents_off,
+        correctionCents: v.correction_cents,
+        enabled: v.enabled != 0,
+      );
+    });
+  }
 
   // ---- Beat ----
 
@@ -503,6 +631,8 @@ class ToneCoreEngine implements Finalizable {
         audioApi: _enumAt(AudioApi.values, v.audio_api, AudioApi.none),
         monitorActive: v.monitor_active != 0,
         inputChannels: v.input_channels,
+        cpuLoadPeak: v.cpu_load_peak,
+        algorithmLatencyFrames: v.algorithm_latency_frames,
       );
     });
   }

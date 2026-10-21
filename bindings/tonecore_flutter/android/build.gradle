@@ -1,7 +1,7 @@
 // Gradle build engine ToneCore bằng NDK + CMake, đóng gói libtonecore.so vào APK.
 
 group = "vn.chuantone.tonecore_flutter"
-version = "0.2.0"
+version = "0.3.0"
 
 buildscript {
     repositories {

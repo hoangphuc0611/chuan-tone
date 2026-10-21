@@ -23,7 +23,7 @@ void main() {
   test('thông tin phiên bản', () {
     expect(ToneCore.isCompatible, isTrue);
     expect(ToneCore.version, isNotEmpty);
-    expect(ToneCore.apiVersionString, '0.2.0');
+    expect(ToneCore.apiVersionString, '0.3.0');
   });
 
   test('tạo, chạy, dừng và huỷ engine', () {
@@ -56,32 +56,88 @@ void main() {
     addTearDown(engine.dispose);
     engine.start();
 
-    final input = Float32List(256)..fillRange(0, 256, 0.5);
-    var out = engine.processOffline(input, 256);
-    expect(out.length, 512);
-    expect(out[0], 0.0); // nghe lại giọng mặc định tắt
+    // Sin 1 kHz (đường micro có lọc thông cao 80 Hz nên không dùng DC); 240 mẫu = 5 chu kỳ.
+    const n = 240;
+    final input = Float32List(n);
+    for (var i = 0; i < n; i++) {
+      input[i] = 0.25 * math.sin(2 * math.pi * 1000 * i / 48000);
+    }
+    double peak(Float32List out, int ch) {
+      var p = 0.0;
+      for (var i = 0; i < n; i++) {
+        p = math.max(p, out[2 * i + ch].abs());
+      }
+      return p;
+    }
+
+    var out = engine.processOffline(input, n);
+    expect(out.length, 2 * n);
+    expect(peak(out, 0), 0.0); // nghe lại giọng mặc định tắt
 
     engine.monitorEnabled = true;
     expect(engine.monitorEnabled, isTrue);
     for (var i = 0; i < 40; i++) {
-      out = engine.processOffline(input, 256);
+      out = engine.processOffline(input, n);
     }
-    expect(out[0], closeTo(0.5, 1e-4));
-    expect(out[1], closeTo(0.5, 1e-4));
+    expect(peak(out, 0), closeTo(0.25, 0.005));
+    expect(peak(out, 1), closeTo(0.25, 0.005));
 
     engine.setParam(TcNode.master, TcParam.gain, 2.0);
     expect(engine.getParam(TcNode.master, TcParam.gain), 2.0);
     for (var i = 0; i < 100; i++) {
-      out = engine.processOffline(input, 256);
+      out = engine.processOffline(input, n);
     }
-    expect(out[510], closeTo(1.0, 1e-4));
+    expect(peak(out, 0), closeTo(0.5, 0.01));
 
     final m = engine.metrics;
-    expect(m.framesProcessed, 256 * 141);
+    expect(m.framesProcessed, n * 141);
     expect(m.callbacks, 141);
     expect(m.sampleRate, 48000);
     expect(m.monitorActive, isTrue);
     expect(m.audioApi, AudioApi.none);
+  });
+
+  test('tự chỉnh giọng: tone, preset, trạng thái cao độ', () {
+    final engine = ToneCoreEngine.create(maxBlockFrames: 256);
+    addTearDown(engine.dispose);
+    engine.start();
+
+    engine.key = const MusicKey(9, MusicScale.naturalMinor);
+    expect(engine.key, const MusicKey(9, MusicScale.naturalMinor));
+    engine.applyCorrectionPreset(CorrectionPreset.robot);
+    expect(engine.getParam(TcNode.pitch, TcParam.retuneMs), 0.0);
+    expect(engine.metrics.algorithmLatencyFrames, 0);
+    engine.pitchCorrectionEnabled = true;
+    expect(engine.pitchCorrectionEnabled, isTrue);
+    expect(engine.metrics.algorithmLatencyFrames, 480);
+    expect(engine.metrics.algorithmLatencyMs, closeTo(10.0, 1e-9));
+
+    // La4 cao 30 cent, sóng có hoà âm (giống giọng hơn sin thuần).
+    final f = 440.0 * math.pow(2, 30 / 1200);
+    final block = Float32List(256);
+    var t = 0;
+    for (var b = 0; b < 100; b++) {
+      for (var i = 0; i < 256; i++, t++) {
+        final ph = 2 * math.pi * f * t / 48000;
+        block[i] =
+            0.2 * math.sin(ph) +
+            0.1 * math.sin(2 * ph) +
+            0.05 * math.sin(3 * ph);
+      }
+      engine.processOffline(block, 256);
+    }
+    final s = engine.pitchState;
+    expect(s.voiced, isTrue);
+    expect(s.enabled, isTrue);
+    expect(s.f0Hz, closeTo(f, 2.0));
+    expect(s.targetNote, 69);
+    expect(s.centsOff, closeTo(30, 5));
+    expect(s.correctionCents, closeTo(-30, 5));
+
+    expect(
+      () => engine.key = const MusicKey(0, MusicScale.chromatic),
+      returnsNormally,
+    );
   });
 
   test('route Bluetooth chặn nghe lại giọng và phát sự kiện', () {

@@ -359,6 +359,87 @@ class ToneCoreBindings {
         )
       >();
 
+  /// ---- Tự chỉnh giọng (từ v0.3) ----
+  /// Dò cao độ luôn chạy khi engine RUNNING (đồng hồ cao độ dùng được cả khi tắt chỉnh giọng).
+  /// Bật/tắt bằng tc_set_param(TC_NODE_PITCH, TC_PARAM_ENABLED, 0|1). Khi bật, giọng nghe lại
+  /// trễ thêm 10 ms (xem tc_metrics.algorithm_latency_frames); chuyển bật/tắt có crossfade 20 ms. */
+  /// /* root: 0 = Đô (C) … 11 = Si (B); scale: tc_scale.
+  int tc_set_key(ffi.Pointer<tc_engine> engine, int root, int scale) {
+    return _tc_set_key(engine, root, scale);
+  }
+
+  late final _tc_set_keyPtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(ffi.Pointer<tc_engine>, ffi.Int32, ffi.Int32)
+        >
+      >('tc_set_key');
+  late final _tc_set_key = _tc_set_keyPtr
+      .asFunction<int Function(ffi.Pointer<tc_engine>, int, int)>();
+
+  int tc_get_key(
+    ffi.Pointer<tc_engine> engine,
+    ffi.Pointer<ffi.Int32> out_root,
+    ffi.Pointer<ffi.Int32> out_scale,
+  ) {
+    return _tc_get_key(engine, out_root, out_scale);
+  }
+
+  late final _tc_get_keyPtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(
+            ffi.Pointer<tc_engine>,
+            ffi.Pointer<ffi.Int32>,
+            ffi.Pointer<ffi.Int32>,
+          )
+        >
+      >('tc_get_key');
+  late final _tc_get_key = _tc_get_keyPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<tc_engine>,
+          ffi.Pointer<ffi.Int32>,
+          ffi.Pointer<ffi.Int32>,
+        )
+      >();
+
+  /// preset: tc_correction_preset. Ghi đè các tham số RETUNE_MS…HYSTERESIS_CENTS.
+  int tc_set_correction_preset(ffi.Pointer<tc_engine> engine, int preset) {
+    return _tc_set_correction_preset(engine, preset);
+  }
+
+  late final _tc_set_correction_presetPtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(ffi.Pointer<tc_engine>, ffi.Int32)
+        >
+      >('tc_set_correction_preset');
+  late final _tc_set_correction_preset = _tc_set_correction_presetPtr
+      .asFunction<int Function(ffi.Pointer<tc_engine>, int)>();
+
+  /// out_state->struct_size phải = sizeof(tc_pitch_state). Gọi từ luồng UI (~30 lần/giây).
+  int tc_get_pitch_state(
+    ffi.Pointer<tc_engine> engine,
+    ffi.Pointer<tc_pitch_state> out_state,
+  ) {
+    return _tc_get_pitch_state(engine, out_state);
+  }
+
+  late final _tc_get_pitch_statePtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(
+            ffi.Pointer<tc_engine>,
+            ffi.Pointer<tc_pitch_state>,
+          )
+        >
+      >('tc_get_pitch_state');
+  late final _tc_get_pitch_state = _tc_get_pitch_statePtr
+      .asFunction<
+        int Function(ffi.Pointer<tc_engine>, ffi.Pointer<tc_pitch_state>)
+      >();
+
   /// ---- Đo lường ----
   int tc_get_metrics(
     ffi.Pointer<tc_engine> engine,
@@ -457,14 +538,65 @@ sealed class tc_node_id {
 
   /// nhạc beat
   static const TC_NODE_BEAT = 2;
+
+  /// tự chỉnh giọng (từ v0.3)
+  static const TC_NODE_PITCH = 3;
 }
 
 sealed class tc_param_id {
   /// Hệ số khuếch đại tuyến tính, 0..4. Được làm mượt trong audio thread.
   static const TC_PARAM_GAIN = 0;
 
-  /// Bật/tắt: 0 hoặc 1 (chỉ TC_NODE_MONITOR).
+  /// Bật/tắt: 0 hoặc 1 (TC_NODE_MONITOR, TC_NODE_PITCH).
   static const TC_PARAM_ENABLED = 1;
+
+  /// 0..200 ms: thời gian kéo về nốt đích (0 = tức thì)
+  static const TC_PARAM_RETUNE_MS = 2;
+
+  /// 0..1: nốt ngân dài thì chỉnh chậm dần
+  static const TC_PARAM_HUMANIZE = 3;
+
+  /// 0..100 cent: lệch dưới ngưỡng này thì không chỉnh
+  static const TC_PARAM_FLEX_CENTS = 4;
+
+  /// 0..1: giữ rung giọng / luyến láy
+  static const TC_PARAM_VIBRATO_PRESERVE = 5;
+
+  /// 0..50 cent: vùng trễ khi chuyển nốt đích
+  static const TC_PARAM_HYSTERESIS_CENTS = 6;
+}
+
+/// Thang âm cho tự chỉnh giọng (từ v0.3).
+sealed class tc_scale {
+  /// trưởng
+  static const TC_SCALE_MAJOR = 0;
+
+  /// thứ tự nhiên
+  static const TC_SCALE_NATURAL_MINOR = 1;
+
+  /// thứ hoà âm
+  static const TC_SCALE_HARMONIC_MINOR = 2;
+
+  /// ngũ cung trưởng
+  static const TC_SCALE_PENTATONIC_MAJOR = 3;
+
+  /// ngũ cung thứ
+  static const TC_SCALE_PENTATONIC_MINOR = 4;
+
+  /// 12 nốt
+  static const TC_SCALE_CHROMATIC = 5;
+}
+
+/// 3 mức tự chỉnh giọng người dùng thấy (từ v0.3).
+sealed class tc_correction_preset {
+  /// Tự nhiên
+  static const TC_PRESET_NATURAL = 0;
+
+  /// Ca sĩ
+  static const TC_PRESET_SINGER = 1;
+
+  /// Robot
+  static const TC_PRESET_ROBOT = 2;
 }
 
 /// Sự kiện gửi lên UI, lấy bằng tc_poll_events.
@@ -581,6 +713,14 @@ final class tc_metrics extends ffi.Struct {
   /// số kênh micro thực tế
   @ffi.Int32()
   external int input_channels;
+
+  /// 0..1 – tải cao nhất trong 1 giây gần nhất
+  @ffi.Float()
+  external double cpu_load_peak;
+
+  /// độ trễ thêm do xử lý (480 khi bật chỉnh giọng ở 48 kHz)
+  @ffi.Int32()
+  external int algorithm_latency_frames;
 }
 
 final class tc_playback_state extends ffi.Struct {
@@ -647,6 +787,44 @@ final class tc_latency_result extends ffi.Struct {
   external int route;
 }
 
+/// Trạng thái cao độ cho đồng hồ cao độ (từ v0.3).
+final class tc_pitch_state extends ffi.Struct {
+  @ffi.Uint32()
+  external int struct_size;
+
+  /// 1 nếu đang có giọng hát
+  @ffi.Int32()
+  external int voiced;
+
+  /// cao độ người hát (Hz), 0 khi không có giọng
+  @ffi.Float()
+  external double f0_hz;
+
+  /// 0..1
+  @ffi.Float()
+  external double confidence;
+
+  /// cao độ người hát dạng số MIDI thực (69 = La 440 Hz)
+  @ffi.Float()
+  external double input_note;
+
+  /// nốt đích (MIDI), -1 nếu chưa có
+  @ffi.Int32()
+  external int target_note;
+
+  /// người hát lệch bao nhiêu cent so với nốt đích
+  @ffi.Float()
+  external double cents_off;
+
+  /// engine đang dịch bao nhiêu cent
+  @ffi.Float()
+  external double correction_cents;
+
+  /// 1 nếu tự chỉnh giọng đang bật
+  @ffi.Int32()
+  external int enabled;
+}
+
 final class tc_event extends ffi.Struct {
   /// tc_event_type
   @ffi.Int32()
@@ -661,8 +839,8 @@ final class tc_event extends ffi.Struct {
 
 const int TC_API_VERSION_MAJOR = 0;
 
-const int TC_API_VERSION_MINOR = 2;
+const int TC_API_VERSION_MINOR = 3;
 
 const int TC_API_VERSION_PATCH = 0;
 
-const int TC_API_VERSION = 512;
+const int TC_API_VERSION = 768;

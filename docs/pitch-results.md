@@ -36,6 +36,44 @@ Chỉnh ngưỡng hữu thanh (MPM, cùng bộ dữ liệu):
 - 6 thanh điệu tiếng Việt: trung vị ≤ 12 cent, 0 lỗi quãng 8.
 - Im lặng / nhiễu trắng / tiếng "s": báo nhầm hữu thanh ≤ 5%.
 
-## Chỉnh giọng, CPU
+## Tự chỉnh giọng
 
-(Cập nhật ở các bước sau của M2.)
+### Mô phỏng người hát nghiệp dư (unit test `Corrector.AmateurSingerSimulation`)
+
+Giai điệu ngẫu nhiên Đô trưởng (5 × 60 nốt), mỗi nốt lệch ±20–45 cent, vuốt vào nốt từ −80 cent (60 ms), rung giọng ±35 cent ở nốt dài, có khoảng lặng 40 ms giữa một số nốt.
+
+| | Lệch tâm nốt (trung vị) | Rung giọng giữ lại | Hình dạng thanh điệu (tương quan, thanh tệ nhất) |
+|---|---|---|---|
+| Gốc (chưa chỉnh) | 31,5 cent | — | — |
+| **Tự nhiên** | 1,9 cent | 104% | 0,985 |
+| **Ca sĩ** | 0,8 cent | 75% | 0,90 |
+| **Robot** | 0,0 cent | 0% | 0,90 |
+
+Lịch sử thiết kế: bản đầu tách "tâm" bằng lọc thông thấp 2 Hz → Tự nhiên chỉ còn 21,5 cent vì bộ lọc trễ và bắt đầu từ đáy đoạn vuốt nốt. Đổi sang **trung bình theo từng nốt** (bỏ 48 ms đầu nốt) và ngưỡng tách nốt tăng theo mức giữ tự nhiên (0,7 + 1,3·p nửa cung) cho kết quả trên.
+
+### Giọng thật (vocadito, key Đô 12 nốt, `pitchlab ab`) — lệch tâm nốt trung vị (cent)
+
+| Bài | Gốc | Tự nhiên | Ca sĩ | Robot |
+|---|---|---|---|---|
+| vocadito_2 | 8,5 | 10,1 | 6,4 | 2,1 |
+| vocadito_5 | 13,2 | 12,2 | 10,5 | 4,3 |
+| vocadito_13 | 12,7 | 11,0 | 8,9 | 6,8 |
+| vocadito_27 | 13,4 | 11,6 | 7,3 | 4,3 |
+
+Ca sĩ vocadito vốn hát khá chuẩn (lệch ~8–13 cent, nhiều nốt dưới ngưỡng flex 10 cent của Tự nhiên) nên Tự nhiên đổi ít — đúng chủ đích "chỉ đụng chỗ lệch rõ". Lưu ý: chỉ số đo theo lưới A4 = 440 Hz; ca sĩ hát theo tuning khác sẽ bị tính là lệch (dò tuning theo beat làm ở M3).
+
+### PSOLA (unit test `Psola.*`, giọng tổng hợp)
+- Dịch ±1/±3/±6 nửa cung với giọng 110/165/330 Hz: f0 ra sai ≤ 5 cent.
+- Giữ formant: tương quan đường bao phổ vào/ra ≥ 0,99 (đối chứng đổi tốc độ phát: 0,80).
+- Độ trễ đúng 480 mẫu (10 ms); không click; chuyển hữu/vô thanh không vượt biên.
+
+## CPU (benchmark `tonecore_bench`, Mac M1, bản Release)
+
+| Khối | Block 128 | Block 256 |
+|---|---|---|
+| VoicePitchNode (HPF + dò cao độ + chỉnh + PSOLA, luôn hữu thanh) | 1,2 % một nhân | 1,25 % |
+| Engine đầy đủ (mixer + nghe lại + chỉnh giọng) | 1,3 % | 1,3 % |
+
+Chỉ tiêu CLAUDE.md mục 7: chuỗi xử lý giọng ≤ 25% một nhân trên máy tầm trung. Số đo trên iPhone: xem báo cáo M2 (dòng CPU / CPU đỉnh ở màn Phòng thử).
+
+Kiểm tra real-time: test `RealTime.ProcessDoesNotAllocate` đếm `operator new` trong `tc_engine_process_offline` (nhiều cỡ block, đổi preset giữa chừng) = **0**.
