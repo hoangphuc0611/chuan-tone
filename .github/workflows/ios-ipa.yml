@@ -10,7 +10,8 @@ on:
 
 jobs:
   ipa:
-    runs-on: macos-15
+    # macos-26: có Xcode 26 (iOS SDK mới mà device_info_plus 13 cần; macos-15 chỉ có Xcode 16.4).
+    runs-on: macos-26
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
