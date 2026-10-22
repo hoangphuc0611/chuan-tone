@@ -249,6 +249,7 @@ Kế hoạch kỹ thuật (cây thư mục, thư viện, thuật toán, rủi ro
 - **Không dùng**: ffmpeg / ffmpeg_kit / libsndfile (LGPL), Rubber Band, SoundTouch, aubio, Essentia, libKeyFinder, Chromaprint. Xuất video bằng API native (AVAssetWriter / MediaCodec+MediaMuxer).
 - **Thứ tự nền tảng** (2026-10-21): làm và nghiệm thu trên **iPhone trước**; Android (đo độ trễ ≥ 2 máy, chốt chỉ tiêu tầm trung) làm sau. Code Android vẫn giữ build được trong CI.
 - **Upload tách vocal**: máy người dùng giải mã bằng codec OS rồi nén FLAC (libFLAC, BSD-3) — chốt lại ở M6.
+- **M3** (2026-10-22, `docs/m3-plan.md`): bài chuyển tone chấm theo thời lượng trên timeline; lệch quãng 5 chỉ tính chiều lên (chuẩn MIREX/mir_eval); BPM Acc2 ≥ 90%, Acc1 ≥ 75%; có demo iPhone ở Phòng thử; phân tích là handle riêng `tc_analyzer_*` kiểu kéo (ADR-003 viết ở B7). Chỉ chỉnh tham số trên tập dev.
 
 ## 12. QUY ƯỚC CODE
 

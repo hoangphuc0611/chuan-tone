@@ -17,6 +17,8 @@ Quy tắc (CLAUDE.md mục 0.2): chỉ MIT / BSD / Apache-2.0 / Zlib / ISC. LGPL
 | dr_wav / dr_mp3 | commit `dfe8377` (`engine/third_party/dr_libs/COMMIT`) | Public domain / MIT-0 | giải mã cho bản host (test, CI) | Không |
 | file_picker | ^13.1.0 | MIT | `app` – chọn file beat | Có |
 | device_info_plus | ^13.3.0 | BSD-3-Clause | `app` – tên máy trong báo cáo độ trễ | Có |
+| mir_eval | 0.8.2 | MIT | `tools/keytest` – kiểm chéo điểm MIREX (không bắt buộc) | Không |
+| numpy / scipy / decorator | theo mir_eval | BSD-3 / BSD-3 / BSD-2 | phụ thuộc của mir_eval | Không |
 
 Lịch sử đo độ trễ lưu bằng file JSON (`app/lib/data/latency_history.dart`), không dùng `shared_preferences`: bản Android của nó gọi Kotlin qua JNI và lỗi `NoSuchMethodError` ở bản release.
 
@@ -47,7 +49,7 @@ Không dùng các bộ chỉ cho phép phi thương mại / nghiên cứu: MIR-1
 | path_provider, camera, share_plus, go_router | BSD-3-Clause | M5+ | app |
 | FastAPI / uvicorn / PyTorch / Demucs (code) | MIT / BSD-3 / BSD-3 / MIT | M6 | server – **trọng số htdemucs cần xác minh license** |
 | arq / Valkey | MIT / BSD-3 | M6 | hàng đợi job |
-| numpy / mir_eval / matplotlib | BSD / MIT / PSF-BSD | M3 | chỉ trong `tools/` |
+| matplotlib | PSF-BSD | M3 | chỉ trong `tools/` (vẽ chroma/timeline nếu cần) |
 | Signalsmith Stretch | MIT | M4 | chỉ để so A/B chất lượng |
 
 ## Đã loại

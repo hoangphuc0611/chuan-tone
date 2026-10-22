@@ -1,0 +1,6 @@
+file,key,mode,modulation,bpm,genre,notes
+dev/bolero_01.mp3,A,minor,"1:35:A:major;2:40:A:minor",68,bolero,điệp khúc lên A trưởng
+dev/ballad_01.m4a,C#,major,,76,ballad,
+dev/nhactre_01.mp3,F#m,,,98,nhac-tre,viết gọn: key = F#m
+dev/dan_ca_01.mp3,D,minor,,,dan-ca,phân vân Dm / F
+dev/remix_01.mp3,Eb,major,3:10:E:major,128,remix,nâng nửa cung cuối bài

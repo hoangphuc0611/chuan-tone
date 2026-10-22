@@ -5,7 +5,7 @@ project(ToneCore VERSION 0.3.0 LANGUAGES C CXX)
 # ---- Tùy chọn ----
 option(TC_BUILD_TESTS "Build unit test (GoogleTest)" ON)
 option(TC_BUILD_BENCH "Build benchmark (Google Benchmark)" OFF)
-option(TC_BUILD_TOOLS "Build công cụ dòng lệnh (pitchlab) cho máy dev" ON)
+option(TC_BUILD_TOOLS "Build công cụ dòng lệnh (pitchlab, keylab) cho máy dev" ON)
 option(TC_BUILD_FRAMEWORK "Build tonecore dạng Apple framework (iOS)" OFF)
 set(TC_SANITIZER "" CACHE STRING "Sanitizer cho bản host: address, undefined, thread hoặc rỗng")
 
@@ -54,6 +54,7 @@ add_library(tonecore_core STATIC
   src/pitch/voice_pitch_node.cpp
   src/player/track.cpp
   src/player/beat_player.cpp
+  src/key/song_analyzer.cpp
 )
 
 # Mã theo nền tảng: backend âm thanh + bộ giải mã file.

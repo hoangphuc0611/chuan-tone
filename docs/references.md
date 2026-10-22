@@ -57,7 +57,7 @@ Mọi thuật toán trong ToneCore được viết từ các nguồn công khai 
 - G. Percival, G. Tzanetakis, *Streamlined Tempo Estimation Based on Autocorrelation and Cross-correlation With Pulses*, IEEE/ACM TASLP 2014.
 - D. Ellis, *Beat Tracking by Dynamic Programming*, JNMR 2007.
 - ITU-R BS.1770-4, *Algorithms to measure audio programme loudness and true-peak audio level*.
-- MIREX Audio Key Detection – quy tắc chấm điểm.
+- MIREX Audio Key Detection – quy tắc chấm điểm. Cài đặt tham chiếu: C. Raffel et al., *mir_eval: A Transparent Implementation of Common MIR Metrics*, ISMIR 2014 (`mir_eval.key.weighted_score`, dùng để kiểm chéo `tools/keytest/mirex.py`).
 
 ## Hiệu ứng (M5)
 
