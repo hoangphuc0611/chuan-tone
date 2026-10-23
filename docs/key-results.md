@@ -99,6 +99,24 @@ tone — các đoạn đó (funk/jazz) cục bộ thật sự nghiêng về tone
 thắng tone toàn bài một khoảng tối thiểu (0,03 / 0,06 điểm tương quan) — không giảm được bài nào nên
 bỏ. Tham số timeline chốt trên tập dev Việt có chuyển tone (B4).
 
+## Công cụ cho B4, thử trước trên GuitarSet (2026-10-23)
+
+- **Profile học từ dữ liệu** (`tools/keytest/train_profile.py`, kiểm chéo 5 phần): **0,688** so với
+  profile hiện tại 0,706 trên cùng các phần (−0,018) — trung bình chroma đơn giản chưa thắng
+  temperley-kp trên guitar jazz/funk. GuitarSet chỉ có 30 bản nhạc (mỗi bản 6 người chơi) nên các
+  phần kiểm chéo không tách bài hoàn toàn — số này chỉ tham khảo; phải đo lại trên dev nhạc Việt.
+- **Gợi ý chủ âm cuối bài** (`--end-weight`, cửa sổ 4 s):
+
+| end-weight | MIREX | Timeline mọi bài |
+|---|---|---|
+| 0 (mặc định) | 0,706 | 0,702 |
+| 0,05 | **0,718** | 0,711 |
+| 0,1 | 0,704 | 0,694 |
+| 0,2 | 0,666 | 0,657 |
+
+  Lợi ít và giảm nhanh khi tăng trọng số (beat lặp vòng có thể kết ở bậc V) → giữ tắt, chọn lại
+  trên dev.
+
 ## BPM (B6, 2026-10-23)
 
 Onset (spectral flux trên log biên độ của phần bộ gõ sau HPSS) → tự tương quan + răng lược bội chu

@@ -197,6 +197,8 @@ def load(csv_path: Path, check_files: bool = True) -> Dataset:
         if check_files and not path.is_file():
             errors.append(f"{prefix}: không thấy file {path}")
             continue
+        if "da_kiem" in fields and not get("da_kiem"):
+            warnings.append(f"{prefix} ({file}): chưa nghe xác nhận (cột da_kiem trống)")
         songs.append(Song(line, file, path, key, mods, bpm, get("genre"), get("notes")))
     if not songs and not errors:
         warnings.append("không có bài nào")

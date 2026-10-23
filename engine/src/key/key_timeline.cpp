@@ -41,7 +41,7 @@ std::vector<KeySegment> estimateKeyTimeline(const Chromagram& ch, double duratio
                                             const KeyDetectConfig& keyCfg,
                                             const KeyTimelineConfig& cfg,
                                             const KeyEstimate& globalKey) {
-  const KeyProfile* profile = findKeyProfile(keyCfg.profile);
+  const KeyProfile* profile = resolveProfile(keyCfg);
   const std::size_t F = ch.frames();
   if (profile == nullptr || F == 0 || !(ch.frameSec > 0.0)) return {};
   if (!(durationSec > 0.0)) durationSec = static_cast<double>(F) * ch.frameSec;

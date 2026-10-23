@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import csv
 import io
 import json
 import math
@@ -26,6 +27,8 @@ sys.path.insert(0, str(HERE.parent))
 import dataset  # noqa: E402
 import keytest  # noqa: E402
 import mirex  # noqa: E402
+import prelabel  # noqa: E402
+import train_profile  # noqa: E402
 from mirex import MAJOR, MINOR, Key, Segment  # noqa: E402
 
 C, A = Key(0, MAJOR), Key(9, MINOR)
@@ -275,6 +278,138 @@ class EndToEndTest(unittest.TestCase):
         self.assertEqual(calls, [["-x", "y", "--profile", "kk", "--bass", "1"],
                                  ["-x", "y", "--profile", "temperley", "--bass", "1"]])
         self.assertIn("| profile=kk bass=1 |", out)
+
+
+class FakeKeylabCase(unittest.TestCase):
+    """Thư mục tạm + keylab giả đọc dự đoán từ preds.json."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        self.args_log = self.dir / "args.jsonl"
+        os.environ["FAKE_KEYLAB_ARGS_LOG"] = str(self.args_log)
+        self.keylab = shlex.join([sys.executable, str(HERE / "fake_keylab.py")])
+
+    def tearDown(self):
+        os.environ.pop("FAKE_KEYLAB_PREDICTIONS", None)
+        os.environ.pop("FAKE_KEYLAB_ARGS_LOG", None)
+        self.tmp.cleanup()
+
+    def predict(self, preds: dict) -> None:
+        path = write(self.dir / "preds.json", json.dumps(preds))
+        os.environ["FAKE_KEYLAB_PREDICTIONS"] = str(path)
+
+    def quiet(self, fn, *argv):
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = fn(list(argv))
+        return code, out.getvalue(), err.getvalue()
+
+
+class PrelabelTest(FakeKeylabCase):
+    def setUp(self):
+        super().setUp()
+        (self.dir / "audio" / "sub").mkdir(parents=True)
+        for name in ("audio/a.mp3", "audio/sub/b.m4a", "audio/ghi-chu.txt"):
+            (self.dir / name).write_bytes(b"")
+        self.predict({
+            "a.mp3": {"key": {"root": 9, "mode": "minor", "confidence": 0.8}, "bpm": 68.2,
+                      "duration_sec": 200,
+                      "timeline": [{"start": 0, "end": 95, "root": 9, "mode": "minor"},
+                                   {"start": 95, "end": 200, "root": 9, "mode": "major"}]},
+            "b.m4a": {"key": {"root": 0, "mode": "major", "confidence": 0.9}, "bpm": 120.0,
+                      "bpm_confidence": 0.9},
+        })
+
+    def test_suggestions_round_trip_through_dataset(self):
+        out = self.dir / "dev.csv"
+        code, _, _ = self.quiet(prelabel.main, str(self.dir / "audio"), "--out", str(out),
+                                "--keylab", self.keylab, "--genre", "bolero")
+        self.assertEqual(code, 0)
+        ds = dataset.load(out)
+        self.assertEqual(ds.errors, [])
+        # Đường dẫn tương đối so với thư mục chứa CSV.
+        self.assertEqual([s.file for s in ds.songs], ["audio/a.mp3", "audio/sub/b.m4a"])
+        a, b = ds.songs
+        self.assertEqual(a.key, A)
+        self.assertEqual(a.modulations, [(95.0, Key(9, MAJOR))])
+        self.assertEqual(a.bpm, 68.0)
+        self.assertEqual(a.genre, "bolero")
+        self.assertEqual(b.key, C)
+        # Chưa ai nghe xác nhận → nhắc từng dòng.
+        self.assertEqual(len(ds.warnings), 2)
+        self.assertIn("chưa nghe xác nhận", ds.warnings[0])
+        rows = list(csv.reader(out.read_text(encoding="utf-8-sig").splitlines()))
+        self.assertEqual(rows[1][8], "x")  # a: có chuyển tone → cần nghe kỹ
+        self.assertIn("Am (tin cậy 0.80)", rows[1][7])
+        self.assertEqual(rows[2][8], "")  # b: tone và BPM đều chắc chắn
+
+    def test_blind_sheet_has_no_machine_hints(self):
+        out = self.dir / "test.csv"
+        code, _, _ = self.quiet(prelabel.main, str(self.dir / "audio"), "--out", str(out),
+                                "--keylab", self.keylab, "--blind")
+        self.assertEqual(code, 0)
+        self.assertFalse(self.args_log.exists(), "gán mù: không được chạy keylab")
+        rows = out.read_text(encoding="utf-8-sig").splitlines()
+        self.assertEqual(rows[0], "file,key,mode,modulation,bpm,genre,notes")
+        self.assertEqual(rows[1], "audio/a.mp3,,,,,,")
+
+    def test_refuses_to_overwrite_labels(self):
+        out = write(self.dir / "dev.csv", "file,key\n")
+        code, _, err = self.quiet(prelabel.main, str(self.dir / "audio"), "--out", str(out),
+                                  "--keylab", self.keylab)
+        self.assertEqual(code, 2)
+        self.assertIn("--force", err)
+        self.assertEqual(out.read_text(), "file,key\n")
+
+
+class TrainProfileTest(FakeKeylabCase):
+    def test_learn_rotates_to_tonic(self):
+        d_major = [0.0] * 12
+        d_major[2] = 3.0   # D (chủ âm)
+        d_major[9] = 1.0   # A (bậc V của D)
+        e_minor = [0.0] * 12
+        e_minor[4] = 2.0
+        e_minor[7] = 2.0   # G (bậc ♭3 của Em)
+        p = train_profile.learn([(Key(2, MAJOR), d_major, d_major), (Key(4, MINOR), e_minor, e_minor)])
+        self.assertAlmostEqual(p["major"][0], 0.75)
+        self.assertAlmostEqual(p["major"][7], 0.25)
+        self.assertAlmostEqual(p["minor"][3], 0.5)
+        self.assertEqual(p["bass_major"], p["major"])
+        with self.assertRaises(ValueError):
+            train_profile.learn([(Key(2, MAJOR), d_major, d_major)])  # thiếu bài thứ
+
+    def test_cross_validation_and_profile_file(self):
+        names = []
+        preds = {}
+        lines = ["file,key,mode"]
+        for i in range(10):
+            name = f"s{i}.mp3"
+            (self.dir / name).write_bytes(b"")
+            mode = "minor" if i % 2 else "major"
+            preds[name] = {"key": {"root": i % 12, "mode": mode}}
+            lines.append(f"{name},{mirex._NAMES[i % 12]},{mode}")
+            names.append(name)
+        self.predict(preds)
+        csv_path = write(self.dir / "dev.csv", "\n".join(lines) + "\n")
+        out = self.dir / "learned.txt"
+        code, stdout, _ = self.quiet(train_profile.main, "--csv", str(csv_path), "--keylab",
+                                     self.keylab, "--folds", "2", "--out", str(out))
+        self.assertEqual(code, 0)
+        self.assertIn("Kiểm chéo 2 phần", stdout)
+        rows = [l for l in out.read_text().splitlines() if l and not l.startswith("#")]
+        self.assertEqual(len(rows), 4)
+        self.assertTrue(all(len(r.split()) == 12 for r in rows))
+        calls = [json.loads(l) for l in self.args_log.read_text().splitlines()]
+        self.assertIn("--global-chroma", calls[0])
+        self.assertTrue(any("--profile-file" in c for c in calls[1:]))
+
+    def test_refuses_test_set(self):
+        csv_path = write(self.dir / "test.csv", "file,key,mode\n")
+        code, _, err = self.quiet(train_profile.main, "--csv", str(csv_path), "--keylab",
+                                  self.keylab)
+        self.assertEqual(code, 2)
+        self.assertIn("Từ chối", err)
 
 
 @unittest.skipUnless(os.environ.get("KEYLAB"), "đặt KEYLAB=<đường dẫn keylab> để chạy")

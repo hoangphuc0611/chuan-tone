@@ -53,6 +53,19 @@ Cột khác (vd. `artist`) được bỏ qua.
    khoảng 60–75. Bỏ trống nếu không chắc.
 6. Ghi tên tone kiểu nào cũng được (`C#` hay `Db`), keytest tự hiểu.
 
+### Gán nhãn nhanh hơn với gợi ý của máy
+
+```sh
+# Tập dev: máy điền sẵn tone / chuyển tone / BPM; cột can_nghe_ky = "x" ở bài máy không chắc.
+python3 tools/keytest/prelabel.py testdata/vn-key/dev --out testdata/vn-key/dev.csv --genre bolero
+# Tập test: bảng TRỐNG — nghe mù, không xem gợi ý của máy (tránh bị dắt theo máy).
+python3 tools/keytest/prelabel.py testdata/vn-key/test --out testdata/vn-key/test.csv --blind
+```
+
+Mở file bằng Excel / Google Sheets, nghe từng bài, sửa ô sai rồi ghi `x` vào cột `da_kiem` của
+dòng đã nghe xong — `validate_csv.py` nhắc các dòng chưa kiểm. Không ghi đè file đã có (trừ khi
+thêm `--force`).
+
 Kiểm tra file trước khi gửi:
 
 ```sh
@@ -86,7 +99,8 @@ Bộ công khai để thử khi chưa có dữ liệu Việt: `tools/keytest/fet
 Tham số keylab quét được (xem `keylab` không tham số): tone `--profile kk|temperley|temperley-kp|diatonic`,
 `--bass-weight`, `--frame-norm none|l1|max`, `--silence-db`, `--compression`; timeline
 `--timeline on|off`, `--switch-prob`, `--emission-temp`, `--min-segment`, `--window-sec`,
-`--related-boost`; BPM `--tempo-prior`, `--tempo-octaves`.
+`--related-boost`; BPM `--tempo-prior`, `--tempo-octaves`; profile từ file `--profile-file`;
+gợi ý chủ âm cuối bài `--end-weight`, `--end-sec`.
 
 ### Cách tính điểm
 
@@ -105,6 +119,19 @@ quãng 5 cả hai chiều để tham khảo.
 - Bài **có** chuyển tone: lấy trung bình điểm theo thời lượng trên timeline.
 - Báo cáo in thêm: điểm chỉ so tone chính; số bài không chuyển tone mà bị đoán có chuyển tone;
   BPM Acc1 (đúng ±4%) và Acc2 (chấp nhận ×2, ×3, ×½, ×⅓); thời gian phân tích.
+
+### Học profile từ dữ liệu
+
+```sh
+# Kiểm chéo 5 phần trên tập dev rồi ghi profile học được
+python3 tools/keytest/train_profile.py --set dev --folds 5 --out tools/keytest/profiles/vn-dev.txt
+# Chấm thử với profile đó
+python3 tools/keytest/keytest.py run --set dev -- --profile-file tools/keytest/profiles/vn-dev.txt
+```
+
+Học từ các bài không chuyển tone: chroma cả bài xoay về chủ âm rồi lấy trung bình theo trưởng /
+thứ, riêng cho treble và bass. Chỉ chạy trên dev. Nếu thắng profile có sẵn trên dev thì đưa vào
+`engine/src/key/key_profiles.cpp` làm profile mặc định.
 
 ### Chống "học vẹt" bộ test
 

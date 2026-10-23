@@ -356,6 +356,8 @@ def resolve_csv(args) -> tuple:
 
 def load_and_run(args, csv_path: Path, extra: list) -> tuple:
     ds = dataset.load(csv_path)
+    for w in ds.warnings:
+        print(f"CHÚ Ý {w}", file=sys.stderr)
     if ds.errors:
         for e in ds.errors:
             print(f"LỖI  {e}", file=sys.stderr)

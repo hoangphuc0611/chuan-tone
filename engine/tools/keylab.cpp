@@ -42,12 +42,19 @@ int usage() {
                "  keylab batch [-j N] [tham số] < danh_sach_file.txt\n"
                "Tham số: --rate 11025  --profile kk|temperley|temperley-kp|diatonic\n"
                "         --bass-weight 0.25  --frame-norm none|l1|max  --silence-db 40\n"
-               "         --compression 100\n"
+               "         --compression 100  --profile-file p.txt  --end-weight 0\n"
+               "         --end-sec 10  --global-chroma on|off\n"
                "Timeline: --timeline on|off  --window-sec 6  --switch-prob 0.002\n"
                "          --related-boost 10  --min-segment 12  --emission-temp 0.1\n"
                "Tempo:    --tempo-prior 120  --tempo-octaves 1.4\n");
   return 2;
 }
+
+// Tham số dòng lệnh: cấu hình phân tích + tuỳ chọn riêng của keylab.
+struct Options {
+  AnalysisConfig cfg;
+  bool globalChroma = false;  // thêm "global_chroma" vào JSON (train_profile.py dùng)
+};
 
 const char* const kRootNames[12] = {"C",  "C#", "D",  "Eb", "E",  "F",
                                     "F#", "G",  "Ab", "A",  "Bb", "B"};
@@ -121,7 +128,32 @@ void appendOptional(std::string& o, const std::optional<T>& v) {
   }
 }
 
-std::string toJson(const std::string& file, tc_result r, const SongAnalysis& a, double totalMs) {
+// Chroma bass/treble cộng dồn cả bài đúng như dò tone toàn bài (cùng khung có tiếng, cùng chuẩn
+// hoá) + nốt bass cuối bài — để học profile từ dữ liệu có nhãn.
+void appendGlobalChroma(std::string& o, const SongAnalysis& a, const KeyDetectConfig& key) {
+  const std::vector<uint8_t> voiced = voicedFrames(a.chroma, key.silenceDb);
+  ChromaVector bass{};
+  ChromaVector treble{};
+  accumulateChroma(a.chroma, voiced, 0, a.chroma.frames(), key.frameNorm, bass, treble);
+  auto vec = [&o](const ChromaVector& v) {
+    o += '[';
+    for (std::size_t i = 0; i < 12; ++i) {
+      if (i > 0) o += ',';
+      appendNumber(o, v[i]);
+    }
+    o += ']';
+  };
+  o += ",\"global_chroma\":{\"bass\":";
+  vec(bass);
+  o += ",\"treble\":";
+  vec(treble);
+  o += ",\"ending_bass_pc\":";
+  appendNumber(o, endingBassPitchClass(a.chroma, voiced, key.endSec));
+  o += '}';
+}
+
+std::string toJson(const std::string& file, tc_result r, const SongAnalysis& a, double totalMs,
+                   const Options& opt) {
   std::string o = "{\"file\":";
   appendString(o, file);
   o += ",\"status\":";
@@ -199,7 +231,9 @@ std::string toJson(const std::string& file, tc_result r, const SongAnalysis& a, 
   }
   o += "\"total\":";
   appendNumber(o, totalMs);
-  o += "}}";
+  o += '}';
+  if (opt.globalChroma && r == TC_OK) appendGlobalChroma(o, a, opt.cfg.key);
+  o += '}';
   return o;
 }
 
@@ -221,25 +255,48 @@ bool writeChromaCsv(const std::string& path, const Chromagram& ch) {
   return std::fclose(f) == 0;
 }
 
-std::string analyzeToJson(const std::string& file, const AnalysisConfig& cfg,
+std::string analyzeToJson(const std::string& file, const Options& opt,
                           const std::string& chromaCsv = {}) {
   const auto t0 = std::chrono::steady_clock::now();
   AnalysisControl ctl;
   SongAnalysis a;
-  const tc_result r = analyzeFile(file, cfg, ctl, a);
+  const tc_result r = analyzeFile(file, opt.cfg, ctl, a);
   const double ms =
       std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
   if (r == TC_OK && !chromaCsv.empty() && !writeChromaCsv(chromaCsv, a.chroma)) {
     std::fprintf(stderr, "Không ghi được %s\n", chromaCsv.c_str());
   }
-  return toJson(file, r, a, ms);
+  return toJson(file, r, a, ms, opt);
 }
 
 // Đọc các tham số phân tích chung (keytest sweep truyền vào đây). Trả false nếu có tham số lạ.
-bool parseConfigArg(int argc, char** argv, int& i, AnalysisConfig& cfg) {
+bool parseConfigArg(int argc, char** argv, int& i, Options& options) {
+  AnalysisConfig& cfg = options.cfg;
   const std::string opt = argv[i];
   if (i + 1 >= argc) return false;
   const std::string val = argv[++i];
+  if (opt == "--global-chroma") {
+    if (val != "on" && val != "off") return false;
+    options.globalChroma = val == "on";
+    return true;
+  }
+  if (opt == "--profile-file") {
+    KeyProfile p;
+    if (!loadKeyProfileFile(val, p)) {
+      std::fprintf(stderr, "Không đọc được profile %s\n", val.c_str());
+      return false;
+    }
+    cfg.key.customProfile = p;
+    return true;
+  }
+  if (opt == "--end-weight") {
+    cfg.key.endWeight = std::stof(val);
+    return cfg.key.endWeight >= 0.0f;
+  }
+  if (opt == "--end-sec") {
+    cfg.key.endSec = std::stof(val);
+    return cfg.key.endSec > 0.0f;
+  }
   if (opt == "--rate") {
     cfg.targetAnalysisRate = std::stod(val);
     return cfg.targetAnalysisRate >= 4000.0 && cfg.targetAnalysisRate <= 48000.0;
@@ -310,29 +367,29 @@ bool parseConfigArg(int argc, char** argv, int& i, AnalysisConfig& cfg) {
 
 int cmdAnalyze(int argc, char** argv) {
   if (argc < 3) return usage();
-  AnalysisConfig cfg;
+  Options opt;
   std::string chromaCsv;
   for (int i = 3; i < argc; ++i) {
     if (std::strcmp(argv[i], "--chroma") == 0 && i + 1 < argc) {
       chromaCsv = argv[++i];
-    } else if (!parseConfigArg(argc, argv, i, cfg)) {
+    } else if (!parseConfigArg(argc, argv, i, opt)) {
       return usage();
     }
   }
-  const std::string json = analyzeToJson(argv[2], cfg, chromaCsv);
+  const std::string json = analyzeToJson(argv[2], opt, chromaCsv);
   std::printf("%s\n", json.c_str());
   return json.find("\"status\":\"ok\"") != std::string::npos ? 0 : 1;
 }
 
 int cmdBatch(int argc, char** argv) {
-  AnalysisConfig cfg;
+  Options opt;
   unsigned jobs = std::max(1u, std::thread::hardware_concurrency());
   for (int i = 2; i < argc; ++i) {
     if (std::strcmp(argv[i], "-j") == 0 && i + 1 < argc) {
       const int j = std::stoi(argv[++i]);
       if (j < 1) return usage();
       jobs = static_cast<unsigned>(j);
-    } else if (!parseConfigArg(argc, argv, i, cfg)) {
+    } else if (!parseConfigArg(argc, argv, i, opt)) {
       return usage();
     }
   }
@@ -348,7 +405,7 @@ int cmdBatch(int argc, char** argv) {
   std::mutex outMutex;
   auto worker = [&] {
     for (std::size_t i = next++; i < files.size(); i = next++) {
-      const std::string json = analyzeToJson(files[i], cfg);
+      const std::string json = analyzeToJson(files[i], opt);
       const std::lock_guard<std::mutex> lock(outMutex);
       std::fputs(json.c_str(), stdout);
       std::fputc('\n', stdout);

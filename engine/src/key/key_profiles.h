@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -14,6 +15,9 @@ struct KeyProfile {
   std::string source;
   std::array<float, 12> major;
   std::array<float, 12> minor;
+  // Profile riêng cho dải bass (vd. học từ dữ liệu); rỗng → bass dùng chung major / minor.
+  std::optional<std::array<float, 12>> bassMajor;
+  std::optional<std::array<float, 12>> bassMinor;
 };
 
 // Các profile có sẵn: "kk", "temperley", "temperley-kp", "diatonic" (xem key_profiles.cpp).
@@ -21,5 +25,10 @@ const std::vector<KeyProfile>& builtinKeyProfiles();
 
 // nullptr nếu không có profile tên này.
 const KeyProfile* findKeyProfile(const std::string& name);
+
+// Đọc profile từ file văn bản (tools/keytest/train_profile.py ghi ra): 2 hoặc 4 dòng số, mỗi dòng
+// 12 giá trị cách nhau bằng dấu cách / dấu phẩy — major, minor[, bass_major, bass_minor]; dòng
+// trống hoặc bắt đầu bằng '#' bị bỏ qua. Trả false nếu sai định dạng.
+bool loadKeyProfileFile(const std::string& path, KeyProfile& out);
 
 }  // namespace tonecore

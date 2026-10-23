@@ -48,7 +48,12 @@
   (chọn tay thì tắt), tone đang áp dụng to và đổi ngay theo sự kiện; kết quả lưu
   `analysis_cache.json` (khoá tên + kích thước file + phiên bản engine) — 16 test app. Build iOS
   qua CI `ios-ipa` (máy dev chưa có Xcode).
-- [ ] B4, B9 (chờ dữ liệu nhạc Việt)
+- [~] **B4 — công cụ đã sẵn, chờ dữ liệu** (2026-10-23): `prelabel.py` (bảng gán nhãn có gợi ý
+  của máy cho dev, bảng trống gán mù cho test, cột `da_kiem`), `train_profile.py` (học profile
+  treble + bass từ dữ liệu, kiểm chéo k-fold) + `keylab --profile-file`, gợi ý chủ âm cuối bài
+  (`--end-weight`, mặc định tắt). Thử trên GuitarSet: profile học 0,688 (CV) so với 0,706; gợi ý
+  cuối bài 0,05 → 0,718. Chọn cấu hình thật trên dev nhạc Việt.
+- [ ] B9 (chờ dữ liệu nhạc Việt)
 
 ## Các điểm cần quyết (2026-10-22: duyệt theo đề nghị)
 

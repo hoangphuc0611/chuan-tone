@@ -19,6 +19,9 @@ namespace tonecore {
 //  3. Với mỗi tone (24 tone: 12 chủ âm × trưởng/thứ): xoay profile tới chủ âm đó, tính hệ số
 //     tương quan Pearson r với chroma treble và với chroma bass;
 //       điểm = (1 − w)·r_treble + w·r_bass,   w = bassWeight.
+//  (Tuỳ chọn) Gợi ý chủ âm cuối bài: nốt bass nổi nhất trong `endSec` giây có tiếng cuối cùng
+//     thường là chủ âm (bài kết về chủ âm) → cộng `endWeight` vào điểm hai tone có chủ âm đó.
+//     Mặc định tắt; chỉ bật nếu tăng điểm trên tập dev (M3 bước B4).
 //  4. Tone điểm cao nhất thắng. Độ tin cậy = (mức áp đảo các tone khác) × (độ rõ tone):
 //       p = exp(0) / Σ_j exp((s_j − s_max)/T)            softmax, nhiệt độ T
 //       c = clamp((s_max − rMin) / (rFull − rMin), 0, 1)  tương quan thấp = không rõ tone
@@ -41,7 +44,18 @@ struct KeyDetectConfig {
   float temperature = 0.02f;
   float clarityMin = 0.3f;   // rMin
   float clarityFull = 0.7f;  // rFull
+  float endWeight = 0.0f;    // gợi ý chủ âm cuối bài; 0 = tắt
+  float endSec = 10.0f;
+  // Profile nạp từ file (loadKeyProfileFile); có thì dùng thay cho `profile`.
+  std::optional<KeyProfile> customProfile;
 };
+
+// Profile sẽ dùng: customProfile nếu có, không thì profile có sẵn tên `profile` (nullptr nếu không
+// có).
+const KeyProfile* resolveProfile(const KeyDetectConfig& cfg);
+
+// Lớp cao độ của nốt bass nổi nhất trong `endSec` giây có tiếng cuối bài; −1 nếu không có.
+int endingBassPitchClass(const Chromagram& ch, const std::vector<uint8_t>& voiced, float endSec);
 
 using KeyScores = std::array<float, 24>;  // chỉ số keyIndex(): trưởng 0..11, thứ 12..23
 

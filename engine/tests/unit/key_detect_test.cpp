@@ -3,11 +3,14 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <cstdio>
+#include <fstream>
 #include <string>
 #include <vector>
 
 #include "key/chroma.h"
 #include "key/cqt.h"
+#include "test_util.h"
 #include "util/synth_music.h"
 
 using namespace tonecore;
@@ -120,4 +123,74 @@ TEST(KeyDetect, ConfidenceReflectsClarity) {
   EXPECT_GT(a->confidence, 0.5f);
   EXPECT_LT(b->confidence, 0.3f);
   EXPECT_GT(a->confidence, b->confidence);
+}
+
+TEST(KeyDetect, LoadProfileFile) {
+  const std::string path = test::tempPath("profile.txt");
+  auto write = [&](const std::string& text) { std::ofstream(path) << text; };
+  write(
+      "# hoc tu tap dev\n"
+      "6, 2, 3.5, 2, 4.5, 4, 2, 5, 2, 3.5, 1.5, 3\n"
+      "\n"
+      "6 2 3.5 5 2 4 2 5 4 2 3 3\n");
+  KeyProfile p;
+  ASSERT_TRUE(loadKeyProfileFile(path, p));
+  EXPECT_FLOAT_EQ(p.major[0], 6.0f);
+  EXPECT_FLOAT_EQ(p.minor[3], 5.0f);
+  EXPECT_FALSE(p.bassMajor.has_value());
+
+  write(
+      "1 0 0 0 0 0 0 0 0 0 0 0\n0 0 0 1 0 0 0 0 0 0 0 0\n"
+      "1 0 0 0 0 0 0 0.5 0 0 0 0\n1 0 0 0 0 0 0 0.5 0 0 0 0\n");
+  ASSERT_TRUE(loadKeyProfileFile(path, p));
+  ASSERT_TRUE(p.bassMinor.has_value());
+  EXPECT_FLOAT_EQ((*p.bassMinor)[7], 0.5f);
+
+  for (const char* bad : {"1 2 3\n1 2 3\n",                                        // thiếu số
+                          "1 1 1 1 1 1 1 1 1 1 1 1\n",                             // 1 dòng
+                          "1 1 1 1 1 1 1 1 1 1 1 1\n1 1 1 1 1 1 1 1 1 1 1 1 9\n",  // thừa số
+                          "1 1 1 1 1 1 1 1 1 1 1 x\n1 1 1 1 1 1 1 1 1 1 1 1\n"}) {
+    write(bad);
+    EXPECT_FALSE(loadKeyProfileFile(path, p)) << bad;
+  }
+  EXPECT_FALSE(loadKeyProfileFile("/khong/co/profile.txt", p));
+  std::remove(path.c_str());
+}
+
+// Profile bass riêng được dùng cho dải bass: bass chỉ có nốt La; profile bass "một nốt chủ âm"
+// → điểm bass cao nhất ở tone có chủ âm La (cả trưởng lẫn thứ), không phụ thuộc profile treble.
+TEST(KeyDetect, SeparateBassProfile) {
+  KeyProfile p = *findKeyProfile("temperley-kp");
+  std::array<float, 12> tonicOnly{};
+  tonicOnly[0] = 1.0f;
+  p.bassMajor = tonicOnly;
+  p.bassMinor = tonicOnly;
+  ChromaVector bass{};
+  bass[9] = 1.0f;
+  const ChromaVector flat{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+  const KeyScores s = scoreKeys(bass, flat, p, 1.0f);
+  EXPECT_NEAR(s[9], 1.0f, 1e-5f);       // A trưởng
+  EXPECT_NEAR(s[12 + 9], 1.0f, 1e-5f);  // La thứ
+  EXPECT_LT(s[0], 0.0f);
+}
+
+// Treble C–E–G–A suốt bài (C6 / Am7); bass Đô 7 s rồi La 3 s cuối. Không có gợi ý cuối bài →
+// Đô trưởng (bass Đô nhiều hơn); bật gợi ý → La thứ (bài kết về La).
+TEST(KeyDetect, EndingTonicHint) {
+  std::vector<float> x(static_cast<std::size_t>(kRate * 10.0), 0.0f);
+  for (const int m : {60, 64, 67, 69}) test::addNote(x, kRate, 0.0, 10.0, m, 0.06f);
+  test::addNote(x, kRate, 0.0, 7.0, 48, 0.1f);
+  test::addNote(x, kRate, 7.0, 3.0, 45, 0.1f);
+  const Chromagram ch = chromaOf(x);
+  KeyDetectConfig cfg;
+  const auto plain = estimateGlobalKey(ch, cfg);
+  ASSERT_TRUE(plain.has_value());
+  EXPECT_EQ(plain->key, (MusicalKey{0, KeyMode::Major})) << name(plain->key);
+  const std::vector<uint8_t> voiced = voicedFrames(ch, cfg.silenceDb);
+  EXPECT_EQ(endingBassPitchClass(ch, voiced, 2.0f), 9);
+  cfg.endWeight = 0.3f;
+  cfg.endSec = 2.0f;
+  const auto hinted = estimateGlobalKey(ch, cfg);
+  ASSERT_TRUE(hinted.has_value());
+  EXPECT_EQ(hinted->key, (MusicalKey{9, KeyMode::Minor})) << name(hinted->key);
 }

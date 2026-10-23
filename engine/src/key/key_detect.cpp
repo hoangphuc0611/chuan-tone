@@ -28,20 +28,29 @@ float pearson(const ChromaVector& a, const std::array<float, 12>& b) {
   return static_cast<float>(num / std::sqrt(va * vb));
 }
 
+namespace {
+
+// Xoay profile: lớp cao độ pc nhận trọng số của bậc (pc − root).
+std::array<float, 12> rotate(const std::array<float, 12>& base, int root) {
+  std::array<float, 12> rotated{};
+  for (int pc = 0; pc < 12; ++pc) {
+    rotated[static_cast<std::size_t>(pc)] = base[static_cast<std::size_t>((pc - root + 12) % 12)];
+  }
+  return rotated;
+}
+
+}  // namespace
+
 KeyScores scoreKeys(const ChromaVector& bass, const ChromaVector& treble, const KeyProfile& profile,
                     float bassWeight) {
   KeyScores scores{};
   for (int mode = 0; mode < 2; ++mode) {
     const std::array<float, 12>& base = mode == 0 ? profile.major : profile.minor;
+    const auto& bassOpt = mode == 0 ? profile.bassMajor : profile.bassMinor;
+    const std::array<float, 12>& bassBase = bassOpt ? *bassOpt : base;
     for (int root = 0; root < 12; ++root) {
-      // Xoay profile: lớp cao độ pc nhận trọng số của bậc (pc − root).
-      std::array<float, 12> rotated{};
-      for (int pc = 0; pc < 12; ++pc) {
-        rotated[static_cast<std::size_t>(pc)] =
-            base[static_cast<std::size_t>((pc - root + 12) % 12)];
-      }
-      const float rt = pearson(treble, rotated);
-      const float rb = pearson(bass, rotated);
+      const float rt = pearson(treble, rotate(base, root));
+      const float rb = pearson(bass, rotate(bassBase, root));
       scores[static_cast<std::size_t>(mode * 12 + root)] =
           (1.0f - bassWeight) * rt + bassWeight * rb;
     }
@@ -109,8 +118,27 @@ KeyEstimate pickKey(const KeyScores& scores, const KeyDetectConfig& cfg) {
   return est;
 }
 
+const KeyProfile* resolveProfile(const KeyDetectConfig& cfg) {
+  return cfg.customProfile ? &*cfg.customProfile : findKeyProfile(cfg.profile);
+}
+
+int endingBassPitchClass(const Chromagram& ch, const std::vector<uint8_t>& voiced, float endSec) {
+  std::size_t last = ch.frames();
+  while (last > 0 && !voiced[last - 1]) --last;
+  if (last == 0) return -1;
+  const auto span = static_cast<std::size_t>(
+      std::max(1.0, std::round(static_cast<double>(endSec) / ch.frameSec)));
+  ChromaVector sum{};
+  for (std::size_t i = last > span ? last - span : 0; i < last; ++i) {
+    if (!voiced[i]) continue;
+    for (std::size_t pc = 0; pc < 12; ++pc) sum[pc] += ch.bass[i][pc];
+  }
+  const auto best = std::max_element(sum.begin(), sum.end());
+  return *best > 0.0f ? static_cast<int>(best - sum.begin()) : -1;
+}
+
 std::optional<KeyEstimate> estimateGlobalKey(const Chromagram& ch, const KeyDetectConfig& cfg) {
-  const KeyProfile* profile = findKeyProfile(cfg.profile);
+  const KeyProfile* profile = resolveProfile(cfg);
   if (profile == nullptr || ch.frames() == 0) return std::nullopt;
   const std::vector<uint8_t> voiced = voicedFrames(ch, cfg.silenceDb);
   ChromaVector bass{};
@@ -120,7 +148,15 @@ std::optional<KeyEstimate> estimateGlobalKey(const Chromagram& ch, const KeyDete
   if (static_cast<double>(used) * ch.frameSec < static_cast<double>(cfg.minVoicedSec)) {
     return std::nullopt;
   }
-  return pickKey(scoreKeys(bass, treble, *profile, cfg.bassWeight), cfg);
+  KeyScores scores = scoreKeys(bass, treble, *profile, cfg.bassWeight);
+  if (cfg.endWeight > 0.0f) {
+    const int tonic = endingBassPitchClass(ch, voiced, cfg.endSec);
+    if (tonic >= 0) {
+      scores[static_cast<std::size_t>(tonic)] += cfg.endWeight;       // trưởng
+      scores[static_cast<std::size_t>(12 + tonic)] += cfg.endWeight;  // thứ
+    }
+  }
+  return pickKey(scores, cfg);
 }
 
 }  // namespace tonecore
