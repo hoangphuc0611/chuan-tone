@@ -40,6 +40,8 @@ add_executable(tonecore_tests
   unit/key_timeline_test.cpp
   unit/loudness_test.cpp
   unit/tempo_test.cpp
+  unit/analyzer_api_test.cpp
+  unit/engine_m3_test.cpp
 )
 target_link_libraries(tonecore_tests PRIVATE tonecore_core tonecore_testutil GTest::gtest_main)
 tc_set_warnings(tonecore_tests)

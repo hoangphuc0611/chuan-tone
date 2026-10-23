@@ -24,6 +24,12 @@ namespace tonecore {
 // - Bật/tắt chỉnh giọng = chuyển dần giữa đường khô (không trễ) và đường ướt (trễ 10 ms) trong
 //   20 ms (ADR-002: khi tắt thì bỏ hẳn độ trễ).
 // - Tham số đổi từ luồng điều khiển qua atomic; audio thread đọc mỗi block.
+// - Tuning: lưới nốt dời theo cao độ của beat (vd. beat lệch +18 cent → nốt đích cũng +18 cent);
+//   cao độ người hát được trừ độ lệch trước khi lượng tử nên lượng chỉnh tính đúng theo beat.
+// - Key có hai nguồn: key chọn tay (luồng điều khiển, atomic) và key do engine tự đặt theo
+//   timeline của bài (CHỈ audio thread ghi, setKeyOverride). Khi override bật thì nó được dùng —
+//   hai nguồn không bao giờ ghi đè lẫn nhau nên không có race giữa "người dùng chọn tay" và
+//   "engine đổi theo bài".
 // - Xử lý theo từng đoạn ≤ 1 hop (4 ms) để kết quả dò cao độ được áp kịp thời cho PSOLA.
 class VoicePitchNode {
  public:
@@ -34,6 +40,9 @@ class VoicePitchNode {
   bool enabled() const noexcept { return enabled_.load(std::memory_order_relaxed); }
 
   void setKey(int root, Scale scale) noexcept;
+  // −100…100 cent so với La = 440 Hz.
+  void setTuningCents(float cents) noexcept;
+  float tuningCents() const noexcept { return tuningCents_.load(std::memory_order_relaxed); }
   int keyRoot() const noexcept { return keyRoot_.load(std::memory_order_relaxed); }
   Scale keyScale() const noexcept { return static_cast<Scale>(keyScale_.load()); }
 
@@ -54,9 +63,12 @@ class VoicePitchNode {
   // ---- Audio thread ----
   // [RT] Xử lý tại chỗ `n` mẫu mono (n ≤ maxBlockFrames).
   void process(float* io, uint32_t n) noexcept;
+  // [RT] Key do engine tự đặt theo timeline; active = false → quay về key chọn tay.
+  void setKeyOverride(bool active, int root, Scale scale) noexcept;
 
  private:
   void syncParams() noexcept;
+  uint16_t activeKeyMask() const noexcept;
   void onFrame(const PitchFrame& f) noexcept;
   void processSlice(float* io, uint32_t n) noexcept;
 
@@ -72,6 +84,11 @@ class VoicePitchNode {
   std::atomic<bool> enabled_{false};
   std::atomic<int> keyRoot_{0};
   std::atomic<int> keyScale_{static_cast<int>(Scale::Chromatic)};
+  std::atomic<float> tuningCents_{0.0f};
+  float tuningSemis_ = 0.0f;     // audio thread
+  bool overrideActive_ = false;  // audio thread
+  int overrideRoot_ = 0;         // audio thread
+  Scale overrideScale_ = Scale::Chromatic;
   std::atomic<float> retuneMs_;
   std::atomic<float> humanize_;
   std::atomic<float> flexCents_;

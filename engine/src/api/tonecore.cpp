@@ -58,6 +58,8 @@ const char* tc_result_to_string(tc_result result) {
       return "TC_ERR_INTERNAL";
     case TC_ERR_DEVICE:
       return "TC_ERR_DEVICE";
+    case TC_ERR_CANCELLED:
+      return "TC_ERR_CANCELLED";
   }
   return "TC_ERR_UNKNOWN";
 }
@@ -217,6 +219,28 @@ tc_result tc_get_key(tc_engine* engine, int32_t* out_root, int32_t* out_scale) {
 tc_result tc_set_correction_preset(tc_engine* engine, int32_t preset) {
   if (engine == nullptr) return TC_ERR_INVALID_ARG;
   return engine->impl.setCorrectionPreset(preset);
+}
+
+tc_result tc_set_tuning(tc_engine* engine, float cents) {
+  if (engine == nullptr) return TC_ERR_INVALID_ARG;
+  return engine->impl.setTuning(cents);
+}
+
+tc_result tc_get_tuning(tc_engine* engine, float* out_cents) {
+  if (engine == nullptr || out_cents == nullptr) return TC_ERR_INVALID_ARG;
+  *out_cents = engine->impl.tuning();
+  return TC_OK;
+}
+
+tc_result tc_set_key_timeline(tc_engine* engine, const tc_key_segment* segments, uint32_t count) {
+  if (engine == nullptr) return TC_ERR_INVALID_ARG;
+  try {
+    return engine->impl.setKeyTimeline(segments, count);
+  } catch (const std::bad_alloc&) {
+    return TC_ERR_OUT_OF_MEMORY;
+  } catch (...) {
+    return TC_ERR_INTERNAL;
+  }
 }
 
 tc_result tc_get_pitch_state(tc_engine* engine, tc_pitch_state* out_state) {

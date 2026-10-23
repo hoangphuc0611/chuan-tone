@@ -31,7 +31,7 @@ extern "C" {
 /* Phiên bản API: (major << 16) | (minor << 8) | patch.
  * Tăng major khi phá vỡ ABI; tăng minor khi thêm hàm. */
 #define TC_API_VERSION_MAJOR 0
-#define TC_API_VERSION_MINOR 3
+#define TC_API_VERSION_MINOR 4
 #define TC_API_VERSION_PATCH 0
 #define TC_API_VERSION \
   ((TC_API_VERSION_MAJOR << 16) | (TC_API_VERSION_MINOR << 8) | TC_API_VERSION_PATCH)
@@ -48,7 +48,9 @@ enum tc_result_code {
   TC_ERR_NOT_SUPPORTED = -4,
   TC_ERR_INTERNAL = -5,
   /* Không mở được thiết bị âm thanh (thiếu quyền micro, thiết bị bận...). */
-  TC_ERR_DEVICE = -6
+  TC_ERR_DEVICE = -6,
+  /* Việc bị huỷ giữa chừng (từ v0.4, vd. tc_analyzer_cancel). */
+  TC_ERR_CANCELLED = -7
 };
 
 typedef enum tc_backend {
@@ -125,7 +127,9 @@ typedef enum tc_event_type {
   TC_EVENT_INTERRUPTED = 4,      /* code = 1 bắt đầu bị ngắt (cuộc gọi...), 0 kết thúc */
   TC_EVENT_LATENCY_DONE = 5,     /* code = tc_result; value = độ trễ (ms) nếu thành công */
   TC_EVENT_STREAM_RESTARTED = 6, /* code = tc_result của lần mở lại stream */
-  TC_EVENT_MONITOR_BLOCKED = 7   /* nghe lại giọng bị chặn vì đang dùng Bluetooth */
+  TC_EVENT_MONITOR_BLOCKED = 7,  /* nghe lại giọng bị chặn vì đang dùng Bluetooth */
+  /* (từ v0.4) Engine tự đổi key chỉnh giọng theo timeline: code = chủ âm 0..11, value = tc_scale */
+  TC_EVENT_KEY_CHANGED = 8
 } tc_event_type;
 
 typedef struct tc_engine tc_engine;
@@ -206,6 +210,69 @@ typedef struct tc_event {
   double value;
 } tc_event;
 
+/* ---- Phân tích bài (từ v0.4, xem docs/adr/003-song-analyzer-api.md) ---- */
+
+typedef enum tc_analysis_state {
+  TC_ANALYSIS_IDLE = 0,     /* chưa chạy */
+  TC_ANALYSIS_RUNNING = 1,  /* đang chạy ở luồng nền */
+  TC_ANALYSIS_DONE = 2,     /* xong, đọc bằng tc_analyzer_get_result */
+  TC_ANALYSIS_FAILED = 3,   /* lỗi: tc_analysis_status.result */
+  TC_ANALYSIS_CANCELLED = 4 /* bị huỷ */
+} tc_analysis_state;
+
+/* Giai đoạn đang chạy, theo thứ tự (để UI hiện "Đang dò tone…"). */
+typedef enum tc_analysis_stage {
+  TC_STAGE_NONE = 0,
+  TC_STAGE_DECODING = 1,   /* giải mã file */
+  TC_STAGE_LOUDNESS = 2,   /* đo độ to */
+  TC_STAGE_RESAMPLING = 3, /* chuẩn bị tín hiệu */
+  TC_STAGE_SEPARATING = 4, /* tách nhạc cụ hoà âm / trống */
+  TC_STAGE_SPECTRUM = 5,   /* phổ cao độ */
+  TC_STAGE_KEY = 6,        /* dò tone + chuyển tone */
+  TC_STAGE_TEMPO = 7,      /* dò BPM */
+  TC_STAGE_DONE = 8
+} tc_analysis_stage;
+
+typedef struct tc_analysis_status {
+  uint32_t struct_size; /* = sizeof(tc_analysis_status) */
+  int32_t state;        /* tc_analysis_state */
+  int32_t stage;        /* tc_analysis_stage */
+  float progress;       /* 0..1 */
+  int32_t result;       /* tc_result của lần chạy gần nhất (TC_OK khi chưa xong) */
+} tc_analysis_status;
+
+/* Một đoạn tone: [start_ms, end_ms). Kích thước cố định (dùng trong mảng) — muốn mở rộng thì
+ * thêm struct mới, không sửa struct này. */
+typedef struct tc_key_segment {
+  double start_ms;
+  double end_ms;
+  int32_t root;     /* 0 = Đô (C) … 11 = Si (B) */
+  int32_t scale;    /* tc_scale; phân tích chỉ trả TC_SCALE_MAJOR hoặc TC_SCALE_NATURAL_MINOR */
+  float confidence; /* 0..1 (đầu vào của tc_set_key_timeline: bỏ qua) */
+} tc_key_segment;
+
+typedef struct tc_analysis_result {
+  uint32_t struct_size; /* = sizeof(tc_analysis_result) */
+  double duration_ms;
+  uint32_t sample_rate; /* của file gốc */
+  uint32_t channels;
+  int32_t has_key; /* 0 nếu không kết luận được (bài quá ngắn, chỉ có trống…) */
+  int32_t key_root;
+  int32_t key_scale; /* tc_scale */
+  float key_confidence;
+  int32_t has_tuning;
+  float tuning_cents; /* lệch so với La = 440 Hz, −50…+50 → đưa vào tc_set_tuning */
+  int32_t has_bpm;
+  float bpm;
+  float bpm_confidence;
+  int32_t has_loudness;
+  float integrated_lufs; /* ITU-R BS.1770-4 */
+  float sample_peak_db;
+  uint32_t timeline_count; /* số đoạn tone — đọc bằng tc_analyzer_get_key_timeline */
+} tc_analysis_result;
+
+typedef struct tc_analyzer tc_analyzer;
+
 /* ---- Thông tin thư viện ---- */
 TC_EXPORT uint32_t tc_get_api_version(void);
 TC_EXPORT const char* tc_get_version_string(void);
@@ -266,6 +333,39 @@ TC_EXPORT tc_result tc_get_key(tc_engine* engine, int32_t* out_root, int32_t* ou
 TC_EXPORT tc_result tc_set_correction_preset(tc_engine* engine, int32_t preset);
 /* out_state->struct_size phải = sizeof(tc_pitch_state). Gọi từ luồng UI (~30 lần/giây). */
 TC_EXPORT tc_result tc_get_pitch_state(tc_engine* engine, tc_pitch_state* out_state);
+
+/* ---- Theo tone của bài (từ v0.4) ----
+ * Lưới nốt của tự chỉnh giọng dời `cents` so với La = 440 Hz (−100…100). Dùng tuning_cents của
+ * tc_analysis_result để giọng được kéo về đúng cao độ của beat. Đồng hồ cao độ đo theo cùng lưới.
+ */
+TC_EXPORT tc_result tc_set_tuning(tc_engine* engine, float cents);
+TC_EXPORT tc_result tc_get_tuning(tc_engine* engine, float* out_cents);
+/* Engine tự đổi key chỉnh giọng theo vị trí beat (cả khi tua). Các đoạn phải tăng dần theo
+ * start_ms, không chồng nhau, tối đa 256 đoạn; khoảng trống giữa hai đoạn giữ key đoạn trước.
+ * count = 0 → tắt. Gọi tc_set_key → tắt chế độ theo timeline (người dùng chọn tay).
+ * Mỗi lần engine tự đổi key → sự kiện TC_EVENT_KEY_CHANGED; tc_get_key trả key đang áp dụng. */
+TC_EXPORT tc_result tc_set_key_timeline(tc_engine* engine, const tc_key_segment* segments,
+                                        uint32_t count);
+
+/* ---- Phân tích bài (từ v0.4) ----
+ * Độc lập với tc_engine (chạy được khi engine chưa start, vd. lúc nhập thư viện bài). Mỗi analyzer
+ * có một luồng nền riêng; UI kéo trạng thái bằng tc_analyzer_get_status (~10 lần/giây).
+ * Bài 4 phút mất ~1 s trên máy mạnh. Gọi các hàm của cùng một analyzer từ một luồng. */
+TC_EXPORT tc_result tc_analyzer_create(tc_analyzer** out_analyzer);
+/* Bắt đầu phân tích file (định dạng như tc_load_beat). Đang chạy → TC_ERR_INVALID_STATE.
+ * Kết quả lần trước bị xoá. Lỗi đọc file báo qua trạng thái TC_ANALYSIS_FAILED. */
+TC_EXPORT tc_result tc_analyzer_start(tc_analyzer* analyzer, const char* path_utf8);
+TC_EXPORT tc_result tc_analyzer_get_status(tc_analyzer* analyzer, tc_analysis_status* out_status);
+/* Yêu cầu dừng (không chờ). Trạng thái chuyển sang TC_ANALYSIS_CANCELLED khi luồng nền dừng. */
+TC_EXPORT tc_result tc_analyzer_cancel(tc_analyzer* analyzer);
+/* Chỉ khi trạng thái là TC_ANALYSIS_DONE, ngược lại TC_ERR_INVALID_STATE. */
+TC_EXPORT tc_result tc_analyzer_get_result(tc_analyzer* analyzer, tc_analysis_result* out_result);
+/* Ghi tối đa `max_segments` đoạn vào `out_segments`, trả số đoạn đã ghi (≥ 0) hoặc mã lỗi.
+ * out_segments = NULL và max_segments = 0 → trả tổng số đoạn. Chỉ khi TC_ANALYSIS_DONE. */
+TC_EXPORT int32_t tc_analyzer_get_key_timeline(tc_analyzer* analyzer, tc_key_segment* out_segments,
+                                               uint32_t max_segments);
+/* Huỷ việc đang chạy và chờ luồng nền dừng (thường < 50 ms). Cho phép analyzer == NULL. */
+TC_EXPORT void tc_analyzer_destroy(tc_analyzer* analyzer);
 
 /* ---- Đo lường ---- */
 TC_EXPORT tc_result tc_get_metrics(tc_engine* engine, tc_metrics* out_metrics);

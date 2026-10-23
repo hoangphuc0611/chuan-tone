@@ -32,6 +32,11 @@ Engine::Engine(const EngineConfig& config)
 
 Engine::~Engine() {
   if (state() == TC_STATE_RUNNING) stop();
+  // Không còn audio thread: giải phóng mọi timeline còn giữ.
+  KeyTimeline* t = nullptr;
+  while (timelineIncoming_.pop(t)) delete t;
+  collectTimelineGarbage();
+  delete timeline_;
 }
 
 // ---------------------------------------------------------------------------
@@ -189,13 +194,72 @@ tc_result Engine::getParam(int32_t nodeId, int32_t paramId, float* outValue) con
 
 tc_result Engine::setKey(int32_t root, int32_t scale) noexcept {
   if (root < 0 || root > 11 || scale < 0 || scale >= kScaleCount) return TC_ERR_INVALID_ARG;
+  followTimeline_.store(false, std::memory_order_release);  // người dùng chọn tay
   pitch_.setKey(root, static_cast<Scale>(scale));
   return TC_OK;
 }
 
 void Engine::key(int32_t& root, int32_t& scale) const noexcept {
+  if (followTimeline_.load(std::memory_order_acquire)) {
+    const int32_t k = autoKey_.load(std::memory_order_relaxed);
+    root = k & 0xFF;
+    scale = k >> 8;
+    return;
+  }
   root = pitch_.keyRoot();
   scale = static_cast<int32_t>(pitch_.keyScale());
+}
+
+tc_result Engine::setTuning(float cents) noexcept {
+  if (!std::isfinite(cents) || std::fabs(cents) > 100.0f) return TC_ERR_INVALID_ARG;
+  pitch_.setTuningCents(cents);
+  return TC_OK;
+}
+
+void Engine::collectTimelineGarbage() {
+  KeyTimeline* t = nullptr;
+  while (timelineRetired_.pop(t)) delete t;
+}
+
+tc_result Engine::setKeyTimeline(const tc_key_segment* segments, uint32_t count) {
+  constexpr uint32_t kMaxSegments = 256;
+  if (count > kMaxSegments || (segments == nullptr && count > 0)) return TC_ERR_INVALID_ARG;
+  collectTimelineGarbage();
+  if (count == 0) {
+    followTimeline_.store(false, std::memory_order_release);
+    return TC_OK;
+  }
+  // Kiểm tra: đoạn hợp lệ, tăng dần, không chồng nhau.
+  for (uint32_t i = 0; i < count; ++i) {
+    const tc_key_segment& g = segments[i];
+    if (!std::isfinite(g.start_ms) || !std::isfinite(g.end_ms) || g.start_ms < 0.0 ||
+        g.end_ms <= g.start_ms || g.root < 0 || g.root > 11 || g.scale < 0 ||
+        g.scale >= kScaleCount || (i > 0 && g.start_ms < segments[i - 1].end_ms - 1e-6)) {
+      return TC_ERR_INVALID_ARG;
+    }
+  }
+  auto tl = std::make_unique<KeyTimeline>();
+  tl->entries.reserve(count);
+  const double framesPerMs = config_.sampleRate / 1000.0;
+  for (uint32_t i = 0; i < count; ++i) {
+    tl->entries.push_back({static_cast<uint64_t>(std::llround(segments[i].start_ms * framesPerMs)),
+                           segments[i].root, static_cast<Scale>(segments[i].scale)});
+  }
+  // Key của đoạn tại vị trí hiện tại → tc_get_key đúng ngay, trước cả khi audio thread chạy.
+  const uint64_t pos = player_.positionFrames();
+  const KeyTimeline::Entry* cur = &tl->entries.front();
+  for (const auto& e : tl->entries) {
+    if (e.startFrame <= pos) cur = &e;
+  }
+  const int32_t initial = packKey(cur->root, cur->scale);
+  KeyTimeline* raw = tl.release();
+  if (!timelineIncoming_.push(raw)) {
+    delete raw;
+    return TC_ERR_INVALID_STATE;  // audio thread chưa nhận các timeline trước (engine dừng?)
+  }
+  autoKey_.store(initial, std::memory_order_relaxed);
+  followTimeline_.store(true, std::memory_order_release);
+  return TC_OK;
 }
 
 tc_result Engine::setCorrectionPreset(int32_t preset) noexcept {
@@ -348,6 +412,13 @@ tc_result Engine::latencyResult(tc_latency_result& out) const {
 
 std::size_t Engine::pollEvents(tc_event* out, std::size_t max) {
   if (player_.consumeEnded()) events_.push(TC_EVENT_BEAT_ENDED);
+  const uint32_t seq = autoKeySeq_.load(std::memory_order_acquire);
+  if (seq != autoKeySeen_) {
+    autoKeySeen_ = seq;
+    const int32_t k = autoKey_.load(std::memory_order_relaxed);
+    events_.push(TC_EVENT_KEY_CHANGED, k & 0xFF, static_cast<double>(k >> 8));
+  }
+  collectTimelineGarbage();
   checkLatencyCompletion();
   // Track cũ (vài chục MB) được huỷ ở luồng nền – cùng luồng với setTrack().
   if (player_.hasGarbage()) worker_.post([this] { player_.collectGarbage(); });
@@ -396,6 +467,45 @@ void Engine::processAudio(const float* in, uint32_t inChannels, float* out, uint
   callbacks_.fetch_add(1, std::memory_order_relaxed);
 }
 
+// [RT] Nhận timeline mới (nếu có) và đặt key theo đoạn chứa vị trí beat hiện tại.
+void Engine::applyKeyTimeline() noexcept {
+  KeyTimeline* t = nullptr;
+  while (timelineIncoming_.pop(t)) {
+    if (timeline_ != nullptr && !timelineRetired_.push(timeline_)) {
+      // Hàng đợi trả về đầy (luồng điều khiển chưa dọn): giữ timeline cũ, trả timeline mới về
+      // để không phải giải phóng trong audio thread. Không xảy ra với nhịp dùng bình thường.
+      timelineRetired_.push(t);
+      continue;
+    }
+    timeline_ = t;
+    appliedSegment_ = -1;
+  }
+  const bool follow = followTimeline_.load(std::memory_order_acquire) && timeline_ != nullptr &&
+                      !timeline_->entries.empty();
+  if (!follow) {
+    if (keyOverride_) {
+      pitch_.setKeyOverride(false, 0, Scale::Chromatic);
+      keyOverride_ = false;
+      appliedSegment_ = -1;
+    }
+    return;
+  }
+  // Đoạn cuối cùng có startFrame ≤ vị trí (trước đoạn đầu → dùng đoạn đầu).
+  const auto& e = timeline_->entries;
+  const uint64_t pos = player_.positionFrames();
+  const auto it =
+      std::upper_bound(e.begin(), e.end(), pos,
+                       [](uint64_t p, const KeyTimeline::Entry& x) { return p < x.startFrame; });
+  const int idx = it == e.begin() ? 0 : static_cast<int>(it - e.begin()) - 1;
+  if (keyOverride_ && idx == appliedSegment_) return;
+  appliedSegment_ = idx;
+  keyOverride_ = true;
+  const KeyTimeline::Entry& seg = e[static_cast<std::size_t>(idx)];
+  pitch_.setKeyOverride(true, seg.root, seg.scale);
+  autoKey_.store(packKey(seg.root, seg.scale), std::memory_order_relaxed);
+  autoKeySeq_.fetch_add(1, std::memory_order_release);
+}
+
 // [RT]
 void Engine::processChunk(const float* in, uint32_t inChannels, float* out, uint32_t outChannels,
                           uint32_t frames) noexcept {
@@ -411,7 +521,8 @@ void Engine::processChunk(const float* in, uint32_t inChannels, float* out, uint
     return;
   }
 
-  // Giọng: lọc thông cao, dò cao độ, tự chỉnh giọng (tại chỗ).
+  // Giọng: lọc thông cao, dò cao độ, tự chỉnh giọng (tại chỗ) — key theo timeline nếu có.
+  applyKeyTimeline();
   pitch_.process(mic, frames);
 
   float* beat = beatBuf_.data();

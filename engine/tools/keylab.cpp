@@ -80,7 +80,7 @@ const char* stageName(AnalysisStage s) {
 }
 
 const char* resultName(tc_result r) {
-  return r == kResultCancelled ? "TC_ERR_CANCELLED" : tc_result_to_string(r);
+  return tc_result_to_string(r);
 }
 
 // Chuỗi JSON: thoát ", \ và ký tự điều khiển; UTF-8 (tên bài tiếng Việt) giữ nguyên.

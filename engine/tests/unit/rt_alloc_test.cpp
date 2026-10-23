@@ -7,10 +7,14 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <new>
+#include <thread>
 #include <vector>
 
+#include "test_util.h"
 #include "tonecore/tonecore.h"
 #include "util/synth_voice.h"
 
@@ -103,5 +107,64 @@ TEST(RealTime, ProcessDoesNotAllocate) {
   }
   EXPECT_EQ(g_allocs.load(), 0);
   tc_engine_destroy(e);
+#endif
+}
+
+// Timeline key (v0.4): audio thread đổi key theo vị trí beat, nhận timeline mới, tua — vẫn không
+// cấp phát.
+TEST(RealTime, KeyTimelineDoesNotAllocate) {
+#ifdef TC_SANITIZED
+  GTEST_SKIP() << "Sanitizer tự thay operator new – chạy ở bản build thường.";
+#else
+  tc_engine* e = nullptr;
+  ASSERT_EQ(tc_engine_create(nullptr, &e), TC_OK);
+  ASSERT_EQ(tc_engine_start(e), TC_OK);
+  ASSERT_EQ(tc_set_param(e, TC_NODE_PITCH, TC_PARAM_ENABLED, 1.0f), TC_OK);
+  ASSERT_EQ(tc_set_tuning(e, 20.0f), TC_OK);
+
+  // Beat 3 s (nạp ở luồng nền của engine — được phép cấp phát).
+  const std::string path = tonecore::test::tempPath("rt_timeline_beat.wav");
+  ASSERT_TRUE(tonecore::test::writeWav16(path, std::vector<int16_t>(48000 * 3 * 2, 0), 48000, 2));
+  ASSERT_EQ(tc_load_beat(e, path.c_str()), TC_OK);
+  bool loaded = false;
+  for (int i = 0; i < 5000 && !loaded; ++i) {
+    tc_event ev[8];
+    const int32_t n = tc_poll_events(e, ev, 8);
+    for (int32_t k = 0; k < n; ++k) loaded = loaded || ev[k].type == TC_EVENT_BEAT_LOADED;
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  ASSERT_TRUE(loaded);
+  ASSERT_EQ(tc_play(e), TC_OK);
+
+  tc_key_segment tl[6];
+  for (int i = 0; i < 6; ++i) {
+    tl[i] = tc_key_segment{i * 500.0, i * 500.0 + 500.0, (i * 5) % 12,
+                           i % 2 == 0 ? TC_SCALE_MAJOR : TC_SCALE_NATURAL_MINOR, 0.0f};
+  }
+  ASSERT_EQ(tc_set_key_timeline(e, tl, 6), TC_OK);
+
+  const auto s = tonecore::test::synthVoice(
+      tonecore::test::vietTone(tonecore::test::VietTone::Nga, 200.0), 2.0);
+  std::vector<float> out(2 * 512);
+  std::size_t off = 0;
+  g_allocs.store(0);
+  for (int round = 0; round < 250; ++round) {
+    if (off + 512 > s.audio.size()) off = 0;
+    g_counting = true;
+    const tc_result r = tc_engine_process_offline(e, s.audio.data() + off, out.data(), 512);
+    g_counting = false;
+    ASSERT_EQ(r, TC_OK);
+    off += 512;
+    // Luồng điều khiển: thay timeline, tua, lấy sự kiện (được phép cấp phát).
+    if (round == 80) ASSERT_EQ(tc_set_key_timeline(e, tl + 1, 5), TC_OK);
+    if (round == 120) ASSERT_EQ(tc_seek(e, 200.0), TC_OK);
+    if (round % 10 == 0) {
+      tc_event ev[8];
+      tc_poll_events(e, ev, 8);
+    }
+  }
+  EXPECT_EQ(g_allocs.load(), 0);
+  tc_engine_destroy(e);
+  std::remove(path.c_str());
 #endif
 }

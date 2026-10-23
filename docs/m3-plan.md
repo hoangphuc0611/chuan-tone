@@ -35,7 +35,13 @@
   prior Ellis 120 BPM σ 1,4) — test tổng hợp 90–140 BPM sai ≤ 1%, GuitarSet Acc1 58% / Acc2 83%;
   LUFS (`key/loudness.*`, BS.1770-4) — khớp bảng hệ số 48 kHz, 5 ca EBU Tech 3341 ±0,1 LU ở
   48 / 44,1 kHz. `keylab --tempo-prior --tempo-octaves`. Cả chuỗi bài 4 phút 1,12 s (M1).
-- [ ] B4, B7 … B9
+- [x] **B7** (2026-10-23): C API 0.4 — `tc_analyzer_*` (handle riêng, luồng nền, kéo trạng thái,
+  huỷ; ADR-003), `TC_ERR_CANCELLED`, `tc_set_tuning` / `tc_get_tuning` (lưới nốt chỉnh giọng theo
+  tuning của beat; đồng hồ cao độ đo theo cùng lưới), `tc_set_key_timeline` (engine tự đổi key theo
+  vị trí beat kể cả khi tua, `TC_EVENT_KEY_CHANGED`, chọn tay thì tắt). Timeline sang audio thread
+  qua hàng đợi SPSC, key override chỉ audio thread ghi → không cấp phát (test RealTime). 179 test,
+  ASan/UBSan/TSan sạch.
+- [ ] B4, B8, B9
 
 ## Các điểm cần quyết (2026-10-22: duyệt theo đề nghị)
 

@@ -55,6 +55,12 @@ void VoicePitchNode::setKey(int root, Scale scale) noexcept {
   paramVersion_.fetch_add(1, std::memory_order_release);
 }
 
+void VoicePitchNode::setTuningCents(float cents) noexcept {
+  tuningCents_.store(std::isfinite(cents) ? std::clamp(cents, -100.0f, 100.0f) : 0.0f,
+                     std::memory_order_relaxed);
+  paramVersion_.fetch_add(1, std::memory_order_release);
+}
+
 void VoicePitchNode::applyPreset(CorrectionPreset preset) noexcept {
   const CorrectorParams p = correctionPreset(preset);
   retuneMs_.store(p.retuneMs, std::memory_order_relaxed);
@@ -90,18 +96,37 @@ CorrectorParams VoicePitchNode::params() const noexcept {
 // ---- Audio thread ----
 
 // [RT]
+uint16_t VoicePitchNode::activeKeyMask() const noexcept {
+  if (overrideActive_) return keyMask(overrideRoot_, overrideScale_);
+  return keyMask(keyRoot_.load(std::memory_order_relaxed),
+                 static_cast<Scale>(keyScale_.load(std::memory_order_relaxed)));
+}
+
+// [RT]
 void VoicePitchNode::syncParams() noexcept {
   const uint32_t v = paramVersion_.load(std::memory_order_acquire);
   if (v == seenVersion_) return;
   seenVersion_ = v;
   corrector_.setParams(params());
-  corrector_.setKeyMask(keyMask(keyRoot_.load(std::memory_order_relaxed),
-                                static_cast<Scale>(keyScale_.load(std::memory_order_relaxed))));
+  corrector_.setKeyMask(activeKeyMask());
+  tuningSemis_ = tuningCents_.load(std::memory_order_relaxed) / 100.0f;
+}
+
+// [RT]
+void VoicePitchNode::setKeyOverride(bool active, int root, Scale scale) noexcept {
+  overrideActive_ = active;
+  overrideRoot_ = ((root % 12) + 12) % 12;
+  overrideScale_ = scale;
+  corrector_.setKeyMask(activeKeyMask());
 }
 
 // [RT] Một khung phân tích xong → cập nhật corrector, PSOLA và trạng thái cho UI.
 void VoicePitchNode::onFrame(const PitchFrame& f) noexcept {
-  const CorrectionFrame c = corrector_.update(f.tracked);
+  // Lượng tử trên lưới của beat: dời cao độ người hát ngược với tuning, lượng chỉnh (nửa cung)
+  // không đổi khi dời cả lưới lẫn cao độ.
+  TrackedPitch onGrid = f.tracked;
+  if (onGrid.voiced) onGrid.midi -= tuningSemis_;
+  const CorrectionFrame c = corrector_.update(onGrid);
   const bool voiced = f.tracked.voiced;
   psola_.setAnalysis(
       voiced, voiced ? static_cast<float>(sampleRate_ / static_cast<double>(f.tracked.f0)) : 0.0f);

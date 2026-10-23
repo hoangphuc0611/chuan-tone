@@ -9,6 +9,7 @@
 
 #include "core/event_queue.h"
 #include "core/smoothed_param.h"
+#include "core/spsc_ring.h"
 #include "core/worker.h"
 #include "io/audio_backend.h"
 #include "latency/latency_probe.h"
@@ -34,6 +35,12 @@ struct EngineConfig {
 //   (khi đang đo độ trễ: chỉ phát tín hiệu MLS, tắt mọi nguồn khác)
 //
 // monitorMix chuyển dần 0↔1 (10 ms) khi bật/tắt nghe lại hoặc khi route đổi sang Bluetooth.
+//
+// Theo tone của bài (từ v0.4): timeline key được dựng ở luồng điều khiển rồi chuyển con trỏ sang
+// audio thread qua hàng đợi SPSC (giống cách thay track của BeatPlayer). Đầu mỗi block audio
+// thread tìm đoạn chứa vị trí beat hiện tại; sang đoạn mới thì đặt key override cho
+// VoicePitchNode và tăng bộ đếm → pollEvents phát TC_EVENT_KEY_CHANGED. Timeline cũ được trả
+// về hàng đợi khác và huỷ ở luồng điều khiển.
 class Engine : public BackendHost {
  public:
   explicit Engine(const EngineConfig& config);
@@ -61,6 +68,9 @@ class Engine : public BackendHost {
   tc_result setKey(int32_t root, int32_t scale) noexcept;
   void key(int32_t& root, int32_t& scale) const noexcept;
   tc_result setCorrectionPreset(int32_t preset) noexcept;
+  tc_result setTuning(float cents) noexcept;
+  float tuning() const noexcept { return pitch_.tuningCents(); }
+  tc_result setKeyTimeline(const tc_key_segment* segments, uint32_t count);
   void fillPitchState(tc_pitch_state& s) const noexcept;
   tc_result startLatencyMeasurement();
   tc_result latencyResult(tc_latency_result& out) const;
@@ -88,6 +98,8 @@ class Engine : public BackendHost {
   void processChunk(const float* in, uint32_t inChannels, float* out, uint32_t outChannels,
                     uint32_t frames) noexcept;
   void updateMonitorTarget() noexcept;
+  void applyKeyTimeline() noexcept;
+  void collectTimelineGarbage();
   void checkLatencyCompletion();
 
   EngineConfig config_;
@@ -100,6 +112,28 @@ class Engine : public BackendHost {
   SmoothedParam monitorMix_{0.0f, 0.0f, 1.0f};
   std::atomic<bool> monitorEnabled_{false};
   std::atomic<int32_t> route_{TC_ROUTE_UNKNOWN};
+
+  // Timeline key (từ v0.4)
+  struct KeyTimeline {
+    struct Entry {
+      uint64_t startFrame;
+      int32_t root;
+      Scale scale;
+    };
+    std::vector<Entry> entries;  // tăng dần theo startFrame
+  };
+  static int32_t packKey(int32_t root, Scale scale) noexcept {
+    return root | (static_cast<int32_t>(scale) << 8);
+  }
+  SpscRing<KeyTimeline*> timelineIncoming_{8};
+  SpscRing<KeyTimeline*> timelineRetired_{16};  // > incoming → không đầy giữa 2 lần dọn
+  KeyTimeline* timeline_ = nullptr;             // audio thread (và destructor)
+  int appliedSegment_ = -1;                     // audio thread
+  bool keyOverride_ = false;                    // audio thread
+  std::atomic<bool> followTimeline_{false};
+  std::atomic<int32_t> autoKey_{0};      // packKey của key đang theo timeline
+  std::atomic<uint32_t> autoKeySeq_{0};  // audio thread tăng mỗi lần tự đổi key
+  uint32_t autoKeySeen_ = 0;             // luồng điều khiển
 
   // Thành phần
   BeatPlayer player_;
