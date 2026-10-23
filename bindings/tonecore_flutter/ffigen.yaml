@@ -13,6 +13,7 @@ functions:
   symbol-address:
     include:
       - tc_engine_destroy
+      - tc_analyzer_destroy
 structs:
   include:
     - tc_.*

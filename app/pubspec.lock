@@ -331,7 +331,7 @@ packages:
       path: "../bindings/tonecore_flutter"
       relative: true
     source: path
-    version: "0.2.0"
+    version: "0.4.0"
   vector_math:
     dependency: transitive
     description:

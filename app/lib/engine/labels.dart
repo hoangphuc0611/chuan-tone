@@ -61,17 +61,58 @@ String scaleLabel(MusicScale s) => switch (s) {
   MusicScale.chromatic => '12 nốt',
 };
 
-/// "La thứ (Am)", "Đô trưởng (C)", "Son ngũ cung trưởng (G)".
-String keyLabel(MusicKey k) {
+/// Ký hiệu hợp âm của tone: "Am", "C", "F#m".
+String keySymbol(MusicKey k) {
   final letter = noteLetter(k.root);
-  final symbol = switch (k.scale) {
+  return switch (k.scale) {
     MusicScale.naturalMinor ||
     MusicScale.harmonicMinor ||
     MusicScale.pentatonicMinor => '${letter}m',
     _ => letter,
   };
+}
+
+/// "La thứ (Am)", "Đô trưởng (C)", "Son ngũ cung trưởng (G)".
+String keyLabel(MusicKey k) {
   if (k.scale == MusicScale.chromatic) return 'Tự do (12 nốt)';
-  return '${noteNameVi(k.root)} ${scaleLabel(k.scale)} ($symbol)';
+  return '${noteNameVi(k.root)} ${scaleLabel(k.scale)} (${keySymbol(k)})';
+}
+
+// ---- Phân tích bài ----
+
+String analysisStageLabel(AnalysisStage s) => switch (s) {
+  AnalysisStage.none || AnalysisStage.decoding => 'Đang đọc bài…',
+  AnalysisStage.loudness => 'Đang đo âm lượng…',
+  AnalysisStage.resampling => 'Đang chuẩn bị…',
+  AnalysisStage.separating => 'Đang tách tiếng trống…',
+  AnalysisStage.spectrum => 'Đang nghe hoà âm…',
+  AnalysisStage.key => 'Đang dò tone…',
+  AnalysisStage.tempo => 'Đang dò nhịp…',
+  AnalysisStage.done => 'Xong',
+};
+
+/// "La thứ (Am) – 92 BPM", như màn Phân tích bài trong spec.
+String analysisSummary(SongAnalysis a) {
+  final key = a.key == null ? 'Chưa dò được tone' : keyLabel(a.key!);
+  final bpm = a.bpm;
+  return bpm == null ? key : '$key – ${bpm.round()} BPM';
+}
+
+/// Chỉ nhắc khi beat lệch rõ (≥ 3 cent) so với chuẩn La 440 Hz.
+String? tuningNote(SongAnalysis a) {
+  final c = a.tuningCents;
+  if (c == null || c.abs() < 3) return null;
+  final sign = c > 0 ? '+' : '−';
+  return 'Beat lệch $sign${c.abs().round()} cent so với chuẩn — chỉnh giọng đã theo đúng beat.';
+}
+
+/// "0:00 Am → 1:35 A → 2:40 Am"; null nếu bài không chuyển tone.
+String? modulationSummary(SongAnalysis a) {
+  if (!a.hasModulation) return null;
+  return [
+    for (final s in a.timeline)
+      '${formatDuration(s.start)} ${keySymbol(s.key)}',
+  ].join(' → ');
 }
 
 String correctionPresetLabel(CorrectionPreset p) => switch (p) {

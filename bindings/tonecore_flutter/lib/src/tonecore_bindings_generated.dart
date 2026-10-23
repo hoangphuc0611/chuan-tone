@@ -440,6 +440,196 @@ class ToneCoreBindings {
         int Function(ffi.Pointer<tc_engine>, ffi.Pointer<tc_pitch_state>)
       >();
 
+  /// ---- Theo tone của bài (từ v0.4) ----
+  /// Lưới nốt của tự chỉnh giọng dời `cents` so với La = 440 Hz (−100…100). Dùng tuning_cents của
+  /// tc_analysis_result để giọng được kéo về đúng cao độ của beat. Đồng hồ cao độ đo theo cùng lưới.
+  int tc_set_tuning(ffi.Pointer<tc_engine> engine, double cents) {
+    return _tc_set_tuning(engine, cents);
+  }
+
+  late final _tc_set_tuningPtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(ffi.Pointer<tc_engine>, ffi.Float)
+        >
+      >('tc_set_tuning');
+  late final _tc_set_tuning = _tc_set_tuningPtr
+      .asFunction<int Function(ffi.Pointer<tc_engine>, double)>();
+
+  int tc_get_tuning(
+    ffi.Pointer<tc_engine> engine,
+    ffi.Pointer<ffi.Float> out_cents,
+  ) {
+    return _tc_get_tuning(engine, out_cents);
+  }
+
+  late final _tc_get_tuningPtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(ffi.Pointer<tc_engine>, ffi.Pointer<ffi.Float>)
+        >
+      >('tc_get_tuning');
+  late final _tc_get_tuning = _tc_get_tuningPtr
+      .asFunction<
+        int Function(ffi.Pointer<tc_engine>, ffi.Pointer<ffi.Float>)
+      >();
+
+  /// Engine tự đổi key chỉnh giọng theo vị trí beat (cả khi tua). Các đoạn phải tăng dần theo
+  /// start_ms, không chồng nhau, tối đa 256 đoạn; khoảng trống giữa hai đoạn giữ key đoạn trước.
+  /// count = 0 → tắt. Gọi tc_set_key → tắt chế độ theo timeline (người dùng chọn tay).
+  /// Mỗi lần engine tự đổi key → sự kiện TC_EVENT_KEY_CHANGED; tc_get_key trả key đang áp dụng.
+  int tc_set_key_timeline(
+    ffi.Pointer<tc_engine> engine,
+    ffi.Pointer<tc_key_segment> segments,
+    int count,
+  ) {
+    return _tc_set_key_timeline(engine, segments, count);
+  }
+
+  late final _tc_set_key_timelinePtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(
+            ffi.Pointer<tc_engine>,
+            ffi.Pointer<tc_key_segment>,
+            ffi.Uint32,
+          )
+        >
+      >('tc_set_key_timeline');
+  late final _tc_set_key_timeline = _tc_set_key_timelinePtr
+      .asFunction<
+        int Function(ffi.Pointer<tc_engine>, ffi.Pointer<tc_key_segment>, int)
+      >();
+
+  /// ---- Phân tích bài (từ v0.4) ----
+  /// Độc lập với tc_engine (chạy được khi engine chưa start, vd. lúc nhập thư viện bài). Mỗi analyzer
+  /// có một luồng nền riêng; UI kéo trạng thái bằng tc_analyzer_get_status (~10 lần/giây).
+  /// Bài 4 phút mất ~1 s trên máy mạnh. Gọi các hàm của cùng một analyzer từ một luồng.
+  int tc_analyzer_create(ffi.Pointer<ffi.Pointer<tc_analyzer>> out_analyzer) {
+    return _tc_analyzer_create(out_analyzer);
+  }
+
+  late final _tc_analyzer_createPtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(ffi.Pointer<ffi.Pointer<tc_analyzer>>)
+        >
+      >('tc_analyzer_create');
+  late final _tc_analyzer_create = _tc_analyzer_createPtr
+      .asFunction<int Function(ffi.Pointer<ffi.Pointer<tc_analyzer>>)>();
+
+  /// Bắt đầu phân tích file (định dạng như tc_load_beat). Đang chạy → TC_ERR_INVALID_STATE.
+  /// Kết quả lần trước bị xoá. Lỗi đọc file báo qua trạng thái TC_ANALYSIS_FAILED.
+  int tc_analyzer_start(
+    ffi.Pointer<tc_analyzer> analyzer,
+    ffi.Pointer<ffi.Char> path_utf8,
+  ) {
+    return _tc_analyzer_start(analyzer, path_utf8);
+  }
+
+  late final _tc_analyzer_startPtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(ffi.Pointer<tc_analyzer>, ffi.Pointer<ffi.Char>)
+        >
+      >('tc_analyzer_start');
+  late final _tc_analyzer_start = _tc_analyzer_startPtr
+      .asFunction<
+        int Function(ffi.Pointer<tc_analyzer>, ffi.Pointer<ffi.Char>)
+      >();
+
+  int tc_analyzer_get_status(
+    ffi.Pointer<tc_analyzer> analyzer,
+    ffi.Pointer<tc_analysis_status> out_status,
+  ) {
+    return _tc_analyzer_get_status(analyzer, out_status);
+  }
+
+  late final _tc_analyzer_get_statusPtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(
+            ffi.Pointer<tc_analyzer>,
+            ffi.Pointer<tc_analysis_status>,
+          )
+        >
+      >('tc_analyzer_get_status');
+  late final _tc_analyzer_get_status = _tc_analyzer_get_statusPtr
+      .asFunction<
+        int Function(ffi.Pointer<tc_analyzer>, ffi.Pointer<tc_analysis_status>)
+      >();
+
+  /// Yêu cầu dừng (không chờ). Trạng thái chuyển sang TC_ANALYSIS_CANCELLED khi luồng nền dừng.
+  int tc_analyzer_cancel(ffi.Pointer<tc_analyzer> analyzer) {
+    return _tc_analyzer_cancel(analyzer);
+  }
+
+  late final _tc_analyzer_cancelPtr =
+      _lookup<ffi.NativeFunction<tc_result Function(ffi.Pointer<tc_analyzer>)>>(
+        'tc_analyzer_cancel',
+      );
+  late final _tc_analyzer_cancel = _tc_analyzer_cancelPtr
+      .asFunction<int Function(ffi.Pointer<tc_analyzer>)>();
+
+  /// Chỉ khi trạng thái là TC_ANALYSIS_DONE, ngược lại TC_ERR_INVALID_STATE.
+  int tc_analyzer_get_result(
+    ffi.Pointer<tc_analyzer> analyzer,
+    ffi.Pointer<tc_analysis_result> out_result,
+  ) {
+    return _tc_analyzer_get_result(analyzer, out_result);
+  }
+
+  late final _tc_analyzer_get_resultPtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(
+            ffi.Pointer<tc_analyzer>,
+            ffi.Pointer<tc_analysis_result>,
+          )
+        >
+      >('tc_analyzer_get_result');
+  late final _tc_analyzer_get_result = _tc_analyzer_get_resultPtr
+      .asFunction<
+        int Function(ffi.Pointer<tc_analyzer>, ffi.Pointer<tc_analysis_result>)
+      >();
+
+  /// Ghi tối đa `max_segments` đoạn vào `out_segments`, trả số đoạn đã ghi (≥ 0) hoặc mã lỗi.
+  /// out_segments = NULL và max_segments = 0 → trả tổng số đoạn. Chỉ khi TC_ANALYSIS_DONE.
+  int tc_analyzer_get_key_timeline(
+    ffi.Pointer<tc_analyzer> analyzer,
+    ffi.Pointer<tc_key_segment> out_segments,
+    int max_segments,
+  ) {
+    return _tc_analyzer_get_key_timeline(analyzer, out_segments, max_segments);
+  }
+
+  late final _tc_analyzer_get_key_timelinePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Int32 Function(
+            ffi.Pointer<tc_analyzer>,
+            ffi.Pointer<tc_key_segment>,
+            ffi.Uint32,
+          )
+        >
+      >('tc_analyzer_get_key_timeline');
+  late final _tc_analyzer_get_key_timeline = _tc_analyzer_get_key_timelinePtr
+      .asFunction<
+        int Function(ffi.Pointer<tc_analyzer>, ffi.Pointer<tc_key_segment>, int)
+      >();
+
+  /// Huỷ việc đang chạy và chờ luồng nền dừng (thường < 50 ms). Cho phép analyzer == NULL.
+  void tc_analyzer_destroy(ffi.Pointer<tc_analyzer> analyzer) {
+    return _tc_analyzer_destroy(analyzer);
+  }
+
+  late final _tc_analyzer_destroyPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<tc_analyzer>)>>(
+        'tc_analyzer_destroy',
+      );
+  late final _tc_analyzer_destroy = _tc_analyzer_destroyPtr
+      .asFunction<void Function(ffi.Pointer<tc_analyzer>)>();
+
   /// ---- Đo lường ----
   int tc_get_metrics(
     ffi.Pointer<tc_engine> engine,
@@ -467,6 +657,8 @@ class _SymbolAddresses {
   _SymbolAddresses(this._library);
   ffi.Pointer<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<tc_engine>)>>
   get tc_engine_destroy => _library._tc_engine_destroyPtr;
+  ffi.Pointer<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<tc_analyzer>)>>
+  get tc_analyzer_destroy => _library._tc_analyzer_destroyPtr;
 }
 
 /// Mã kết quả. Dùng int32_t (không dùng kiểu enum) trong chữ ký hàm vì kích thước enum
@@ -485,6 +677,9 @@ sealed class tc_result_code {
 
   /// Không mở được thiết bị âm thanh (thiếu quyền micro, thiết bị bận...).
   static const TC_ERR_DEVICE = -6;
+
+  /// Việc bị huỷ giữa chừng (từ v0.4, vd. tc_analyzer_cancel).
+  static const TC_ERR_CANCELLED = -7;
 }
 
 sealed class tc_backend {
@@ -623,6 +818,9 @@ sealed class tc_event_type {
 
   /// nghe lại giọng bị chặn vì đang dùng Bluetooth
   static const TC_EVENT_MONITOR_BLOCKED = 7;
+
+  /// (từ v0.4) Engine tự đổi key chỉnh giọng theo timeline: code = chủ âm 0..11, value = tc_scale
+  static const TC_EVENT_KEY_CHANGED = 8;
 }
 
 final class tc_engine extends ffi.Opaque {}
@@ -837,10 +1035,161 @@ final class tc_event extends ffi.Struct {
   external double value;
 }
 
+/// ---- Phân tích bài (từ v0.4, xem docs/adr/003-song-analyzer-api.md) ----
+sealed class tc_analysis_state {
+  /// chưa chạy
+  static const TC_ANALYSIS_IDLE = 0;
+
+  /// đang chạy ở luồng nền
+  static const TC_ANALYSIS_RUNNING = 1;
+
+  /// xong, đọc bằng tc_analyzer_get_result
+  static const TC_ANALYSIS_DONE = 2;
+
+  /// lỗi: tc_analysis_status.result
+  static const TC_ANALYSIS_FAILED = 3;
+
+  /// bị huỷ
+  static const TC_ANALYSIS_CANCELLED = 4;
+}
+
+/// Giai đoạn đang chạy, theo thứ tự (để UI hiện "Đang dò tone…").
+sealed class tc_analysis_stage {
+  static const TC_STAGE_NONE = 0;
+
+  /// giải mã file
+  static const TC_STAGE_DECODING = 1;
+
+  /// đo độ to
+  static const TC_STAGE_LOUDNESS = 2;
+
+  /// chuẩn bị tín hiệu
+  static const TC_STAGE_RESAMPLING = 3;
+
+  /// tách nhạc cụ hoà âm / trống
+  static const TC_STAGE_SEPARATING = 4;
+
+  /// phổ cao độ
+  static const TC_STAGE_SPECTRUM = 5;
+
+  /// dò tone + chuyển tone
+  static const TC_STAGE_KEY = 6;
+
+  /// dò BPM
+  static const TC_STAGE_TEMPO = 7;
+  static const TC_STAGE_DONE = 8;
+}
+
+final class tc_analysis_status extends ffi.Struct {
+  /// = sizeof(tc_analysis_status)
+  @ffi.Uint32()
+  external int struct_size;
+
+  /// tc_analysis_state
+  @ffi.Int32()
+  external int state;
+
+  /// tc_analysis_stage
+  @ffi.Int32()
+  external int stage;
+
+  /// 0..1
+  @ffi.Float()
+  external double progress;
+
+  /// tc_result của lần chạy gần nhất (TC_OK khi chưa xong)
+  @ffi.Int32()
+  external int result;
+}
+
+/// Một đoạn tone: [start_ms, end_ms). Kích thước cố định (dùng trong mảng) — muốn mở rộng thì
+/// thêm struct mới, không sửa struct này.
+final class tc_key_segment extends ffi.Struct {
+  @ffi.Double()
+  external double start_ms;
+
+  @ffi.Double()
+  external double end_ms;
+
+  /// 0 = Đô (C) … 11 = Si (B)
+  @ffi.Int32()
+  external int root;
+
+  /// tc_scale; phân tích chỉ trả TC_SCALE_MAJOR hoặc TC_SCALE_NATURAL_MINOR
+  @ffi.Int32()
+  external int scale;
+
+  /// 0..1 (đầu vào của tc_set_key_timeline: bỏ qua)
+  @ffi.Float()
+  external double confidence;
+}
+
+final class tc_analysis_result extends ffi.Struct {
+  /// = sizeof(tc_analysis_result)
+  @ffi.Uint32()
+  external int struct_size;
+
+  @ffi.Double()
+  external double duration_ms;
+
+  /// của file gốc
+  @ffi.Uint32()
+  external int sample_rate;
+
+  @ffi.Uint32()
+  external int channels;
+
+  /// 0 nếu không kết luận được (bài quá ngắn, chỉ có trống…)
+  @ffi.Int32()
+  external int has_key;
+
+  @ffi.Int32()
+  external int key_root;
+
+  /// tc_scale
+  @ffi.Int32()
+  external int key_scale;
+
+  @ffi.Float()
+  external double key_confidence;
+
+  @ffi.Int32()
+  external int has_tuning;
+
+  /// lệch so với La = 440 Hz, −50…+50 → đưa vào tc_set_tuning
+  @ffi.Float()
+  external double tuning_cents;
+
+  @ffi.Int32()
+  external int has_bpm;
+
+  @ffi.Float()
+  external double bpm;
+
+  @ffi.Float()
+  external double bpm_confidence;
+
+  @ffi.Int32()
+  external int has_loudness;
+
+  /// ITU-R BS.1770-4
+  @ffi.Float()
+  external double integrated_lufs;
+
+  @ffi.Float()
+  external double sample_peak_db;
+
+  /// số đoạn tone — đọc bằng tc_analyzer_get_key_timeline
+  @ffi.Uint32()
+  external int timeline_count;
+}
+
+final class tc_analyzer extends ffi.Opaque {}
+
 const int TC_API_VERSION_MAJOR = 0;
 
-const int TC_API_VERSION_MINOR = 3;
+const int TC_API_VERSION_MINOR = 4;
 
 const int TC_API_VERSION_PATCH = 0;
 
-const int TC_API_VERSION = 768;
+const int TC_API_VERSION = 1024;

@@ -23,7 +23,7 @@ void main() {
   test('thông tin phiên bản', () {
     expect(ToneCore.isCompatible, isTrue);
     expect(ToneCore.version, isNotEmpty);
-    expect(ToneCore.apiVersionString, '0.3.0');
+    expect(ToneCore.apiVersionString, '0.4.0');
   });
 
   test('tạo, chạy, dừng và huỷ engine', () {
@@ -217,6 +217,159 @@ void main() {
     expect(r.latencyMs, closeTo(20.0, 0.05));
   });
 
+  group('phân tích bài (v0.4)', () {
+    late String cadence;
+    late String longSine;
+    setUpAll(() {
+      cadence = '${Directory.systemTemp.path}/tonecore_dart_cadence.wav';
+      _writeCadenceWav(cadence);
+      longSine = '${Directory.systemTemp.path}/tonecore_dart_long.wav';
+      _writeSineWav(longSine, seconds: 120, sampleRate: 44100);
+    });
+    tearDownAll(() {
+      File(cadence).deleteSync();
+      File(longSine).deleteSync();
+    });
+
+    test('dò tone, BPM, tuning, độ to và timeline', () async {
+      final analyzer = SongAnalyzer.create();
+      addTearDown(analyzer.dispose);
+      expect(analyzer.status.state, AnalysisState.idle);
+      final seen = <AnalysisStatus>[];
+      final a = await analyzer.analyze(
+        cadence,
+        onProgress: seen.add,
+        pollInterval: const Duration(milliseconds: 5),
+      );
+      expect(a.duration.inMilliseconds, closeTo(16000, 1));
+      expect(a.sampleRate, 44100);
+      expect(a.key, const MusicKey(2, MusicScale.major));
+      expect(a.keyConfidence, greaterThan(0));
+      expect(a.bpm, closeTo(120, 1.2));
+      expect(a.tuningCents, closeTo(0, 3));
+      expect(a.integratedLufs, lessThan(0));
+      expect(a.timeline, isNotEmpty);
+      expect(a.timeline.first.start, Duration.zero);
+      expect(a.timeline.last.end, a.duration);
+      expect(a.timeline.first.key, a.key);
+      // Tiến độ chỉ tăng, kết thúc ở giai đoạn "xong".
+      for (var i = 1; i < seen.length; i++) {
+        expect(seen[i].progress, greaterThanOrEqualTo(seen[i - 1].progress));
+      }
+      final last = analyzer.status;
+      expect(last.state, AnalysisState.done);
+      expect(last.stage, AnalysisStage.done);
+      expect(last.progress, 1.0);
+    });
+
+    test('file không tồn tại báo lỗi', () async {
+      final analyzer = SongAnalyzer.create();
+      addTearDown(analyzer.dispose);
+      await expectLater(
+        analyzer.analyze('/khong/co/file.mp3'),
+        throwsA(
+          isA<ToneCoreException>().having(
+            (e) => e.code,
+            'code',
+            TcResult.invalidArg,
+          ),
+        ),
+      );
+      expect(analyzer.status.state, AnalysisState.failed);
+      expect(() => analyzer.result, throwsA(isA<ToneCoreException>()));
+    });
+
+    test('huỷ giữa chừng rồi dùng lại', () async {
+      final analyzer = SongAnalyzer.create();
+      addTearDown(analyzer.dispose);
+      final running = analyzer.analyze(
+        longSine,
+        pollInterval: const Duration(milliseconds: 5),
+      );
+      analyzer.cancel();
+      try {
+        await running;
+      } on ToneCoreException catch (e) {
+        expect(e.code, TcResult.cancelled);
+        expect(analyzer.status.state, AnalysisState.cancelled);
+      }
+      final again = await analyzer.analyze(cadence);
+      expect(again.key, const MusicKey(2, MusicScale.major));
+    });
+
+    test('dispose khi đang chạy không treo', () {
+      final analyzer = SongAnalyzer.create();
+      analyzer.start(longSine);
+      final sw = Stopwatch()..start();
+      analyzer.dispose();
+      expect(sw.elapsed, lessThan(const Duration(seconds: 10)));
+      expect(() => analyzer.status, throwsStateError);
+      analyzer.dispose(); // gọi lần hai không sao
+    });
+  });
+
+  test('tuning và key theo timeline của bài', () async {
+    final engine = ToneCoreEngine.create(maxBlockFrames: 256);
+    addTearDown(engine.dispose);
+    engine.start();
+    expect(engine.tuningCents, 0);
+    engine.tuningCents = 18.5;
+    expect(engine.tuningCents, closeTo(18.5, 1e-6));
+    expect(() => engine.tuningCents = 500, throwsA(isA<ToneCoreException>()));
+
+    final path = '${Directory.systemTemp.path}/tonecore_dart_tl_beat.wav';
+    _writeSineWav(path, seconds: 3, sampleRate: 48000);
+    addTearDown(() => File(path).deleteSync());
+    await engine.loadBeatAndWait(path);
+    engine.play();
+
+    const c = MusicKey(0, MusicScale.major);
+    const am = MusicKey(9, MusicScale.naturalMinor);
+    engine.setKeyTimeline(const [
+      KeySegment(start: Duration.zero, end: Duration(seconds: 1), key: c),
+      KeySegment(
+        start: Duration(seconds: 1),
+        end: Duration(seconds: 3),
+        key: am,
+      ),
+    ]);
+    expect(engine.key, c);
+    final changes = <MusicKey>[];
+    void run(int blocks) {
+      for (var i = 0; i < blocks; i++) {
+        engine.processOffline(null, 256);
+      }
+      for (final e in engine.pollEvents()) {
+        if (e.type == ToneCoreEventType.keyChanged) changes.add(e.key!);
+      }
+    }
+
+    run(100); // ~0,53 s
+    expect(engine.key, c);
+    run(120); // qua mốc 1 s
+    expect(engine.key, am);
+    expect(changes, [c, am]);
+
+    // Chọn tay → thôi theo timeline.
+    engine.key = const MusicKey(5, MusicScale.major);
+    engine.seek(Duration.zero);
+    run(20);
+    expect(engine.key, const MusicKey(5, MusicScale.major));
+    expect(changes, [c, am]);
+
+    expect(
+      () => engine.setKeyTimeline(const [
+        KeySegment(
+          start: Duration(seconds: 2),
+          end: Duration(seconds: 1),
+          key: c,
+        ),
+      ]),
+      throwsA(isA<ToneCoreException>()),
+    );
+    engine.clearKeyTimeline();
+  });
+
   test('block quá lớn bị từ chối ở phía Dart', () {
     final engine = ToneCoreEngine.create(maxBlockFrames: 64);
     addTearDown(engine.dispose);
@@ -253,6 +406,69 @@ void _writeSineWav(
   data.setUint32(40, frames * 4, Endian.little);
   for (var i = 0; i < frames; i++) {
     final v = (16000 * math.sin(2 * math.pi * 440 * i / sampleRate)).round();
+    data.setInt16(44 + i * 4, v, Endian.little);
+    data.setInt16(46 + i * 4, v, Endian.little);
+  }
+  File(path).writeAsBytesSync(data.buffer.asUint8List());
+}
+
+/// Vòng hoà âm Rê trưởng I–IV–V–I (2 s mỗi hợp âm, 2 vòng = 16 s) có nốt bass, cộng tiếng gõ
+/// mỗi 0,5 s (120 BPM). WAV 16-bit stereo 44,1 kHz.
+void _writeCadenceWav(String path) {
+  const sampleRate = 44100;
+  const seconds = 16;
+  const frames = sampleRate * seconds;
+  const chords = [
+    [50, 62, 66, 69], // D
+    [43, 62, 67, 71], // G
+    [45, 61, 64, 69], // A
+    [50, 62, 66, 69], // D
+  ];
+  final mix = Float64List(frames);
+  double hz(int midi) => 440.0 * math.pow(2, (midi - 69) / 12);
+  for (var c = 0; c < 8; c++) {
+    final start = c * 2 * sampleRate;
+    for (final m in chords[c % 4]) {
+      for (var h = 1; h <= 4; h++) {
+        final f = hz(m) * h;
+        for (var i = 0; i < 2 * sampleRate; i++) {
+          final env =
+              math.min(1.0, i / 441) *
+              math.min(1.0, (2 * sampleRate - i) / 2205);
+          mix[start + i] +=
+              0.05 * env * math.sin(2 * math.pi * f * i / sampleRate) / h;
+        }
+      }
+    }
+  }
+  final rng = math.Random(7);
+  for (var k = 0; k < 32; k++) {
+    final start = k * sampleRate ~/ 2;
+    for (var i = 0; i < 1300 && start + i < frames; i++) {
+      mix[start + i] += 0.4 * math.exp(-i / 176.0) * (rng.nextDouble() * 2 - 1);
+    }
+  }
+  final data = ByteData(44 + frames * 4);
+  void str(int o, String s) {
+    for (var i = 0; i < s.length; i++) {
+      data.setUint8(o + i, s.codeUnitAt(i));
+    }
+  }
+
+  str(0, 'RIFF');
+  data.setUint32(4, 36 + frames * 4, Endian.little);
+  str(8, 'WAVEfmt ');
+  data.setUint32(16, 16, Endian.little);
+  data.setUint16(20, 1, Endian.little);
+  data.setUint16(22, 2, Endian.little);
+  data.setUint32(24, sampleRate, Endian.little);
+  data.setUint32(28, sampleRate * 4, Endian.little);
+  data.setUint16(32, 4, Endian.little);
+  data.setUint16(34, 16, Endian.little);
+  str(36, 'data');
+  data.setUint32(40, frames * 4, Endian.little);
+  for (var i = 0; i < frames; i++) {
+    final v = (32767 * mix[i].clamp(-1.0, 1.0)).round();
     data.setInt16(44 + i * 4, v, Endian.little);
     data.setInt16(46 + i * 4, v, Endian.little);
   }

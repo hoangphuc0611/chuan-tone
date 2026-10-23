@@ -19,13 +19,23 @@ class AudioService extends ChangeNotifier {
   String? lastError;
   bool micGranted = false;
 
-  /// Tone đang chọn cho tự chỉnh giọng (mặc định La thứ – tone phổ biến của nhạc Việt).
+  /// Tone chọn tay cho tự chỉnh giọng (mặc định La thứ – tone phổ biến của nhạc Việt).
   MusicKey key = const MusicKey(9, MusicScale.naturalMinor);
+
+  /// Kết quả phân tích của beat đang nạp (null = chưa có).
+  SongAnalysis? songAnalysis;
+
+  /// true: tone (và chuyển tone) theo kết quả phân tích, engine tự đổi theo vị trí bài;
+  /// false: dùng [key] chọn tay.
+  bool followSong = false;
 
   /// Mức tự chỉnh giọng; null = tắt.
   CorrectionPreset? correction;
 
   ToneCoreEngine? get engine => _engine;
+
+  /// Tone đang áp dụng (khi theo bài thì đổi theo vị trí beat).
+  MusicKey get currentKey => _engine?.key ?? key;
   bool get isRunning => _engine != null;
 
   /// Sự kiện từ engine (nạp beat xong, đổi route, đo độ trễ xong...).
@@ -47,6 +57,7 @@ class AudioService extends ChangeNotifier {
       e.applyCorrectionPreset(correction ?? CorrectionPreset.singer);
       e.pitchCorrectionEnabled = correction != null;
       _engine = e;
+      _syncSong();
       _routeMonitor = RouteMonitor(e)..start();
       _eventSub = e.events.listen(_events.add);
       lastError = null;
@@ -57,10 +68,39 @@ class AudioService extends ChangeNotifier {
     return _engine != null;
   }
 
+  /// Chọn tone tay → thôi theo bài.
   void setKey(MusicKey k) {
     key = k;
+    followSong = false;
     _engine?.key = k;
     notifyListeners();
+  }
+
+  /// Nhận kết quả phân tích của beat mới (null khi đổi beat mà chưa có kết quả): áp tuning, và
+  /// theo tone của bài nếu dò được tone.
+  void applySongAnalysis(SongAnalysis? a) {
+    songAnalysis = a;
+    followSong = a?.key != null;
+    _syncSong();
+    notifyListeners();
+  }
+
+  void setFollowSong(bool on) {
+    followSong = on && songAnalysis?.key != null;
+    _syncSong();
+    notifyListeners();
+  }
+
+  void _syncSong() {
+    final e = _engine;
+    if (e == null) return;
+    final a = songAnalysis;
+    e.tuningCents = a?.tuningCents ?? 0;
+    if (followSong && a != null && a.timeline.isNotEmpty) {
+      e.setKeyTimeline(a.timeline);
+    } else {
+      e.key = key;
+    }
   }
 
   /// null = tắt tự chỉnh giọng.

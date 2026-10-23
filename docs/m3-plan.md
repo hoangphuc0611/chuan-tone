@@ -41,7 +41,14 @@
   vị trí beat kể cả khi tua, `TC_EVENT_KEY_CHANGED`, chọn tay thì tắt). Timeline sang audio thread
   qua hàng đợi SPSC, key override chỉ audio thread ghi → không cấp phát (test RealTime). 179 test,
   ASan/UBSan/TSan sạch.
-- [ ] B4, B8, B9
+- [x] **B8** (2026-10-23): binding Dart 0.4 (ffigen sinh lại; `SongAnalyzer` + `analyze()` kéo
+  trạng thái, `SongAnalysis` / `KeySegment`, `tuningCents`, `setKeyTimeline`, sự kiện
+  `keyChanged`) — 15 test binding. Màn Phòng thử: nạp beat → tự phân tích (thanh tiến độ theo
+  giai đoạn), "Tone: La thứ (Am) – 92 BPM", chuyển tone, ghi chú tuning, công tắc "Tone theo bài"
+  (chọn tay thì tắt), tone đang áp dụng to và đổi ngay theo sự kiện; kết quả lưu
+  `analysis_cache.json` (khoá tên + kích thước file + phiên bản engine) — 16 test app. Build iOS
+  qua CI `ios-ipa` (máy dev chưa có Xcode).
+- [ ] B4, B9 (chờ dữ liệu nhạc Việt)
 
 ## Các điểm cần quyết (2026-10-22: duyệt theo đề nghị)
 

@@ -1,14 +1,17 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:tonecore_flutter/tonecore_flutter.dart';
 
+import '../data/analysis_cache.dart';
 import '../engine/audio_service.dart';
 import '../engine/labels.dart';
 import '../widgets/pitch_meter.dart';
 
-/// Màn thử M1–M2: phát beat, nghe lại giọng, tự chỉnh giọng, đồng hồ cao độ, số đo engine.
+/// Màn thử M1–M3: phát beat, tự dò tone / BPM khi nạp bài, nghe lại giọng, tự chỉnh giọng theo
+/// tone của bài, đồng hồ cao độ, số đo engine.
 class TestRoomPage extends StatefulWidget {
   const TestRoomPage({super.key});
 
@@ -32,6 +35,12 @@ class _TestRoomPageState extends State<TestRoomPage> {
   double _monitorGain = 1.0;
   bool _monitorOn = false;
   double? _dragPosition;
+  SongAnalyzer? _analyzer;
+  AnalysisCache? _cache;
+  bool _analyzing = false;
+  AnalysisStatus? _analysisStatus;
+  String? _analysisError;
+  MusicKey? _currentKey;
 
   @override
   void initState() {
@@ -67,12 +76,15 @@ class _TestRoomPageState extends State<TestRoomPage> {
     setState(() {
       _playback = e.playback;
       _metrics = e.metrics;
+      _currentKey = _service.currentKey;
     });
   }
 
   void _onEvent(ToneCoreEvent ev) {
     if (!mounted) return;
     switch (ev.type) {
+      case ToneCoreEventType.keyChanged:
+        setState(() => _currentKey = ev.key);
       case ToneCoreEventType.monitorBlocked:
         _show(
           'Tai nghe Bluetooth bị trễ nhiều nên đã tắt nghe lại giọng. Hãy dùng tai nghe có dây.',
@@ -110,6 +122,8 @@ class _TestRoomPageState extends State<TestRoomPage> {
     try {
       await e.loadBeatAndWait(path);
       _beatName = files.single.name;
+      final size = await File(path).length();
+      unawaited(_analyze(path, files.single.name, size));
     } on ToneCoreException catch (err) {
       _show('Không mở được file (${err.codeName}). Hãy thử MP3, M4A hoặc WAV.');
     } on TimeoutException {
@@ -118,11 +132,58 @@ class _TestRoomPageState extends State<TestRoomPage> {
     if (mounted) setState(() => _loading = false);
   }
 
+  /// Dò tone / chuyển tone / tuning / BPM của beat vừa nạp (lấy từ bộ nhớ nếu đã phân tích), rồi
+  /// cho tự chỉnh giọng theo bài.
+  Future<void> _analyze(String path, String name, int size) async {
+    _analyzer?.dispose(); // beat trước còn đang phân tích → dừng
+    _analyzer = null;
+    _service.applySongAnalysis(null);
+    setState(() {
+      _analyzing = true;
+      _analysisStatus = null;
+      _analysisError = null;
+    });
+    final cache = _cache ??= AnalysisCache(engineVersion: ToneCore.version);
+    var result = await cache.lookup(name: name, size: size);
+    if (result == null) {
+      final analyzer = _analyzer = SongAnalyzer.create();
+      try {
+        result = await analyzer.analyze(
+          path,
+          onProgress: (s) {
+            if (mounted) setState(() => _analysisStatus = s);
+          },
+        );
+        await cache.store(name: name, size: size, analysis: result);
+      } on StateError {
+        return; // đã chọn beat khác: analyzer này bị dispose giữa chừng
+      } on ToneCoreException catch (err) {
+        if (err.code != TcResult.cancelled) {
+          _analysisError = 'Không phân tích được bài (${err.codeName}).';
+        }
+      } on TimeoutException {
+        _analysisError = 'Phân tích bài quá lâu.';
+      } finally {
+        if (identical(_analyzer, analyzer)) {
+          analyzer.dispose();
+          _analyzer = null;
+        }
+      }
+    }
+    if (!mounted) return;
+    if (result != null) _service.applySongAnalysis(result);
+    setState(() {
+      _analyzing = false;
+      _currentKey = _service.currentKey;
+    });
+  }
+
   @override
   void dispose() {
     _ticker?.cancel();
     _pitchTicker?.cancel();
     _sub?.cancel();
+    _analyzer?.dispose();
     _service.engine?.pause();
     super.dispose();
   }
@@ -246,9 +307,29 @@ class _TestRoomPageState extends State<TestRoomPage> {
         // ---- Tự chỉnh giọng ----
         Text('Tự chỉnh giọng', style: theme.textTheme.titleLarge),
         const SizedBox(height: 8),
+        if (_analyzing) _AnalysisProgress(status: _analysisStatus),
+        if (_analysisError != null)
+          Text(
+            _analysisError!,
+            style: TextStyle(color: theme.colorScheme.error),
+          ),
+        if (!_analyzing && _service.songAnalysis != null)
+          _AnalysisCard(
+            analysis: _service.songAnalysis!,
+            follow: _service.followSong,
+            onFollowChanged: (v) => setState(() {
+              _service.setFollowSong(v);
+              _currentKey = _service.currentKey;
+            }),
+          ),
+        const SizedBox(height: 8),
         _KeyPicker(
-          value: _service.key,
-          onChanged: (k) => setState(() => _service.setKey(k)),
+          value: _currentKey ?? _service.currentKey,
+          followingSong: _service.followSong,
+          onChanged: (k) => setState(() {
+            _service.setKey(k);
+            _currentKey = k;
+          }),
         ),
         const SizedBox(height: 12),
         SegmentedButton<int>(
@@ -286,11 +367,89 @@ class _TestRoomPageState extends State<TestRoomPage> {
   }
 }
 
-/// Chọn tone: chủ âm (12 nốt) + thang âm.
+/// Đang phân tích bài: giai đoạn + thanh tiến độ.
+class _AnalysisProgress extends StatelessWidget {
+  const _AnalysisProgress({required this.status});
+
+  final AnalysisStatus? status;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = status;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(analysisStageLabel(s?.stage ?? AnalysisStage.none)),
+          const SizedBox(height: 6),
+          LinearProgressIndicator(value: s?.progress),
+        ],
+      ),
+    );
+  }
+}
+
+/// Kết quả phân tích: "Tone: La thứ (Am) – 92 BPM", chuyển tone, tuning, công tắc theo bài.
+class _AnalysisCard extends StatelessWidget {
+  const _AnalysisCard({
+    required this.analysis,
+    required this.follow,
+    required this.onFollowChanged,
+  });
+
+  final SongAnalysis analysis;
+  final bool follow;
+  final ValueChanged<bool> onFollowChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final modulation = modulationSummary(analysis);
+    final tuning = tuningNote(analysis);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Bài này', style: theme.textTheme.labelLarge),
+            Text(
+              analysisSummary(analysis),
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            if (modulation != null) Text('Chuyển tone: $modulation'),
+            if (tuning != null) Text(tuning, style: theme.textTheme.bodySmall),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Tone theo bài'),
+              subtitle: Text(
+                follow
+                    ? 'Tự chỉnh giọng theo tone của bài, tự đổi khi bài chuyển tone'
+                    : 'Đang dùng tone chọn tay',
+              ),
+              value: follow,
+              onChanged: analysis.key == null ? null : onFollowChanged,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Tone đang áp dụng (thật to) + chọn tay: chủ âm (12 nốt) + thang âm.
 class _KeyPicker extends StatelessWidget {
-  const _KeyPicker({required this.value, required this.onChanged});
+  const _KeyPicker({
+    required this.value,
+    required this.followingSong,
+    required this.onChanged,
+  });
 
   final MusicKey value;
+  final bool followingSong;
   final ValueChanged<MusicKey> onChanged;
 
   @override
@@ -301,9 +460,13 @@ class _KeyPicker extends StatelessWidget {
       children: [
         Text(
           'Tone: ${keyLabel(value)}',
-          style: theme.textTheme.headlineSmall?.copyWith(
+          style: theme.textTheme.headlineMedium?.copyWith(
             fontWeight: FontWeight.w700,
           ),
+        ),
+        Text(
+          followingSong ? 'Theo bài · chọn bên dưới để đổi tay' : 'Chọn tay',
+          style: theme.textTheme.bodySmall,
         ),
         Wrap(
           spacing: 16,

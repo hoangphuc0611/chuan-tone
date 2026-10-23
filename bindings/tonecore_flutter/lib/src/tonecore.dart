@@ -21,6 +21,7 @@ abstract final class TcResult {
   static const int notSupported = tc_result_code.TC_ERR_NOT_SUPPORTED;
   static const int internal = tc_result_code.TC_ERR_INTERNAL;
   static const int device = tc_result_code.TC_ERR_DEVICE;
+  static const int cancelled = tc_result_code.TC_ERR_CANCELLED;
 }
 
 abstract final class TcNode {
@@ -67,6 +68,99 @@ class MusicKey {
 
   @override
   int get hashCode => Object.hash(root, scale);
+
+  @override
+  String toString() => 'MusicKey($root, ${scale.name})';
+}
+
+/// Một đoạn tone của bài: [start, end).
+class KeySegment {
+  const KeySegment({
+    required this.start,
+    required this.end,
+    required this.key,
+    this.confidence = 0,
+  });
+
+  final Duration start;
+  final Duration end;
+  final MusicKey key;
+
+  /// 0..1 (bỏ qua khi đưa vào [ToneCoreEngine.setKeyTimeline]).
+  final double confidence;
+}
+
+/// Trạng thái phân tích bài (thứ tự khớp `tc_analysis_state`).
+enum AnalysisState { idle, running, done, failed, cancelled }
+
+/// Giai đoạn phân tích đang chạy (thứ tự khớp `tc_analysis_stage`).
+enum AnalysisStage {
+  none,
+  decoding,
+  loudness,
+  resampling,
+  separating,
+  spectrum,
+  key,
+  tempo,
+  done,
+}
+
+class AnalysisStatus {
+  const AnalysisStatus({
+    required this.state,
+    required this.stage,
+    required this.progress,
+    required this.result,
+  });
+
+  final AnalysisState state;
+  final AnalysisStage stage;
+
+  /// 0..1, chỉ tăng.
+  final double progress;
+
+  /// Mã `tc_result` của lần chạy gần nhất (lý do khi [AnalysisState.failed]).
+  final int result;
+}
+
+/// Kết quả phân tích một bài: tone (kèm các đoạn chuyển tone), tuning, BPM, độ to.
+class SongAnalysis {
+  const SongAnalysis({
+    required this.duration,
+    required this.sampleRate,
+    required this.channels,
+    required this.key,
+    required this.keyConfidence,
+    required this.tuningCents,
+    required this.bpm,
+    required this.bpmConfidence,
+    required this.integratedLufs,
+    required this.samplePeakDb,
+    required this.timeline,
+  });
+
+  final Duration duration;
+  final int sampleRate;
+  final int channels;
+
+  /// Tone chính; null nếu không kết luận được (bài quá ngắn, chỉ có trống…).
+  final MusicKey? key;
+  final double keyConfidence;
+
+  /// Lệch so với La = 440 Hz (−50…+50); null nếu không đo được.
+  final double? tuningCents;
+  final double? bpm;
+  final double bpmConfidence;
+
+  /// Độ to tích hợp (LUFS, ITU-R BS.1770-4).
+  final double? integratedLufs;
+  final double samplePeakDb;
+
+  /// Phủ kín bài; nhiều hơn 1 đoạn nghĩa là bài có chuyển tone.
+  final List<KeySegment> timeline;
+
+  bool get hasModulation => timeline.length > 1;
 }
 
 /// Trạng thái cao độ để vẽ đồng hồ cao độ.
@@ -120,6 +214,7 @@ enum ToneCoreEventType {
   latencyDone,
   streamRestarted,
   monitorBlocked,
+  keyChanged,
 }
 
 T _enumAt<T>(List<T> values, int index, T fallback) =>
@@ -286,6 +381,14 @@ class ToneCoreEvent {
 
   bool get ok => code == TcResult.ok;
 
+  /// Với [ToneCoreEventType.keyChanged]: key engine vừa tự chuyển sang theo timeline.
+  MusicKey? get key => type == ToneCoreEventType.keyChanged
+      ? MusicKey(
+          code,
+          _enumAt(MusicScale.values, value.round(), MusicScale.chromatic),
+        )
+      : null;
+
   @override
   String toString() => 'ToneCoreEvent($type, code=$code, value=$value)';
 }
@@ -413,6 +516,45 @@ class ToneCoreEngine implements Finalizable {
       );
     });
   }
+
+  /// Lưới nốt của tự chỉnh giọng dời so với La = 440 Hz (−100…100 cent), thường lấy từ
+  /// [SongAnalysis.tuningCents] để giọng được kéo về đúng cao độ của beat.
+  set tuningCents(double cents) =>
+      _check('tc_set_tuning', _bindings.tc_set_tuning(_h, cents));
+
+  double get tuningCents {
+    return using((arena) {
+      final out = arena<Float>();
+      _check('tc_get_tuning', _bindings.tc_get_tuning(_h, out));
+      return out.value;
+    });
+  }
+
+  /// Engine tự đổi key theo vị trí beat (cả khi tua); mỗi lần đổi có sự kiện
+  /// [ToneCoreEventType.keyChanged]. Gán [key] (chọn tay) sẽ tắt chế độ này.
+  void setKeyTimeline(List<KeySegment> segments) {
+    using((arena) {
+      final buf = segments.isEmpty
+          ? nullptr
+          : arena<tc_key_segment>(segments.length);
+      for (var i = 0; i < segments.length; i++) {
+        final s = segments[i];
+        buf[i]
+          ..start_ms = s.start.inMicroseconds / 1000.0
+          ..end_ms = s.end.inMicroseconds / 1000.0
+          ..root = s.key.root
+          ..scale = s.key.scale.index
+          ..confidence = s.confidence;
+      }
+      _check(
+        'tc_set_key_timeline',
+        _bindings.tc_set_key_timeline(_h, buf, segments.length),
+      );
+    });
+  }
+
+  /// Thôi đổi key theo bài, quay về key chọn tay gần nhất.
+  void clearKeyTimeline() => setKeyTimeline(const []);
 
   /// Áp một trong 3 mức chỉnh (ghi đè retune/humanize/flex/vibrato/hysteresis).
   void applyCorrectionPreset(CorrectionPreset p) => _check(
@@ -635,5 +777,140 @@ class ToneCoreEngine implements Finalizable {
         algorithmLatencyFrames: v.algorithm_latency_frames,
       );
     });
+  }
+}
+
+/// Phân tích bài ở luồng nền (tone, chuyển tone, tuning, BPM, độ to) — không cần engine chạy.
+/// Gọi [dispose] khi xong; nếu quên, bộ thu gom rác sẽ tự huỷ (và dừng việc đang chạy).
+class SongAnalyzer implements Finalizable {
+  SongAnalyzer._(this._handle) {
+    _finalizer.attach(this, _handle.cast(), detach: this);
+  }
+
+  factory SongAnalyzer.create() {
+    return using((arena) {
+      final out = arena<Pointer<tc_analyzer>>();
+      _check('tc_analyzer_create', _bindings.tc_analyzer_create(out));
+      return SongAnalyzer._(out.value);
+    });
+  }
+
+  static final _finalizer = NativeFinalizer(
+    _bindings.addresses.tc_analyzer_destroy.cast(),
+  );
+
+  final Pointer<tc_analyzer> _handle;
+  bool _disposed = false;
+
+  Pointer<tc_analyzer> get _h {
+    if (_disposed) throw StateError('SongAnalyzer đã bị dispose');
+    return _handle;
+  }
+
+  /// Bắt đầu phân tích (lỗi đọc file báo qua [status], không ném ở đây).
+  void start(String path) {
+    using((arena) {
+      final p = path.toNativeUtf8(allocator: arena);
+      _check('tc_analyzer_start', _bindings.tc_analyzer_start(_h, p.cast()));
+    });
+  }
+
+  /// Yêu cầu dừng; [status] chuyển sang [AnalysisState.cancelled] khi luồng nền dừng.
+  void cancel() =>
+      _check('tc_analyzer_cancel', _bindings.tc_analyzer_cancel(_h));
+
+  AnalysisStatus get status {
+    return using((arena) {
+      final s = arena<tc_analysis_status>();
+      s.ref.struct_size = sizeOf<tc_analysis_status>();
+      _check('tc_analyzer_get_status', _bindings.tc_analyzer_get_status(_h, s));
+      final v = s.ref;
+      return AnalysisStatus(
+        state: _enumAt(AnalysisState.values, v.state, AnalysisState.idle),
+        stage: _enumAt(AnalysisStage.values, v.stage, AnalysisStage.none),
+        progress: v.progress,
+        result: v.result,
+      );
+    });
+  }
+
+  /// Chỉ đọc được khi [status] là [AnalysisState.done].
+  SongAnalysis get result {
+    return using((arena) {
+      final r = arena<tc_analysis_result>();
+      r.ref.struct_size = sizeOf<tc_analysis_result>();
+      _check('tc_analyzer_get_result', _bindings.tc_analyzer_get_result(_h, r));
+      final v = r.ref;
+      final count = v.timeline_count;
+      final segs = count == 0 ? nullptr : arena<tc_key_segment>(count);
+      final n = _bindings.tc_analyzer_get_key_timeline(_h, segs, count);
+      if (n < 0) throw ToneCoreException('tc_analyzer_get_key_timeline', n);
+      MusicKey keyOf(int root, int scale) => MusicKey(
+        root,
+        _enumAt(MusicScale.values, scale, MusicScale.chromatic),
+      );
+      Duration ms(double v) => Duration(microseconds: (v * 1000).round());
+      return SongAnalysis(
+        duration: ms(v.duration_ms),
+        sampleRate: v.sample_rate,
+        channels: v.channels,
+        key: v.has_key != 0 ? keyOf(v.key_root, v.key_scale) : null,
+        keyConfidence: v.key_confidence,
+        tuningCents: v.has_tuning != 0 ? v.tuning_cents : null,
+        bpm: v.has_bpm != 0 ? v.bpm : null,
+        bpmConfidence: v.bpm_confidence,
+        integratedLufs: v.has_loudness != 0 ? v.integrated_lufs : null,
+        samplePeakDb: v.sample_peak_db,
+        timeline: [
+          for (var i = 0; i < n; i++)
+            KeySegment(
+              start: ms(segs[i].start_ms),
+              end: ms(segs[i].end_ms),
+              key: keyOf(segs[i].root, segs[i].scale),
+              confidence: segs[i].confidence,
+            ),
+        ],
+      );
+    });
+  }
+
+  /// Phân tích và chờ kết quả, báo tiến độ qua [onProgress] mỗi [pollInterval].
+  /// Bị huỷ → [ToneCoreException] mã [TcResult.cancelled]; lỗi file → mã lỗi tương ứng.
+  Future<SongAnalysis> analyze(
+    String path, {
+    void Function(AnalysisStatus status)? onProgress,
+    Duration pollInterval = const Duration(milliseconds: 100),
+    Duration timeout = const Duration(minutes: 5),
+  }) async {
+    start(path);
+    final deadline = DateTime.now().add(timeout);
+    while (true) {
+      final s = status;
+      onProgress?.call(s);
+      switch (s.state) {
+        case AnalysisState.done:
+          return result;
+        case AnalysisState.failed:
+        case AnalysisState.cancelled:
+          throw ToneCoreException('tc_analyzer', s.result);
+        case AnalysisState.idle:
+        case AnalysisState.running:
+          break;
+      }
+      if (DateTime.now().isAfter(deadline)) {
+        cancel();
+        throw TimeoutException('Phân tích bài quá lâu', timeout);
+      }
+      await Future<void>.delayed(pollInterval);
+      if (_disposed) throw StateError('SongAnalyzer đã bị dispose');
+    }
+  }
+
+  /// Dừng việc đang chạy (chờ luồng nền dừng, thường < 50 ms) và giải phóng.
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _finalizer.detach(this);
+    _bindings.tc_analyzer_destroy(_handle);
   }
 }
