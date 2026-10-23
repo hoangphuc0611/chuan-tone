@@ -182,11 +182,11 @@ class EndToEndTest(unittest.TestCase):
         for name in ("a.mp3", "b.mp3", "c.mp3", "d.mp3"):
             (self.dir / name).write_bytes(b"")
         self.csv = write(self.dir / "dev.csv",
-                         "file,key,mode,modulation,bpm\n"
-                         "a.mp3,A,minor,,68\n"
-                         "b.mp3,C,major,,120\n"
-                         "c.mp3,A,minor,\"60:A:major\",\n"
-                         "d.mp3,G,major,,\n")
+                         "file,key,mode,modulation,bpm,genre\n"
+                         "a.mp3,A,minor,,68,bolero\n"
+                         "b.mp3,C,major,,120,ballad\n"
+                         "c.mp3,A,minor,\"60:A:major\",,bolero\n"
+                         "d.mp3,G,major,,,ballad\n")
         preds = {
             "a.mp3": {"key": {"root": 9, "mode": "minor"}, "bpm": 136.0},       # đúng, BPM ×2
             "b.mp3": {"key": {"root": 7, "mode": "major"}, "bpm": 121.0,       # quãng 5 lên
@@ -230,6 +230,8 @@ class EndToEndTest(unittest.TestCase):
         # Tone chính: a đúng, b quãng 5, c: đáp án Am 60 s > A 40 s → tone chính Am, đoán A
         # → song song 0,2; d lỗi.
         self.assertIn(f"| Chỉ tone chính | {(1.0 + 0.5 + 0.2 + 0.0) / 4:.3f} |", out)
+        self.assertIn(f"| bolero | 2 | {(1.0 + timeline_c) / 2:.3f} | 50% |", out)
+        self.assertIn("| ballad | 2 | 0.250 | 0% |", out)
         rows = per_song.read_text(encoding="utf-8").splitlines()
         self.assertEqual(len(rows), 5)
         self.assertTrue(rows[0].startswith("file,ref,est,score"))
@@ -300,11 +302,23 @@ class RealKeylabTest(unittest.TestCase):
             song = dataset.Song(1, "sin.wav", wav, A)
             r = keytest.evaluate(song, ok)
             self.assertTrue(r.ok)
-            self.assertEqual(r.relation, mirex.MISSING)  # B1: chưa dò tone
+            # Chỉ 2 s < minVoicedSec (3 s) → keylab không kết luận tone ("key": null).
+            self.assertIsNone(ok["key"])
+            self.assertEqual(r.relation, mirex.MISSING)
 
             out = subprocess.run([os.environ["KEYLAB"], "analyze", str(wav)], check=True,
                                  capture_output=True, text=True).stdout
             self.assertEqual(json.loads(out)["channels"], 2)
+
+            # Tham số dò tone mà keytest sweep dùng; tham số sai → mã 2.
+            ok_args = ["--profile", "temperley", "--bass-weight", "0.5", "--frame-norm", "l1",
+                       "--silence-db", "30", "--compression", "10"]
+            subprocess.run([os.environ["KEYLAB"], "analyze", str(wav), *ok_args], check=True,
+                           capture_output=True)
+            for bad in (["--profile", "khong-co"], ["--bass-weight", "2"], ["--frame-norm", "x"]):
+                code = subprocess.run([os.environ["KEYLAB"], "analyze", str(wav), *bad],
+                                      capture_output=True).returncode
+                self.assertEqual(code, 2, bad)
 
 
 if __name__ == "__main__":

@@ -135,12 +135,11 @@ TEST(SongAnalyzer, AnalyzeDecodedFillsBasicInfo) {
   EXPECT_EQ(ctl.stage(), AnalysisStage::Done);
   EXPECT_FLOAT_EQ(ctl.progress(), 1.0f);
   ASSERT_FALSE(a.timings.empty());
-  EXPECT_EQ(a.timings.back().stage, AnalysisStage::Spectrum);
+  EXPECT_EQ(a.timings.back().stage, AnalysisStage::Key);
   // Sin 220 Hz đơn lẻ: dưới dải đỉnh dùng để đo tuning (400–3000 Hz) → không có tuning.
   EXPECT_FALSE(a.tuningCents.has_value());
   EXPECT_NEAR(static_cast<double>(a.chroma.frames()), 3.0 / a.chroma.frameSec, 1.0);
-  // Chưa có bước dò tone / BPM (B3–B6) → các kết quả còn trống.
-  EXPECT_FALSE(a.key.has_value());
+  // Chưa có timeline / BPM (B5–B6).
   EXPECT_TRUE(a.timeline.empty());
   EXPECT_FALSE(a.bpm.has_value());
 }
@@ -228,4 +227,35 @@ TEST(SongAnalyzer, AnalyzeFileMissing) {
   AnalysisControl ctl;
   SongAnalysis a;
   EXPECT_EQ(analyzeFile("/khong/ton/tai.mp3", AnalysisConfig{}, ctl, a), TC_ERR_INVALID_ARG);
+}
+
+// Đầu-cuối: beat 48 kHz stereo lệch −35 cent, vòng hoà âm + trống to → đúng tone, tuning ±3 cent.
+TEST(SongAnalyzer, PipelineDetectsKeyWithDrumsAndDetune) {
+  const double rate = 48000.0;
+  const MusicalKey keys[] = {{6, KeyMode::Minor}, {10, KeyMode::Major}, {4, KeyMode::Major}};
+  for (const MusicalKey& truth : keys) {
+    SCOPED_TRACE(truth.root);
+    std::vector<float> x(static_cast<std::size_t>(rate * 12), 0.0f);
+    test::NoteSpec spec;
+    spec.tuningCents = -35.0;
+    spec.decayPerSec = 0.8;
+    test::addCadence(x, rate, 0.0, truth.root, truth.mode == KeyMode::Minor, 2, 1.5,
+                     static_cast<uint32_t>(truth.root), spec);
+    for (int i = 0; i < 24; ++i) test::addClick(x, rate, 0.5 * i, 0.5f, 300 + i);
+    std::vector<int16_t> pcm(x.size() * 2);
+    for (std::size_t i = 0; i < x.size(); ++i) {
+      const float v = std::clamp(x[i], -1.0f, 1.0f);
+      pcm[2 * i] = pcm[2 * i + 1] = static_cast<int16_t>(std::lround(v * 32767.0f));
+    }
+    AnalysisControl ctl;
+    SongAnalysis a;
+    ASSERT_EQ(analyzeDecoded(makeAudio(std::move(pcm), 48000, 2), AnalysisConfig{}, ctl, a), TC_OK);
+    ASSERT_TRUE(a.key.has_value());
+    EXPECT_EQ(*a.key, truth) << "đoán " << a.key->root
+                             << (a.key->mode == KeyMode::Minor ? "m" : "");
+    EXPECT_GT(a.keyConfidence, 0.3f);
+    ASSERT_TRUE(a.tuningCents.has_value());
+    EXPECT_NEAR(*a.tuningCents, -35.0f, 3.0f);
+    EXPECT_EQ(a.timings.back().stage, AnalysisStage::Key);
+  }
 }

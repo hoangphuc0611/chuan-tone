@@ -47,8 +47,10 @@ Mọi thuật toán trong ToneCore được viết từ các nguồn công khai 
 
 ## Dò tone, BPM, loudness (M3)
 
-- C. Krumhansl, *Cognitive Foundations of Musical Pitch*, OUP 1990.
-- D. Temperley, *Music and Probability*, MIT Press 2007.
+- C. Krumhansl, *Cognitive Foundations of Musical Pitch*, OUP 1990 — thuật toán Krumhansl–Schmuckler (tương quan chroma với profile xoay vòng, `key/key_detect.cpp`).
+- C. Krumhansl, E. Kessler, *Tracing the dynamic changes in perceived tonal organization in a spatial representation of musical keys*, Psychological Review 1982 — profile "kk".
+- D. Temperley, *What's key for key? The Krumhansl–Schmuckler key-finding algorithm reconsidered*, Music Perception 1999 — profile "temperley".
+- D. Temperley, *Music and Probability*, MIT Press 2007 — profile "temperley-kp" (kho Kostka–Payne).
 - Á. Faraldo et al., *Key Estimation in Electronic Dance Music*, ECIR 2016 — profile EDMA.
 - D. Fitzgerald, *Harmonic/Percussive Separation using Median Filtering*, DAFx 2010.
 - C. Schörkhuber, A. Klapuri, *Constant-Q transform toolbox for music processing*, SMC 2010 — CQT theo từng quãng 8 + hạ mẫu ÷2 (`key/cqt.cpp`).

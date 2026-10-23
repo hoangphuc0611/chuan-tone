@@ -106,6 +106,33 @@ jobs:
       - name: Kiểm tra CSV mẫu
         run: python tools/keytest/validate_csv.py tools/keytest/example.csv --no-check-files
 
+  # Chấm dò tone trên GuitarSet (CC BY 4.0, ~700 MB, cache theo MD5 trong script) để chặn hồi quy.
+  # Không phải chỉ tiêu M3 (chỉ tiêu tính trên bộ bài Việt, chỉ chạy trên máy dev).
+  key-eval:
+    runs-on: ubuntu-24.04
+    env:
+      CC: clang
+      CXX: clang++
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - uses: actions/cache@v4
+        with:
+          path: testdata/GuitarSet
+          key: guitarset-${{ hashFiles('tools/keytest/fetch_guitarset.sh') }}
+      - name: Tải GuitarSet
+        run: tools/keytest/fetch_guitarset.sh
+      - name: Build keylab (Release)
+        working-directory: engine
+        run: |
+          cmake -S . -B build/rel -G Ninja -DCMAKE_BUILD_TYPE=Release -DTC_BUILD_TESTS=OFF
+          cmake --build build/rel --target keylab
+      - name: Chấm điểm (MIREX ≥ 0.68)
+        run: python3 tools/keytest/keytest.py run --csv testdata/GuitarSet/guitarset.csv --min-score 0.68 --out key-eval.md
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: key-eval, path: key-eval.md }
+
   format:
     runs-on: ubuntu-24.04
     steps:

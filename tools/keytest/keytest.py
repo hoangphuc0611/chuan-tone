@@ -290,6 +290,17 @@ def render_report(title: str, results: list, s: Summary, meta: list) -> str:
         n = sum(1 for r in results if r.relation == rel)
         if n:
             lines.append(f"| {label} | {n} | {pct(n / len(results))} |")
+    genres: dict = {}
+    for r in results:
+        genres.setdefault(r.song.genre or "(trống)", []).append(r)
+    if len(genres) > 1:
+        lines += ["", "## Theo thể loại", "", "| Thể loại | Số bài | Điểm MIREX | Đúng hẳn |",
+                  "|---|---|---|---|"]
+        for g in sorted(genres):
+            rs = genres[g]
+            right = sum(1 for r in rs if r.relation == mirex.CORRECT)
+            lines.append(f"| {g} | {len(rs)} | {statistics.fmean(r.score for r in rs):.3f} | "
+                         f"{pct(right / len(rs))} |")
     lines += [
         "",
         "## Từng bài (điểm thấp trước)",

@@ -73,13 +73,18 @@ cmake --build engine/build/rel --target keylab
 python3 tools/keytest/keytest.py run --set dev --out dev-report.md --per-song dev.csv
 
 # Quét tham số (CHỈ trên dev)
-python3 tools/keytest/keytest.py sweep --set dev --grid profile=kk,temperley,edma
+python3 tools/keytest/keytest.py sweep --set dev --grid profile=kk,temperley-kp --grid bass-weight=0,0.25,0.5
 
 # Chấm bộ test (chỉ với tham số mặc định)
 python3 tools/keytest/keytest.py run --set test --out docs/key-results.md
 ```
 
 Thử một bài: `engine/build/rel/tools/keylab analyze bai.mp3` (in JSON).
+
+Bộ công khai để thử khi chưa có dữ liệu Việt: `tools/keytest/fetch_guitarset.sh` tải GuitarSet
+(CC BY 4.0, ~700 MB) và tạo `testdata/GuitarSet/guitarset.csv`; kết quả ở `docs/key-results.md`.
+Tham số keylab quét được: `--profile kk|temperley|temperley-kp|diatonic`, `--bass-weight`,
+`--frame-norm none|l1|max`, `--silence-db`, `--compression`.
 
 ### Cách tính điểm
 

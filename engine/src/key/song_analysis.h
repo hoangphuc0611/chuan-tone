@@ -9,16 +9,11 @@
 #include "key/chroma.h"
 #include "key/cqt.h"
 #include "key/hpss.h"
+#include "key/key_detect.h"
+#include "key/musical_key.h"
 #include "tonecore/tonecore.h"
 
 namespace tonecore {
-
-enum class KeyMode : int32_t { Major = 0, Minor = 1 };
-
-struct MusicalKey {
-  int32_t root = 0;  // 0 = Đô (C) … 11 = Si (B)
-  KeyMode mode = KeyMode::Major;
-};
 
 // Một đoạn của timeline tone: [startSec, endSec).
 struct KeySegment {
@@ -28,14 +23,15 @@ struct KeySegment {
   float confidence = 0.0f;  // 0..1
 };
 
-// Các giai đoạn phân tích, theo thứ tự chạy. Sẽ thêm dần ở B3–B6 (tone, BPM, loudness).
+// Các giai đoạn phân tích, theo thứ tự chạy. Sẽ thêm dần ở B5–B6 (timeline, BPM, loudness).
 enum class AnalysisStage : int32_t {
   Idle = 0,
   Decoding = 1,    // giải mã file bằng codec của hệ điều hành
   Resampling = 2,  // trộn mono + đổi về tần số phân tích
   Separating = 3,  // HPSS (tách hoà âm / bộ gõ) + ước lượng tuning
   Spectrum = 4,    // CQT phần hoà âm → chroma
-  Done = 5
+  Key = 5,         // dò tone (so chroma với key profile)
+  Done = 6
 };
 
 struct StageTiming {
@@ -73,6 +69,7 @@ struct AnalysisConfig {
   HpssConfig hpss;
   CqtConfig cqt;  // tuningCents bị ghi đè bằng tuning ước lượng được
   ChromaConfig chroma;
+  KeyDetectConfig key;
 };
 
 // Kênh trao đổi giữa luồng phân tích và luồng điều khiển (UI / C API): tiến độ, giai đoạn, huỷ.

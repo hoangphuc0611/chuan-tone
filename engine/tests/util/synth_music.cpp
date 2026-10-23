@@ -51,4 +51,29 @@ void addClick(std::vector<float>& buf, double rate, double timeSec, float amplit
   }
 }
 
+void addCadence(std::vector<float>& buf, double rate, double startSec, int root, bool minor,
+                int loops, double chordSec, uint32_t seed, const NoteSpec& spec) {
+  // Bậc (nửa cung tính từ chủ âm) của các nốt trong 4 hợp âm.
+  static const int kMajor[4][3] = {{0, 4, 7}, {5, 9, 0}, {7, 11, 2}, {0, 4, 7}};
+  static const int kMinor[4][3] = {{0, 3, 7}, {5, 8, 0}, {7, 11, 2}, {0, 3, 7}};
+  static const int kChordRoot[4] = {0, 5, 7, 0};
+  std::mt19937 rng(seed);
+  for (int l = 0; l < loops; ++l) {
+    for (int c = 0; c < 4; ++c) {
+      const double t = startSec + (4 * l + c) * chordSec;
+      const int (&degrees)[3] = minor ? kMinor[c] : kMajor[c];
+      const int inversion = static_cast<int>(rng() % 3);
+      int midi = 55 + static_cast<int>(rng() % 8);  // nốt thấp nhất của hợp âm ≥ G3…D4
+      for (int i = 0; i < 3; ++i) {
+        const int pc = (root + degrees[(inversion + i) % 3]) % 12;
+        while ((midi % 12) != pc) ++midi;
+        addNote(buf, rate, t, chordSec, midi, 0.06f, spec);
+      }
+      int bass = 40;  // E2
+      while ((bass % 12) != (root + kChordRoot[c]) % 12) ++bass;
+      addNote(buf, rate, t, chordSec, bass, 0.08f, spec);
+    }
+  }
+}
+
 }  // namespace tonecore::test

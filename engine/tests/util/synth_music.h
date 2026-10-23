@@ -25,4 +25,10 @@ void addNote(std::vector<float>& buf, double rate, double startSec, double durSe
 // Tiếng gõ: nhiễu trắng tắt dần nhanh (τ = 4 ms), băng rộng — "đường dọc" trên spectrogram.
 void addClick(std::vector<float>& buf, double rate, double timeSec, float amplitude, uint32_t seed);
 
+// Vòng hoà âm I–IV–V–I (trưởng) hoặc i–iv–V–i (thứ; V trưởng như thứ hoà âm) ở tone có chủ âm
+// `root` (0 = Đô), mỗi hợp âm `chordSec` giây, lặp `loops` vòng từ `startSec`. Voicing ngẫu nhiên
+// theo `seed` (thế đảo, vị trí quãng 8 trong G3–G5); nốt bass = gốc hợp âm ở E2–Eb3.
+void addCadence(std::vector<float>& buf, double rate, double startSec, int root, bool minor,
+                int loops, double chordSec, uint32_t seed, const NoteSpec& spec = {});
+
 }  // namespace tonecore::test

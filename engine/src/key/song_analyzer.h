@@ -9,8 +9,8 @@
 
 namespace tonecore {
 
-// Phân tích offline cả bài: giải mã → mono ~11–12 kHz → HPSS + tuning → CQT → chroma →
-// (B3–B6) tone, timeline, BPM, loudness. Chạy đồng bộ trên luồng gọi — luôn là luồng nền, KHÔNG BAO
+// Phân tích offline cả bài: giải mã → mono ~11–12 kHz → HPSS + tuning → CQT → chroma → tone →
+// (B5–B6) timeline, BPM, loudness. Chạy đồng bộ trên luồng gọi — luôn là luồng nền, KHÔNG BAO
 // GIỜ từ audio thread (có cấp phát, có I/O). Mỗi lần gọi dùng đối tượng riêng nên nhiều luồng chạy
 // song song được.
 //

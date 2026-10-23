@@ -1,10 +1,10 @@
 // keylab — công cụ thử dò tone / BPM / loudness trên file audio (chạy trên Mac/Linux).
 //
-//   keylab analyze <file> [--rate 11025] [--chroma out.csv]
+//   keylab analyze <file> [tham số] [--chroma out.csv]
 //                                                 → 1 dòng JSON kết quả phân tích; --chroma ghi
 //                                                   chroma từng khung (time, energy_db, bass_*,
 //                                                   treble_*) để xem bằng bảng tính / matplotlib
-//   keylab batch [-j N] [--rate 11025] < danh_sach → JSONL, mỗi dòng một bài (thứ tự xong trước
+//   keylab batch [-j N] [tham số] < danh_sach      → JSONL, mỗi dòng một bài (thứ tự xong trước
 //                                                    in trước; trường "file" giữ nguyên đường dẫn)
 //
 // `tools/keytest/keytest.py` gọi `keylab batch` để chấm điểm MIREX trên bộ test.
@@ -38,8 +38,11 @@ namespace {
 int usage() {
   std::fprintf(stderr,
                "Cách dùng:\n"
-               "  keylab analyze <file> [--rate 11025] [--chroma out.csv]\n"
-               "  keylab batch [-j N] [--rate 11025] < danh_sach_file.txt\n");
+               "  keylab analyze <file> [tham số] [--chroma out.csv]\n"
+               "  keylab batch [-j N] [tham số] < danh_sach_file.txt\n"
+               "Tham số: --rate 11025  --profile kk|temperley|temperley-kp|diatonic\n"
+               "         --bass-weight 0.25  --frame-norm none|l1|max  --silence-db 40\n"
+               "         --compression 100\n");
   return 2;
 }
 
@@ -60,6 +63,8 @@ const char* stageName(AnalysisStage s) {
       return "hpss";
     case AnalysisStage::Spectrum:
       return "cqt";
+    case AnalysisStage::Key:
+      return "key";
     case AnalysisStage::Idle:
     case AnalysisStage::Done:
       break;
@@ -223,11 +228,42 @@ std::string analyzeToJson(const std::string& file, const AnalysisConfig& cfg,
   return toJson(file, r, a, ms);
 }
 
-// Đọc các tham số phân tích chung. Trả false nếu có tham số lạ.
+// Đọc các tham số phân tích chung (keytest sweep truyền vào đây). Trả false nếu có tham số lạ.
 bool parseConfigArg(int argc, char** argv, int& i, AnalysisConfig& cfg) {
-  if (std::strcmp(argv[i], "--rate") == 0 && i + 1 < argc) {
-    cfg.targetAnalysisRate = std::stod(argv[++i]);
+  const std::string opt = argv[i];
+  if (i + 1 >= argc) return false;
+  const std::string val = argv[++i];
+  if (opt == "--rate") {
+    cfg.targetAnalysisRate = std::stod(val);
     return cfg.targetAnalysisRate >= 4000.0 && cfg.targetAnalysisRate <= 48000.0;
+  }
+  if (opt == "--profile") {
+    cfg.key.profile = val;
+    return findKeyProfile(val) != nullptr;
+  }
+  if (opt == "--bass-weight") {
+    cfg.key.bassWeight = std::stof(val);
+    return cfg.key.bassWeight >= 0.0f && cfg.key.bassWeight <= 1.0f;
+  }
+  if (opt == "--frame-norm") {
+    if (val == "none") {
+      cfg.key.frameNorm = ChromaFrameNorm::None;
+    } else if (val == "l1") {
+      cfg.key.frameNorm = ChromaFrameNorm::L1;
+    } else if (val == "max") {
+      cfg.key.frameNorm = ChromaFrameNorm::Max;
+    } else {
+      return false;
+    }
+    return true;
+  }
+  if (opt == "--silence-db") {
+    cfg.key.silenceDb = std::stof(val);
+    return cfg.key.silenceDb > 0.0f;
+  }
+  if (opt == "--compression") {
+    cfg.chroma.compression = std::stof(val);
+    return cfg.chroma.compression > 0.0f;
   }
   return false;
 }

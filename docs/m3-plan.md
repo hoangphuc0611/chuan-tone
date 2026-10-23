@@ -16,7 +16,15 @@
   4 phút stereo 48 kHz): **tổng 0,8 s** (hạ mẫu 0,12 s, HPSS 0,52 s, CQT 0,14 s), RAM đỉnh 87 MB;
   tuning đúng ±3 cent trên test tổng hợp (−45…+49 cent, cả khi có trống + nốt tắt dần); HPSS tách
   hợp âm/tiếng gõ còn sai −12,9 / −16,1 dB.
-- [ ] B3 … B9
+- [x] **B3** (2026-10-23): dò tone toàn bài (`key/key_detect.*`, `key/key_profiles.*`):
+  tương quan Pearson chroma treble + bass với profile xoay vòng, độ tin cậy = softmax × độ rõ tone.
+  Profile kk, temperley-kp (đã đối chiếu số liệu với music21), temperley 1999 (chưa đối chiếu),
+  diatonic. Test tổng hợp: cả 4 profile đúng 24/24 tone; đầu-cuối có trống + lệch −35 cent đúng.
+  **GuitarSet: 0,706** (mặc định tạm temperley-kp / bass 0,25 / L1, chọn bằng quét 24 cấu hình;
+  kk mặc định cũ 0,608); phần đệm hợp âm 0,87–0,93. Job CI `key-eval` chặn hồi quy < 0,68.
+  Chi tiết: `docs/key-results.md`. *Đổi so với kế hoạch*: chưa có EDMA / Albrecht–Shanahan (cần
+  số liệu gốc của bài báo) — B4 thay bằng profile học từ tập dev Việt.
+- [ ] B4 … B9
 
 ## Các điểm cần quyết (2026-10-22: duyệt theo đề nghị)
 

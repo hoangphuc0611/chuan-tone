@@ -58,6 +58,8 @@ add_library(tonecore_core STATIC
   src/key/tuning.cpp
   src/key/cqt.cpp
   src/key/chroma.cpp
+  src/key/key_profiles.cpp
+  src/key/key_detect.cpp
   src/key/song_analyzer.cpp
 )
 
