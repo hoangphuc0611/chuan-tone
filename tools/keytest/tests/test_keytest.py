@@ -225,6 +225,10 @@ class EndToEndTest(unittest.TestCase):
         self.assertIn(f"**{want:.3f}**", out)
         self.assertEqual(report.read_text(encoding="utf-8"), out.rstrip("\n") + "\n")
         self.assertIn("| Chuyển tone giả (bài không chuyển tone) | 1/3 |", out)  # bài b
+        # Timeline mọi bài: a 1; b đoán G 0–50 s (quãng 5: 0,5) rồi C 50–100 s (1) → 0,75;
+        # c như điểm chính; d lỗi 0.
+        self.assertIn(f"| Điểm timeline, mọi bài (đúng cái engine dùng khi chỉnh giọng) | "
+                      f"{(1.0 + 0.75 + timeline_c + 0.0) / 4:.3f} |", out)
         self.assertIn("| BPM Acc1 / Acc2 (số bài có nhãn) | 50% / 100% (2) |", out)
         self.assertIn("lỗi: TC_ERR_INVALID_ARG", out)
         # Tone chính: a đúng, b quãng 5, c: đáp án Am 60 s > A 40 s → tone chính Am, đoán A

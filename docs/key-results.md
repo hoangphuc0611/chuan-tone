@@ -74,3 +74,27 @@ chứa trọn Em; Am → G do giọng dorian).
 Nhận xét: chuẩn hoá L1 từng khung luôn tốt hơn; bass 0,5 làm giảm điểm (guitar solo gần như không có
 bass thật — beat karaoke có bass riêng nên phải chọn lại trên tập dev Việt ở B4).
 Profile "temperley" (1999) chưa đối chiếu được số liệu gốc; "kk" và "temperley-kp" đã đối chiếu.
+
+## Timeline chuyển tone (B5, 2026-10-23)
+
+HMM 24 trạng thái trên cửa sổ 6 s / bước 2 s (`engine/src/key/key_timeline.*`). Test tổng hợp
+(`KeyTimeline.*`, `SongAnalyzer.PipelineTracksModulation`): Am → A (kiểu bolero), nâng nửa cung cuối
+bài, Am → C → Am đều tìm đúng tone, biên lệch ≤ 4 s (≤ 6 s với chuyển tương đối); đoạn mượn 6 s và
+khoảng lặng 10 s không sinh chuyển tone.
+
+GuitarSet **không có bài nào chuyển tone**, nên chỉ đo được mặt trái: số bài bị đoán chuyển tone giả
+và điểm timeline tính trên mọi bài (thứ engine dùng khi chỉnh giọng theo timeline). Đoạn ~30 s nên
+`min-segment` 20 s gần như cấm hẳn đoạn thứ hai — không dùng để chọn tham số cho bài 4 phút.
+
+| ε (switch-prob) | τ (emission-temp) | min-segment | Timeline mọi bài | Chuyển tone giả |
+|---|---|---|---|---|
+| 0,01 | 0,05 | 12 s | 0,692 | 43/360 |
+| 0,01 | 0,1 | 12 s | 0,702 | 23/360 |
+| **0,002** | **0,1** | **12 s** | **0,702** | **19/360** (mặc định) |
+| 0,0005 | 0,1 | 12 s | 0,703 | 14/360 |
+| 0,002 | 0,1 | 20 s | 0,707 | 2/360 |
+
+Tone toàn bài vẫn 0,706. Trên 19 bài bị chuyển giả, điểm timeline 0,383 so với 0,453 nếu giữ một
+tone — các đoạn đó (funk/jazz) cục bộ thật sự nghiêng về tone khác: đã thử bắt đoạn khác tone phải
+thắng tone toàn bài một khoảng tối thiểu (0,03 / 0,06 điểm tương quan) — không giảm được bài nào nên
+bỏ. Tham số timeline chốt trên tập dev Việt có chuyển tone (B4).

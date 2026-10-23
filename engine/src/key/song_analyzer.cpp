@@ -104,17 +104,22 @@ tc_result analyzeImpl(DecodedAudio& audio, const AnalysisConfig& cfg, AnalysisCo
   out.timings.push_back({AnalysisStage::Spectrum, msSince(t0)});
   if (r != TC_OK) return r;
 
-  // Giai đoạn 5: tone toàn bài.
+  // Giai đoạn 5: tone toàn bài + timeline chuyển tone.
   t0 = Clock::now();
   ctl.report(AnalysisStage::Key, kSpectrumSpan.end);
   if (const auto key = estimateGlobalKey(out.chroma, cfg.key)) {
     out.key = key->key;
     out.keyConfidence = key->confidence;
+    if (cfg.timeline.enabled) {
+      out.timeline = estimateKeyTimeline(out.chroma, out.durationSec, cfg.key, cfg.timeline, *key);
+    } else {
+      out.timeline.push_back({0.0, out.durationSec, key->key, key->confidence});
+    }
   }
   out.timings.push_back({AnalysisStage::Key, msSince(t0)});
   if (ctl.cancelled()) return kResultCancelled;
 
-  // B5–B6: timeline chuyển tone (chroma); BPM (parts.percussive); loudness.
+  // B6: BPM (parts.percussive); loudness.
 
   ctl.report(AnalysisStage::Done, 1.0f);
   return TC_OK;

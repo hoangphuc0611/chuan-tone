@@ -42,7 +42,9 @@ int usage() {
                "  keylab batch [-j N] [tham số] < danh_sach_file.txt\n"
                "Tham số: --rate 11025  --profile kk|temperley|temperley-kp|diatonic\n"
                "         --bass-weight 0.25  --frame-norm none|l1|max  --silence-db 40\n"
-               "         --compression 100\n");
+               "         --compression 100\n"
+               "Timeline: --timeline on|off  --window-sec 6  --switch-prob 0.002\n"
+               "          --related-boost 10  --min-segment 12  --emission-temp 0.1\n");
   return 2;
 }
 
@@ -260,6 +262,31 @@ bool parseConfigArg(int argc, char** argv, int& i, AnalysisConfig& cfg) {
   if (opt == "--silence-db") {
     cfg.key.silenceDb = std::stof(val);
     return cfg.key.silenceDb > 0.0f;
+  }
+  if (opt == "--timeline") {
+    if (val != "on" && val != "off") return false;
+    cfg.timeline.enabled = val == "on";
+    return true;
+  }
+  if (opt == "--window-sec") {
+    cfg.timeline.windowSec = std::stof(val);
+    return cfg.timeline.windowSec >= 1.0f;
+  }
+  if (opt == "--switch-prob") {
+    cfg.timeline.switchProb = std::stof(val);
+    return cfg.timeline.switchProb > 0.0f && cfg.timeline.switchProb < 0.5f;
+  }
+  if (opt == "--related-boost") {
+    cfg.timeline.relatedBoost = std::stof(val);
+    return cfg.timeline.relatedBoost >= 1.0f;
+  }
+  if (opt == "--min-segment") {
+    cfg.timeline.minSegmentSec = std::stof(val);
+    return cfg.timeline.minSegmentSec >= 0.0f;
+  }
+  if (opt == "--emission-temp") {
+    cfg.timeline.emissionTemperature = std::stof(val);
+    return cfg.timeline.emissionTemperature > 0.0f;
   }
   if (opt == "--compression") {
     cfg.chroma.compression = std::stof(val);

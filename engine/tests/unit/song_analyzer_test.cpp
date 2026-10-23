@@ -139,8 +139,14 @@ TEST(SongAnalyzer, AnalyzeDecodedFillsBasicInfo) {
   // Sin 220 Hz đơn lẻ: dưới dải đỉnh dùng để đo tuning (400–3000 Hz) → không có tuning.
   EXPECT_FALSE(a.tuningCents.has_value());
   EXPECT_NEAR(static_cast<double>(a.chroma.frames()), 3.0 / a.chroma.frameSec, 1.0);
-  // Chưa có timeline / BPM (B5–B6).
-  EXPECT_TRUE(a.timeline.empty());
+  // Có tone thì timeline phủ kín bài (ở đây không có chuyển tone → 1 đoạn); chưa có BPM (B6).
+  if (a.key) {
+    ASSERT_EQ(a.timeline.size(), 1u);
+    EXPECT_EQ(a.timeline[0].key, *a.key);
+    EXPECT_DOUBLE_EQ(a.timeline[0].endSec, 3.0);
+  } else {
+    EXPECT_TRUE(a.timeline.empty());
+  }
   EXPECT_FALSE(a.bpm.has_value());
 }
 
@@ -258,4 +264,27 @@ TEST(SongAnalyzer, PipelineDetectsKeyWithDrumsAndDetune) {
     EXPECT_NEAR(*a.tuningCents, -35.0f, 3.0f);
     EXPECT_EQ(a.timings.back().stage, AnalysisStage::Key);
   }
+}
+
+// Đầu-cuối: Am 48 s → A trưởng 42 s, có trống, 48 kHz → timeline 2 đoạn, biên lệch ≤ 4 s.
+TEST(SongAnalyzer, PipelineTracksModulation) {
+  const double rate = 48000.0;
+  std::vector<float> x(static_cast<std::size_t>(rate * 90), 0.0f);
+  test::NoteSpec spec;
+  spec.harmonics = 4;
+  test::addCadence(x, rate, 0.0, 9, true, 8, 1.5, 11, spec);
+  test::addCadence(x, rate, 48.0, 9, false, 7, 1.5, 12, spec);
+  for (int i = 0; i < 180; ++i) test::addClick(x, rate, 0.5 * i, 0.4f, 700 + i);
+  std::vector<int16_t> pcm(x.size());
+  for (std::size_t i = 0; i < x.size(); ++i) {
+    pcm[i] = static_cast<int16_t>(std::lround(std::clamp(x[i], -1.0f, 1.0f) * 32767.0f));
+  }
+  AnalysisControl ctl;
+  SongAnalysis a;
+  ASSERT_EQ(analyzeDecoded(makeAudio(std::move(pcm), 48000, 1), AnalysisConfig{}, ctl, a), TC_OK);
+  ASSERT_EQ(a.timeline.size(), 2u);
+  EXPECT_EQ(a.timeline[0].key, (MusicalKey{9, KeyMode::Minor}));
+  EXPECT_EQ(a.timeline[1].key, (MusicalKey{9, KeyMode::Major}));
+  EXPECT_NEAR(a.timeline[1].startSec, 48.0, 4.0);
+  EXPECT_DOUBLE_EQ(a.timeline.back().endSec, 90.0);
 }

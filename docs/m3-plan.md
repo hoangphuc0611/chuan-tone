@@ -24,7 +24,14 @@
   kk mặc định cũ 0,608); phần đệm hợp âm 0,87–0,93. Job CI `key-eval` chặn hồi quy < 0,68.
   Chi tiết: `docs/key-results.md`. *Đổi so với kế hoạch*: chưa có EDMA / Albrecht–Shanahan (cần
   số liệu gốc của bài báo) — B4 thay bằng profile học từ tập dev Việt.
-- [ ] B4 … B9
+- [x] **B5** (2026-10-23, làm trước B4 vì chưa có dữ liệu): timeline chuyển tone
+  (`key/key_timeline.*`) — HMM 24 trạng thái, cửa sổ 6 s / bước 2 s, chuyển ưu tiên tone họ hàng
+  (quãng 5, tương đối, song song, nâng 1–2 nửa cung), Viterbi + forward–backward, gộp đoạn < 12 s,
+  một đoạn thì dùng tone toàn bài. Test tổng hợp đúng cả Am → A, nâng nửa cung, Am → C → Am
+  (biên ≤ 4–6 s); GuitarSet (không chuyển tone): 19/360 bài chuyển giả, điểm timeline mọi bài
+  0,702. keytest thêm chỉ số "timeline mọi bài". `keylab --timeline on|off --switch-prob
+  --emission-temp --min-segment --window-sec --related-boost`. Chi tiết: `docs/key-results.md`.
+- [ ] B4, B6 … B9
 
 ## Các điểm cần quyết (2026-10-22: duyệt theo đề nghị)
 

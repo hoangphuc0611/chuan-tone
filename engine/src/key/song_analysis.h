@@ -10,27 +10,20 @@
 #include "key/cqt.h"
 #include "key/hpss.h"
 #include "key/key_detect.h"
+#include "key/key_timeline.h"
 #include "key/musical_key.h"
 #include "tonecore/tonecore.h"
 
 namespace tonecore {
 
-// Một đoạn của timeline tone: [startSec, endSec).
-struct KeySegment {
-  double startSec = 0.0;
-  double endSec = 0.0;
-  MusicalKey key{};
-  float confidence = 0.0f;  // 0..1
-};
-
-// Các giai đoạn phân tích, theo thứ tự chạy. Sẽ thêm dần ở B5–B6 (timeline, BPM, loudness).
+// Các giai đoạn phân tích, theo thứ tự chạy. Sẽ thêm ở B6 (BPM, loudness).
 enum class AnalysisStage : int32_t {
   Idle = 0,
   Decoding = 1,    // giải mã file bằng codec của hệ điều hành
   Resampling = 2,  // trộn mono + đổi về tần số phân tích
   Separating = 3,  // HPSS (tách hoà âm / bộ gõ) + ước lượng tuning
   Spectrum = 4,    // CQT phần hoà âm → chroma
-  Key = 5,         // dò tone (so chroma với key profile)
+  Key = 5,         // dò tone toàn bài + timeline chuyển tone
   Done = 6
 };
 
@@ -49,7 +42,7 @@ struct SongAnalysis {
 
   std::optional<MusicalKey> key;  // tone chính của bài
   float keyConfidence = 0.0f;
-  std::vector<KeySegment> timeline;  // theo dõi chuyển tone; rỗng nếu chưa dò
+  std::vector<KeySegment> timeline;  // phủ kín cả bài; rỗng nếu không có tone
 
   std::optional<float> tuningCents;  // độ lệch so với La = 440 Hz, −50…+50
   Chromagram chroma;                 // chroma bass/treble của phần hoà âm (đầu vào dò tone)
@@ -70,6 +63,7 @@ struct AnalysisConfig {
   CqtConfig cqt;  // tuningCents bị ghi đè bằng tuning ước lượng được
   ChromaConfig chroma;
   KeyDetectConfig key;
+  KeyTimelineConfig timeline;
 };
 
 // Kênh trao đổi giữa luồng phân tích và luồng điều khiển (UI / C API): tiến độ, giai đoạn, huỷ.

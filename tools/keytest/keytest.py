@@ -111,6 +111,7 @@ class SongResult:
     score: float           # điểm tính chỉ tiêu
     score_main: float      # chỉ so tone chính
     score_desc5: float     # như `score` nhưng tính quãng 5 cả hai chiều
+    score_timeline: float  # timeline theo thời lượng ở MỌI bài (engine chỉnh giọng đi theo timeline)
     relation: str          # quan hệ tone chính đoán ↔ đáp án
     spurious: bool         # bài không chuyển tone nhưng đoán ra nhiều tone
     est_bpm: Optional[float]
@@ -153,7 +154,9 @@ def evaluate(song: dataset.Song, res: Optional[dict]) -> SongResult:
         song=song, ok=ok, error="" if ok else (res or {}).get("error", "không có kết quả"),
         duration=duration, ref_main=ref_main, est_key=est_key, est_timeline=est_tl,
         score=primary(False), score_main=mirex.score(ref_main, est_key) if ok else 0.0,
-        score_desc5=primary(True), relation=mirex.relation(ref_main, est_key),
+        score_desc5=primary(True),
+        score_timeline=mirex.timeline_score(ref_tl, est_tl_scored) if ok and ref_tl else 0.0,
+        relation=mirex.relation(ref_main, est_key),
         spurious=not song.has_modulation and len({s.key for s in est_tl}) > 1,
         est_bpm=est_bpm, acc1=acc1, acc2=acc2, time_ms=timing.get("total"))
 
@@ -182,6 +185,7 @@ class Summary:
     score: float
     score_main: float
     score_desc5: float
+    score_timeline: float
     mod_n: int
     mod_score: Optional[float]
     spurious: int
@@ -206,6 +210,7 @@ def summarize(results: list) -> Summary:
         score=mean(r.score for r in results) or 0.0,
         score_main=mean(r.score_main for r in results) or 0.0,
         score_desc5=mean(r.score_desc5 for r in results) or 0.0,
+        score_timeline=mean(r.score_timeline for r in results) or 0.0,
         mod_n=len(mods), mod_score=mean(r.score for r in mods),
         spurious=sum(1 for r in results if r.spurious), nomod_n=len(results) - len(mods),
         bpm_n=len(bpm), acc1=mean(1.0 if r.acc1 else 0.0 for r in bpm),
@@ -273,6 +278,7 @@ def render_report(title: str, results: list, s: Summary, meta: list) -> str:
         f"| **Điểm MIREX** (chỉ tiêu ≥ {TARGET}) | **{s.score:.3f}** |",
         f"| Chỉ tone chính | {s.score_main:.3f} |",
         f"| Tính lệch quãng 5 cả hai chiều | {s.score_desc5:.3f} |",
+        f"| Điểm timeline, mọi bài (đúng cái engine dùng khi chỉnh giọng) | {s.score_timeline:.3f} |",
         f"| Bài chuyển tone: số bài / điểm timeline | {s.mod_n} / {fmt(s.mod_score)} |",
         f"| Chuyển tone giả (bài không chuyển tone) | {s.spurious}/{s.nomod_n} |",
         f"| BPM Acc1 / Acc2 (số bài có nhãn) | {pct(s.acc1)} / {pct(s.acc2)} ({s.bpm_n}) |",
@@ -320,11 +326,13 @@ def render_report(title: str, results: list, s: Summary, meta: list) -> str:
 def write_per_song(path: Path, results: list) -> None:
     with path.open("w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["file", "ref", "est", "score", "score_main", "relation", "spurious",
+        w.writerow(["file", "ref", "est", "score", "score_main", "score_timeline", "relation",
+                    "spurious",
                     "ref_bpm", "est_bpm", "acc1", "acc2", "time_ms", "error"])
         for r in results:
             w.writerow([r.song.file, ref_label(r.song), r.est_key.name if r.est_key else "",
-                        f"{r.score:.4f}", f"{r.score_main:.4f}", r.relation, int(r.spurious),
+                        f"{r.score:.4f}", f"{r.score_main:.4f}", f"{r.score_timeline:.4f}",
+                        r.relation, int(r.spurious),
                         r.song.bpm if r.song.bpm is not None else "",
                         r.est_bpm if r.est_bpm is not None else "",
                         "" if r.acc1 is None else int(r.acc1),
@@ -431,12 +439,13 @@ def cmd_sweep(args, extra: list) -> int:
     rows.sort(key=lambda r: -r[1].score)
     lines = [f"# Quét tham số — {csv_path.stem}", "",
              f"- Thời điểm: {datetime.datetime.now():%Y-%m-%d %H:%M}, commit {git_info()}", "",
-             "| Tham số | MIREX | Tone chính | Timeline (bài chuyển tone) | Chuyển tone giả | "
-             "BPM Acc1 / Acc2 |",
-             "|---|---|---|---|---|---|"]
+             "| Tham số | MIREX | Tone chính | Timeline mọi bài | Timeline (bài chuyển tone) | "
+             "Chuyển tone giả | BPM Acc1 / Acc2 |",
+             "|---|---|---|---|---|---|---|"]
     for label, s in rows:
-        lines.append(f"| {label} | {s.score:.3f} | {s.score_main:.3f} | {fmt(s.mod_score)} | "
-                     f"{s.spurious}/{s.nomod_n} | {pct(s.acc1)} / {pct(s.acc2)} |")
+        lines.append(f"| {label} | {s.score:.3f} | {s.score_main:.3f} | {s.score_timeline:.3f} | "
+                     f"{fmt(s.mod_score)} | {s.spurious}/{s.nomod_n} | "
+                     f"{pct(s.acc1)} / {pct(s.acc2)} |")
     report = "\n".join(lines) + "\n"
     print(report)
     if args.out:

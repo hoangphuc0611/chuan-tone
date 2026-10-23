@@ -22,4 +22,12 @@ inline MusicalKey keyFromIndex(int i) {
   return {i % 12, i >= 12 ? KeyMode::Minor : KeyMode::Major};
 }
 
+// Một đoạn của timeline tone: [startSec, endSec).
+struct KeySegment {
+  double startSec = 0.0;
+  double endSec = 0.0;
+  MusicalKey key{};
+  float confidence = 0.0f;  // 0..1
+};
+
 }  // namespace tonecore

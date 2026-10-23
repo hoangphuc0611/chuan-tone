@@ -59,6 +59,9 @@ Mọi thuật toán trong ToneCore được viết từ các nguồn công khai 
 - C. Harte, M. Sandler, *Automatic chord identification using a quantised chromagram*, AES 2005 — ước lượng tuning (`key/tuning.cpp`, làm trên đỉnh STFT thay vì CQT).
 - J. O. Smith, X. Serra, *PARSHL: An Analysis/Synthesis Program for Non-Harmonic Sounds Based on a Sinusoidal Representation*, ICMC 1987 — nội suy parabol đỉnh phổ (QIFFT).
 - M. Müller, *Fundamentals of Music Processing*, Springer 2015 (bản 2, 2021), mục 3.1 — chroma, nén log.
+- K. Noland, M. Sandler, *Key estimation using a hidden Markov model*, ISMIR 2006 — HMM 24 tone.
+- H. Papadopoulos, G. Peeters, *Local key estimation from an audio signal relying on harmony and metrical structures*, IEEE TASLP 2012 — tone cục bộ / chuyển tone.
+- L. R. Rabiner, *A tutorial on hidden Markov models and selected applications in speech recognition*, Proc. IEEE 1989 — Viterbi, forward–backward (`key/key_timeline.cpp`).
 - J. P. Bello et al., *A Tutorial on Onset Detection in Music Signals*, IEEE TSAP 2005.
 - G. Percival, G. Tzanetakis, *Streamlined Tempo Estimation Based on Autocorrelation and Cross-correlation With Pulses*, IEEE/ACM TASLP 2014.
 - D. Ellis, *Beat Tracking by Dynamic Programming*, JNMR 2007.
