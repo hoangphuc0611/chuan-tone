@@ -73,7 +73,8 @@ tc_result separateHarmonicPercussive(const std::vector<float>& x, double rate,
   // chu kỳ H (hằng số với Hann khi H = N/4) → chia cho nó để tổng hợp lại đúng tín hiệu gốc.
   std::vector<float> w(N);
   for (std::size_t i = 0; i < N; ++i) {
-    w[i] = static_cast<float>(0.5 - 0.5 * std::cos(2.0 * kPi * static_cast<double>(i) / N));
+    w[i] = static_cast<float>(
+        0.5 - 0.5 * std::cos(2.0 * kPi * static_cast<double>(i) / static_cast<double>(N)));
   }
   std::vector<float> olaNorm(H, 0.0f);
   for (std::size_t i = 0; i < N; ++i) olaNorm[i % H] += w[i] * w[i];
@@ -141,7 +142,9 @@ tc_result separateHarmonicPercussive(const std::vector<float>& x, double rate,
       harmMag[k] = mc[k] * mh;
     }
     if (onHarmonicFrame) {
-      const double t = (static_cast<double>(c * H) - static_cast<double>(pad) + 0.5 * N) / rate;
+      const double t =
+          (static_cast<double>(c * H) - static_cast<double>(pad) + 0.5 * static_cast<double>(N)) /
+          rate;
       onHarmonicFrame(harmMag.data(), bins, t);
     }
     fft.inverse(spec.data(), timeBuf.data());
@@ -169,7 +172,7 @@ tc_result separateHarmonicPercussive(const std::vector<float>& x, double rate,
     }
     addFrame(j);
     if (j >= r) processCenter(j - r);  // cửa sổ = [j − 2r, j]
-    if (j % 64 == 63 && onProgress && !onProgress(static_cast<float>(j) / J)) {
+    if (j % 64 == 63 && onProgress && !onProgress(static_cast<float>(j) / static_cast<float>(J))) {
       out = HpssOutput{};
       return kResultCancelled;
     }

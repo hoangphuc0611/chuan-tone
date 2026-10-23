@@ -34,7 +34,8 @@ std::vector<std::vector<KernelTap>> buildKernel(const std::vector<double>& nu, d
     std::vector<double> w(len);
     double sw = 0.0;
     for (std::size_t m = 0; m < len; ++m) {
-      w[m] = 0.5 - 0.5 * std::cos(2.0 * kPi * (static_cast<double>(m) + 0.5) / len);
+      w[m] = 0.5 -
+             0.5 * std::cos(2.0 * kPi * (static_cast<double>(m) + 0.5) / static_cast<double>(len));
       sw += w[m];
     }
     // DFT của k[n] = w[n − off]·e^{i2πν(n − off − c)} / Σw chỉ đáng kể quanh j ≈ ν·L: búp chính
@@ -49,9 +50,10 @@ std::vector<std::vector<KernelTap>> buildKernel(const std::vector<double>& nu, d
     for (std::size_t j = j0; j <= j1; ++j) {
       std::complex<double> acc = 0.0;
       for (std::size_t m = 0; m < len; ++m) {
-        const double phase = 2.0 * kPi *
-                             (nu[b] * (static_cast<double>(m) - c) -
-                              static_cast<double>(j) * static_cast<double>(m + off) / L);
+        const double phase =
+            2.0 * kPi *
+            (nu[b] * (static_cast<double>(m) - c) -
+             static_cast<double>(j) * static_cast<double>(m + off) / static_cast<double>(L));
         acc += w[m] * std::complex<double>(std::cos(phase), std::sin(phase));
       }
       k[j - j0] = acc / sw;

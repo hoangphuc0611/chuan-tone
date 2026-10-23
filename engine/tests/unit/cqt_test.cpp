@@ -14,7 +14,8 @@ namespace {
 std::vector<float> sine(double rate, double secs, double hz, float amp) {
   std::vector<float> x(static_cast<std::size_t>(rate * secs));
   for (std::size_t i = 0; i < x.size(); ++i) {
-    x[i] = amp * static_cast<float>(std::sin(2.0 * 3.14159265358979323846 * hz * i / rate));
+    x[i] = amp * static_cast<float>(
+                     std::sin(2.0 * 3.14159265358979323846 * hz * static_cast<double>(i) / rate));
   }
   return x;
 }

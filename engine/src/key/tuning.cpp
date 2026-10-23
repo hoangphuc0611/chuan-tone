@@ -22,9 +22,11 @@ int wrap(int i, int n) {
 TuningEstimator::TuningEstimator(double rate, std::size_t fftSize, double minHz, double maxHz)
     : rate_(rate), fftSize_(fftSize) {
   const std::size_t bins = fftSize / 2 + 1;
-  kMin_ = std::max<std::size_t>(1, static_cast<std::size_t>(std::ceil(minHz * fftSize / rate)));
+  kMin_ = std::max<std::size_t>(
+      1, static_cast<std::size_t>(std::ceil(minHz * static_cast<double>(fftSize) / rate)));
   const double top = std::min(maxHz, 0.45 * rate);
-  kMax_ = std::min(bins - 2, static_cast<std::size_t>(std::floor(top * fftSize / rate)));
+  kMax_ = std::min(bins - 2,
+                   static_cast<std::size_t>(std::floor(top * static_cast<double>(fftSize) / rate)));
 }
 
 void TuningEstimator::addFrame(const float* mag, std::size_t bins) {

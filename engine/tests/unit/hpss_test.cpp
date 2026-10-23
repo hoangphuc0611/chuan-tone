@@ -93,13 +93,15 @@ TEST(Hpss, HarmonicFrameCallback) {
                     for (std::size_t k = 1; k < bins; ++k) {
                       if (mag[k] > mag[best]) best = k;
                     }
-                    peakHz = static_cast<float>(best * kRate / cfg.fftSize);
+                    peakHz = static_cast<float>(static_cast<double>(best) * kRate /
+                                                static_cast<double>(cfg.fftSize));
                   }
                 },
                 nullptr, out),
             TC_OK);
   EXPECT_TRUE(increasing);
-  EXPECT_NEAR(static_cast<double>(frames), x.size() / static_cast<double>(cfg.hop), 4.0);
+  EXPECT_NEAR(static_cast<double>(frames),
+              static_cast<double>(x.size()) / static_cast<double>(cfg.hop), 4.0);
   EXPECT_NEAR(peakHz, 440.0f, kRate / cfg.fftSize);
 }
 

@@ -30,7 +30,8 @@ std::vector<float> onsetEnvelope(const std::vector<float>& x, double rate, const
   std::vector<float> w(N);
   double sw = 0.0;
   for (std::size_t i = 0; i < N; ++i) {
-    w[i] = static_cast<float>(0.5 - 0.5 * std::cos(2.0 * kPi * static_cast<double>(i) / N));
+    w[i] = static_cast<float>(
+        0.5 - 0.5 * std::cos(2.0 * kPi * static_cast<double>(i) / static_cast<double>(N)));
     sw += static_cast<double>(w[i]);
   }
   // |X| của sin biên độ A ≈ A·Σw/2 → chia cho Σw/2 để γ không phụ thuộc kích thước FFT.
