@@ -62,10 +62,11 @@ Mọi thuật toán trong ToneCore được viết từ các nguồn công khai 
 - K. Noland, M. Sandler, *Key estimation using a hidden Markov model*, ISMIR 2006 — HMM 24 tone.
 - H. Papadopoulos, G. Peeters, *Local key estimation from an audio signal relying on harmony and metrical structures*, IEEE TASLP 2012 — tone cục bộ / chuyển tone.
 - L. R. Rabiner, *A tutorial on hidden Markov models and selected applications in speech recognition*, Proc. IEEE 1989 — Viterbi, forward–backward (`key/key_timeline.cpp`).
-- J. P. Bello et al., *A Tutorial on Onset Detection in Music Signals*, IEEE TSAP 2005.
-- G. Percival, G. Tzanetakis, *Streamlined Tempo Estimation Based on Autocorrelation and Cross-correlation With Pulses*, IEEE/ACM TASLP 2014.
-- D. Ellis, *Beat Tracking by Dynamic Programming*, JNMR 2007.
-- ITU-R BS.1770-4, *Algorithms to measure audio programme loudness and true-peak audio level*.
+- J. P. Bello et al., *A Tutorial on Onset Detection in Music Signals*, IEEE TSAP 2005 — spectral flux trên log biên độ.
+- G. Percival, G. Tzanetakis, *Streamlined Tempo Estimation Based on Autocorrelation and Cross-correlation With Pulses*, IEEE/ACM TASLP 2014 — tự tương quan onset + răng lược bội chu kỳ.
+- D. Ellis, *Beat Tracking by Dynamic Programming*, JNMR 2007 — prior tempo log-Gauss (`key/tempo.cpp`).
+- ITU-R BS.1770-4, *Algorithms to measure audio programme loudness and true-peak audio level* — K-weighting, cổng (`key/loudness.cpp`).
+- EBU Tech 3341, *Loudness Metering: "EBU Mode" metering to supplement EBU R 128 loudness normalization* — ca test tuân thủ (`tests/unit/loudness_test.cpp`).
 - MIREX Audio Key Detection – quy tắc chấm điểm. Cài đặt tham chiếu: C. Raffel et al., *mir_eval: A Transparent Implementation of Common MIR Metrics*, ISMIR 2014 (`mir_eval.key.weighted_score`, dùng để kiểm chéo `tools/keytest/mirex.py`).
 
 ## Hiệu ứng (M5)

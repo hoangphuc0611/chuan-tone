@@ -83,8 +83,10 @@ Thử một bài: `engine/build/rel/tools/keylab analyze bai.mp3` (in JSON).
 
 Bộ công khai để thử khi chưa có dữ liệu Việt: `tools/keytest/fetch_guitarset.sh` tải GuitarSet
 (CC BY 4.0, ~700 MB) và tạo `testdata/GuitarSet/guitarset.csv`; kết quả ở `docs/key-results.md`.
-Tham số keylab quét được: `--profile kk|temperley|temperley-kp|diatonic`, `--bass-weight`,
-`--frame-norm none|l1|max`, `--silence-db`, `--compression`.
+Tham số keylab quét được (xem `keylab` không tham số): tone `--profile kk|temperley|temperley-kp|diatonic`,
+`--bass-weight`, `--frame-norm none|l1|max`, `--silence-db`, `--compression`; timeline
+`--timeline on|off`, `--switch-prob`, `--emission-temp`, `--min-segment`, `--window-sec`,
+`--related-boost`; BPM `--tempo-prior`, `--tempo-octaves`.
 
 ### Cách tính điểm
 

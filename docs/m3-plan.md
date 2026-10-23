@@ -31,7 +31,11 @@
   (biên ≤ 4–6 s); GuitarSet (không chuyển tone): 19/360 bài chuyển giả, điểm timeline mọi bài
   0,702. keytest thêm chỉ số "timeline mọi bài". `keylab --timeline on|off --switch-prob
   --emission-temp --min-segment --window-sec --related-boost`. Chi tiết: `docs/key-results.md`.
-- [ ] B4, B6 … B9
+- [x] **B6** (2026-10-23): BPM (`key/tempo.*`: onset từ phần bộ gõ, tự tương quan + răng lược,
+  prior Ellis 120 BPM σ 1,4) — test tổng hợp 90–140 BPM sai ≤ 1%, GuitarSet Acc1 58% / Acc2 83%;
+  LUFS (`key/loudness.*`, BS.1770-4) — khớp bảng hệ số 48 kHz, 5 ca EBU Tech 3341 ±0,1 LU ở
+  48 / 44,1 kHz. `keylab --tempo-prior --tempo-octaves`. Cả chuỗi bài 4 phút 1,12 s (M1).
+- [ ] B4, B7 … B9
 
 ## Các điểm cần quyết (2026-10-22: duyệt theo đề nghị)
 

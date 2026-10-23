@@ -25,10 +25,12 @@ struct ProgressSpan {
   float end;
   float at(float fraction) const noexcept { return begin + (end - begin) * fraction; }
 };
-constexpr ProgressSpan kDecodeSpan{0.0f, 0.10f};
-constexpr ProgressSpan kResampleSpan{0.10f, 0.15f};
-constexpr ProgressSpan kSeparateSpan{0.15f, 0.70f};
-constexpr ProgressSpan kSpectrumSpan{0.70f, 1.0f};
+constexpr ProgressSpan kDecodeSpan{0.0f, 0.05f};
+constexpr ProgressSpan kLoudnessSpan{0.05f, 0.10f};
+constexpr ProgressSpan kResampleSpan{0.10f, 0.25f};
+constexpr ProgressSpan kSeparateSpan{0.25f, 0.80f};
+constexpr ProgressSpan kSpectrumSpan{0.80f, 0.92f};
+constexpr ProgressSpan kTempoSpan{0.92f, 1.0f};
 
 ProgressFn stageProgress(AnalysisControl& ctl, AnalysisStage stage, ProgressSpan span) {
   ctl.report(stage, span.begin);
@@ -69,8 +71,17 @@ tc_result analyzeImpl(DecodedAudio& audio, const AnalysisConfig& cfg, AnalysisCo
   out.channels = audio.channels;
   if (ctl.cancelled()) return kResultCancelled;
 
-  // Giai đoạn 2: tín hiệu phân tích mono.
+  // Giai đoạn 2: độ to (LUFS) trên đúng các kênh engine sẽ phát, trước khi trộn mono.
   auto t0 = Clock::now();
+  ctl.report(AnalysisStage::Loudness, kLoudnessSpan.begin);
+  const LoudnessResult loud = measureLoudness(audio);
+  out.integratedLufs = loud.integratedLufs;
+  out.samplePeakDb = loud.samplePeakDb;
+  out.timings.push_back({AnalysisStage::Loudness, msSince(t0)});
+  if (ctl.cancelled()) return kResultCancelled;
+
+  // Giai đoạn 3: tín hiệu phân tích mono.
+  t0 = Clock::now();
   AnalysisSignal signal;
   tc_result r =
       prepareAnalysisSignal(audio, cfg.targetAnalysisRate,
@@ -79,7 +90,7 @@ tc_result analyzeImpl(DecodedAudio& audio, const AnalysisConfig& cfg, AnalysisCo
   if (r != TC_OK) return r;
   out.analysisRate = signal.rate;
 
-  // Giai đoạn 3: tách hoà âm / bộ gõ; các khung phổ hoà âm dùng luôn để ước lượng tuning.
+  // Giai đoạn 4: tách hoà âm / bộ gõ; các khung phổ hoà âm dùng luôn để ước lượng tuning.
   t0 = Clock::now();
   TuningEstimator tuner(signal.rate, cfg.hpss.fftSize);
   HpssOutput parts;
@@ -92,7 +103,7 @@ tc_result analyzeImpl(DecodedAudio& audio, const AnalysisConfig& cfg, AnalysisCo
   std::vector<float>().swap(signal.samples);
   out.tuningCents = tuner.estimate();
 
-  // Giai đoạn 4: CQT phần hoà âm (lưới bin dời theo tuning) → chroma bass/treble.
+  // Giai đoạn 5: CQT phần hoà âm (lưới bin dời theo tuning) → chroma bass/treble.
   t0 = Clock::now();
   CqtConfig cqtCfg = cfg.cqt;
   cqtCfg.tuningCents = out.tuningCents.value_or(0.0f);
@@ -104,7 +115,7 @@ tc_result analyzeImpl(DecodedAudio& audio, const AnalysisConfig& cfg, AnalysisCo
   out.timings.push_back({AnalysisStage::Spectrum, msSince(t0)});
   if (r != TC_OK) return r;
 
-  // Giai đoạn 5: tone toàn bài + timeline chuyển tone.
+  // Giai đoạn 6: tone toàn bài + timeline chuyển tone.
   t0 = Clock::now();
   ctl.report(AnalysisStage::Key, kSpectrumSpan.end);
   if (const auto key = estimateGlobalKey(out.chroma, cfg.key)) {
@@ -118,8 +129,19 @@ tc_result analyzeImpl(DecodedAudio& audio, const AnalysisConfig& cfg, AnalysisCo
   }
   out.timings.push_back({AnalysisStage::Key, msSince(t0)});
   if (ctl.cancelled()) return kResultCancelled;
+  std::vector<float>().swap(parts.harmonic);
 
-  // B6: BPM (parts.percussive); loudness.
+  // Giai đoạn 7: tempo từ phần bộ gõ.
+  t0 = Clock::now();
+  std::optional<TempoEstimate> tempo;
+  r = estimateTempo(parts.percussive, signal.rate, cfg.tempo,
+                    stageProgress(ctl, AnalysisStage::Tempo, kTempoSpan), tempo);
+  out.timings.push_back({AnalysisStage::Tempo, msSince(t0)});
+  if (r != TC_OK) return r;
+  if (tempo) {
+    out.bpm = tempo->bpm;
+    out.bpmConfidence = tempo->confidence;
+  }
 
   ctl.report(AnalysisStage::Done, 1.0f);
   return TC_OK;

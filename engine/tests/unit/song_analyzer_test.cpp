@@ -135,11 +135,12 @@ TEST(SongAnalyzer, AnalyzeDecodedFillsBasicInfo) {
   EXPECT_EQ(ctl.stage(), AnalysisStage::Done);
   EXPECT_FLOAT_EQ(ctl.progress(), 1.0f);
   ASSERT_FALSE(a.timings.empty());
-  EXPECT_EQ(a.timings.back().stage, AnalysisStage::Key);
+  EXPECT_EQ(a.timings.back().stage, AnalysisStage::Tempo);
   // Sin 220 Hz đơn lẻ: dưới dải đỉnh dùng để đo tuning (400–3000 Hz) → không có tuning.
   EXPECT_FALSE(a.tuningCents.has_value());
   EXPECT_NEAR(static_cast<double>(a.chroma.frames()), 3.0 / a.chroma.frameSec, 1.0);
-  // Có tone thì timeline phủ kín bài (ở đây không có chuyển tone → 1 đoạn); chưa có BPM (B6).
+  // Có tone thì timeline phủ kín bài (ở đây không có chuyển tone → 1 đoạn). Bài 3 s ngắn hơn
+  // mức tối thiểu để dò BPM (5 s).
   if (a.key) {
     ASSERT_EQ(a.timeline.size(), 1u);
     EXPECT_EQ(a.timeline[0].key, *a.key);
@@ -262,7 +263,12 @@ TEST(SongAnalyzer, PipelineDetectsKeyWithDrumsAndDetune) {
     EXPECT_GT(a.keyConfidence, 0.3f);
     ASSERT_TRUE(a.tuningCents.has_value());
     EXPECT_NEAR(*a.tuningCents, -35.0f, 3.0f);
-    EXPECT_EQ(a.timings.back().stage, AnalysisStage::Key);
+    // Tiếng gõ mỗi 0,5 s → 120 BPM; có LUFS.
+    ASSERT_TRUE(a.bpm.has_value());
+    EXPECT_NEAR(*a.bpm, 120.0f, 1.2f);
+    ASSERT_TRUE(a.integratedLufs.has_value());
+    EXPECT_LT(*a.integratedLufs, 0.0f);
+    EXPECT_EQ(a.timings.back().stage, AnalysisStage::Tempo);
   }
 }
 

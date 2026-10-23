@@ -44,7 +44,8 @@ int usage() {
                "         --bass-weight 0.25  --frame-norm none|l1|max  --silence-db 40\n"
                "         --compression 100\n"
                "Timeline: --timeline on|off  --window-sec 6  --switch-prob 0.002\n"
-               "          --related-boost 10  --min-segment 12  --emission-temp 0.1\n");
+               "          --related-boost 10  --min-segment 12  --emission-temp 0.1\n"
+               "Tempo:    --tempo-prior 120  --tempo-octaves 1.4\n");
   return 2;
 }
 
@@ -59,6 +60,8 @@ const char* stageName(AnalysisStage s) {
   switch (s) {
     case AnalysisStage::Decoding:
       return "decode";
+    case AnalysisStage::Loudness:
+      return "loudness";
     case AnalysisStage::Resampling:
       return "resample";
     case AnalysisStage::Separating:
@@ -67,6 +70,8 @@ const char* stageName(AnalysisStage s) {
       return "cqt";
     case AnalysisStage::Key:
       return "key";
+    case AnalysisStage::Tempo:
+      return "tempo";
     case AnalysisStage::Idle:
     case AnalysisStage::Done:
       break;
@@ -287,6 +292,14 @@ bool parseConfigArg(int argc, char** argv, int& i, AnalysisConfig& cfg) {
   if (opt == "--emission-temp") {
     cfg.timeline.emissionTemperature = std::stof(val);
     return cfg.timeline.emissionTemperature > 0.0f;
+  }
+  if (opt == "--tempo-prior") {
+    cfg.tempo.priorBpm = std::stof(val);
+    return cfg.tempo.priorBpm >= 30.0f && cfg.tempo.priorBpm <= 300.0f;
+  }
+  if (opt == "--tempo-octaves") {
+    cfg.tempo.priorOctaves = std::stof(val);
+    return cfg.tempo.priorOctaves > 0.0f;
   }
   if (opt == "--compression") {
     cfg.chroma.compression = std::stof(val);

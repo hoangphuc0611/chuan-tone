@@ -1,4 +1,4 @@
-# Kết quả dò tone (M3)
+# Kết quả dò tone, BPM, loudness (M3)
 
 Chỉ tiêu M3 tính trên **bộ test 50 bài Việt** (CLAUDE.md mục 9) — chưa có dữ liệu, xem
 `tools/keytest/README.md` để chuẩn bị. Các số dưới đây trên bộ công khai, chỉ để so sánh cấu hình và
@@ -98,3 +98,36 @@ Tone toàn bài vẫn 0,706. Trên 19 bài bị chuyển giả, điểm timeline
 tone — các đoạn đó (funk/jazz) cục bộ thật sự nghiêng về tone khác: đã thử bắt đoạn khác tone phải
 thắng tone toàn bài một khoảng tối thiểu (0,03 / 0,06 điểm tương quan) — không giảm được bài nào nên
 bỏ. Tham số timeline chốt trên tập dev Việt có chuyển tone (B4).
+
+## BPM (B6, 2026-10-23)
+
+Onset (spectral flux trên log biên độ của phần bộ gõ sau HPSS) → tự tương quan + răng lược bội chu
+kỳ → prior log-Gauss 120 BPM, σ 1,4 quãng 8 (`engine/src/key/tempo.*`). Test tổng hợp: tiếng gõ
+90–140 BPM sai ≤ 1%; 60–180 BPM đúng trong một quãng 8 (×2 / ×½).
+
+GuitarSet (tempo theo lead sheet; guitar không có trống): **Acc1 58% / Acc2 83%**. Nhầm quãng 8 chia
+đều hai phía (×2: 50 bài, ×½: 36 bài) → tâm prior không lệch hẳn.
+
+| Prior | σ (quãng 8) | Acc1 | Acc2 |
+|---|---|---|---|
+| 100 | 0,8 | 58% | 76% |
+| 100 | 1,4 | 56% | 81% |
+| 120 | 0,8 | 70% | 80% |
+| **120** | **1,4** | **58%** | **83%** (mặc định) |
+| 140 | 0,8 | 61% | 84% |
+| 140 | 1,4 | 57% | 85% |
+
+Giữ mặc định của Ellis 2007: prior hẹp quanh 120 sẽ đẩy bolero (nhạc công đếm ~65) lên ~130. Prior
+theo thể loại chọn trên tập dev Việt (B4); chỉ tiêu đề xuất Acc2 ≥ 90%, Acc1 ≥ 75%.
+
+## Loudness (B6, 2026-10-23)
+
+ITU-R BS.1770-4 (`engine/src/key/loudness.*`): hệ số K-weighting tính lại được đúng bảng 48 kHz của
+chuẩn (sai < 1e-8); 5 ca test EBU Tech 3341 (sin 1 kHz stereo, có cổng tuyệt đối/tương đối) đều
+trong ±0,1 LU ở cả 48 kHz và 44,1 kHz. Beat mono tính như mono kép, file > 2 kênh chỉ đo 2 kênh đầu
+(đúng tín hiệu engine phát). Mức đích chuẩn hoá beat chốt ở M5.
+
+## Thời gian phân tích
+
+Bài tổng hợp 4 phút stereo 48 kHz, Mac M1, Release: **1,12 s** (giải mã 0,03 · LUFS 0,12 · hạ mẫu
+0,12 · HPSS 0,52 · CQT 0,15 · tone 0,001 · BPM 0,19). Ngân sách: ≤ 5 s trên iPhone 13 Pro (đo ở B9).

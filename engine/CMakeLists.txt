@@ -61,6 +61,8 @@ add_library(tonecore_core STATIC
   src/key/key_profiles.cpp
   src/key/key_detect.cpp
   src/key/key_timeline.cpp
+  src/key/loudness.cpp
+  src/key/tempo.cpp
   src/key/song_analyzer.cpp
 )
 

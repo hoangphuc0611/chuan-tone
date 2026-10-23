@@ -10,9 +10,9 @@
 namespace tonecore {
 
 // Phân tích offline cả bài: giải mã → mono ~11–12 kHz → HPSS + tuning → CQT → chroma → tone +
-// timeline chuyển tone → (B6) BPM, loudness. Chạy đồng bộ trên luồng gọi — luôn là luồng nền, KHÔNG
-// BAO GIỜ từ audio thread (có cấp phát, có I/O). Mỗi lần gọi dùng đối tượng riêng nên nhiều luồng
-// chạy song song được.
+// timeline chuyển tone; LUFS trên tín hiệu gốc; BPM từ phần bộ gõ. Chạy đồng bộ trên luồng gọi —
+// luôn là luồng nền, KHÔNG BAO GIỜ từ audio thread (có cấp phát, có I/O). Mỗi lần gọi dùng đối
+// tượng riêng nên nhiều luồng chạy song song được.
 //
 // Trả về TC_OK, kResultCancelled khi ctl.cancel() được gọi, hoặc mã lỗi của bộ giải mã.
 tc_result analyzeFile(const std::string& path, const AnalysisConfig& cfg, AnalysisControl& ctl,

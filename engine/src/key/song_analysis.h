@@ -11,20 +11,24 @@
 #include "key/hpss.h"
 #include "key/key_detect.h"
 #include "key/key_timeline.h"
+#include "key/loudness.h"
 #include "key/musical_key.h"
+#include "key/tempo.h"
 #include "tonecore/tonecore.h"
 
 namespace tonecore {
 
-// Các giai đoạn phân tích, theo thứ tự chạy. Sẽ thêm ở B6 (BPM, loudness).
+// Các giai đoạn phân tích, theo thứ tự chạy.
 enum class AnalysisStage : int32_t {
   Idle = 0,
   Decoding = 1,    // giải mã file bằng codec của hệ điều hành
-  Resampling = 2,  // trộn mono + đổi về tần số phân tích
-  Separating = 3,  // HPSS (tách hoà âm / bộ gõ) + ước lượng tuning
-  Spectrum = 4,    // CQT phần hoà âm → chroma
-  Key = 5,         // dò tone toàn bài + timeline chuyển tone
-  Done = 6
+  Loudness = 2,    // LUFS trên tín hiệu gốc (trước khi trộn mono)
+  Resampling = 3,  // trộn mono + đổi về tần số phân tích
+  Separating = 4,  // HPSS (tách hoà âm / bộ gõ) + ước lượng tuning
+  Spectrum = 5,    // CQT phần hoà âm → chroma
+  Key = 6,         // dò tone toàn bài + timeline chuyển tone
+  Tempo = 7,       // BPM từ phần bộ gõ
+  Done = 8
 };
 
 struct StageTiming {
@@ -64,6 +68,7 @@ struct AnalysisConfig {
   ChromaConfig chroma;
   KeyDetectConfig key;
   KeyTimelineConfig timeline;
+  TempoConfig tempo;
 };
 
 // Kênh trao đổi giữa luồng phân tích và luồng điều khiển (UI / C API): tiến độ, giai đoạn, huỷ.
