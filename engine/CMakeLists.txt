@@ -54,6 +54,10 @@ add_library(tonecore_core STATIC
   src/pitch/voice_pitch_node.cpp
   src/player/track.cpp
   src/player/beat_player.cpp
+  src/key/hpss.cpp
+  src/key/tuning.cpp
+  src/key/cqt.cpp
+  src/key/chroma.cpp
   src/key/song_analyzer.cpp
 )
 

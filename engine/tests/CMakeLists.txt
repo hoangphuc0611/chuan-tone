@@ -11,7 +11,7 @@ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
 # Tiện ích test dùng chung (giọng tổng hợp…) — cả test, bench và công cụ dùng được.
-add_library(tonecore_testutil STATIC util/synth_voice.cpp)
+add_library(tonecore_testutil STATIC util/synth_voice.cpp util/synth_music.cpp)
 target_include_directories(tonecore_testutil PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 tc_set_warnings(tonecore_testutil)
 target_compile_options(tonecore_testutil PRIVATE $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wno-double-promotion>)
@@ -33,6 +33,9 @@ add_executable(tonecore_tests
   unit/voice_pitch_node_test.cpp
   unit/rt_alloc_test.cpp
   unit/song_analyzer_test.cpp
+  unit/hpss_test.cpp
+  unit/cqt_test.cpp
+  unit/tuning_chroma_test.cpp
 )
 target_link_libraries(tonecore_tests PRIVATE tonecore_core tonecore_testutil GTest::gtest_main)
 tc_set_warnings(tonecore_tests)

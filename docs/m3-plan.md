@@ -11,7 +11,12 @@
   hạ mẫu, tiến độ/huỷ), `keylab analyze|batch`, `tools/keytest` (CSV, chấm MIREX kiểm chéo
   mir_eval, báo cáo, chặn chỉnh tham số trên test), hướng dẫn gán nhãn `tools/keytest/README.md`,
   job CI `keytest`.
-- [ ] B2 … B9
+- [x] **B2** (2026-10-22): HPSS cuốn chiếu (median trượt có sắp xếp), ước lượng tuning, CQT đa tốc
+  độ, chroma bass/treble; `keylab analyze --chroma out.csv`. Số đo (Mac M1, Release, bài tổng hợp
+  4 phút stereo 48 kHz): **tổng 0,8 s** (hạ mẫu 0,12 s, HPSS 0,52 s, CQT 0,14 s), RAM đỉnh 87 MB;
+  tuning đúng ±3 cent trên test tổng hợp (−45…+49 cent, cả khi có trống + nốt tắt dần); HPSS tách
+  hợp âm/tiếng gõ còn sai −12,9 / −16,1 dB.
+- [ ] B3 … B9
 
 ## Các điểm cần quyết (2026-10-22: duyệt theo đề nghị)
 
@@ -94,11 +99,14 @@ file ─ giải mã (codec HĐH, đã có) ─┬─ LUFS BS.1770-4 (tần số 
   mặt nạ mềm, ISTFT. Một bước dùng cho cả dò tone (bỏ trống) và BPM (bỏ hoà âm).
   Chạy cuốn chiếu theo khối, không giữ cả spectrogram trong RAM.
 - **CQT** (Schörkhuber & Klapuri 2010): kernel phổ thưa theo từng quãng 8 + hạ mẫu dần.
-  Dải ~E1 (41 Hz) – C7, 36 bin mỗi quãng 8 (3 bin mỗi nửa cung) để đo được tuning.
-- **Tuning** (Harte & Sandler 2005): gom năng lượng các đỉnh theo phần lẻ của bin, lấy trung bình vòng
-  (circular mean), ra độ lệch −50…+50 cent. Lượt CQT thứ hai dùng kernel đã dời theo tuning.
-- **Chroma**: 12 chiều, nén log, chuẩn hoá. Tách **bass** (≤ ~200 Hz) và **treble**, vì nốt bass
-  giúp phân biệt trưởng/thứ tương đối, chỗ ngũ cung và bolero hay nhầm nhất.
+  Dải E1 (41 Hz) – D#7 (2,5 kHz), 36 bin mỗi quãng 8 (3 bin mỗi nửa cung), khung đầu ra ~0,34 s.
+- **Tuning** (ý tưởng Harte & Sandler 2005): *B2 đổi cách làm* — lấy đỉnh phổ 400–3000 Hz ngay trên
+  các khung STFT hoà âm của HPSS (nội suy parabol, chính xác hơn CQT 3 bin/nửa cung), histogram vòng
+  1 cent, lấy **mode** chứ không lấy trung bình (hoạ âm bậc 5, 7 lệch −14, −31 cent kéo lệch trung
+  bình). Nhờ vậy chỉ cần **một** lượt CQT, kernel dời sẵn theo tuning.
+- **Chroma**: 12 chiều, mỗi nốt = tổng 3 bin CQT, nén log(1 + γE/E_ref) với E_ref = phân vị 95
+  công suất khung. Tách **bass** (≤ C3, giảm dần tới C4) và **treble**, vì nốt bass giúp phân
+  biệt trưởng/thứ tương đối, chỗ ngũ cung và bolero hay nhầm nhất. Chuẩn hoá theo khung để B3 chọn.
 - **Tone toàn bài**: tương quan với 24 profile xoay vòng. So các bộ profile Krumhansl-Kessler,
   Temperley, EDMA (Faraldo 2016), Albrecht-Shanahan (2013) cùng trọng số bass/treble, rồi
   **chọn trên tập dev**. Thêm một đặc trưng tuỳ chọn: chủ âm của hợp âm và nốt bass cuối bài

@@ -2,12 +2,14 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <thread>
 #include <vector>
 
 #include "test_util.h"
+#include "util/synth_music.h"
 
 using namespace tonecore;
 
@@ -133,11 +135,51 @@ TEST(SongAnalyzer, AnalyzeDecodedFillsBasicInfo) {
   EXPECT_EQ(ctl.stage(), AnalysisStage::Done);
   EXPECT_FLOAT_EQ(ctl.progress(), 1.0f);
   ASSERT_FALSE(a.timings.empty());
-  EXPECT_EQ(a.timings.back().stage, AnalysisStage::Resampling);
-  // Chưa có bước dò nào (B2–B6) → các kết quả còn trống.
+  EXPECT_EQ(a.timings.back().stage, AnalysisStage::Spectrum);
+  // Sin 220 Hz đơn lẻ: dưới dải đỉnh dùng để đo tuning (400–3000 Hz) → không có tuning.
+  EXPECT_FALSE(a.tuningCents.has_value());
+  EXPECT_NEAR(static_cast<double>(a.chroma.frames()), 3.0 / a.chroma.frameSec, 1.0);
+  // Chưa có bước dò tone / BPM (B3–B6) → các kết quả còn trống.
   EXPECT_FALSE(a.key.has_value());
   EXPECT_TRUE(a.timeline.empty());
   EXPECT_FALSE(a.bpm.has_value());
+}
+
+// Cả chuỗi trên nhạc tổng hợp: beat lệch +25 cent, hợp âm La thứ (bass A2) + trống →
+// tuning ±3 cent, chroma bass nổi La, treble nổi La – Đô – Mi.
+TEST(SongAnalyzer, PipelineEstimatesTuningAndChroma) {
+  const double rate = 48000.0;
+  std::vector<float> x(static_cast<std::size_t>(rate * 12), 0.0f);
+  test::NoteSpec spec;
+  spec.tuningCents = 25.0;
+  for (const int m : {45, 57, 60, 64, 69, 72}) test::addNote(x, rate, 0.0, 12.0, m, 0.06f, spec);
+  for (int i = 0; i < 24; ++i) test::addClick(x, rate, 0.5 * i, 0.4f, 50 + i);
+  std::vector<int16_t> pcm(x.size() * 2);
+  for (std::size_t i = 0; i < x.size(); ++i) {
+    pcm[2 * i] = pcm[2 * i + 1] = static_cast<int16_t>(std::lround(x[i] * 32767.0f));
+  }
+  AnalysisControl ctl;
+  SongAnalysis a;
+  ASSERT_EQ(analyzeDecoded(makeAudio(std::move(pcm), 48000, 2), AnalysisConfig{}, ctl, a), TC_OK);
+  ASSERT_TRUE(a.tuningCents.has_value());
+  EXPECT_NEAR(*a.tuningCents, 25.0f, 3.0f);
+  ASSERT_GT(a.chroma.frames(), 10u);
+  ChromaVector bass{};
+  ChromaVector treble{};
+  for (std::size_t i = 0; i < a.chroma.frames(); ++i) {
+    for (std::size_t pc = 0; pc < 12; ++pc) {
+      bass[pc] += a.chroma.bass[i][pc];
+      treble[pc] += a.chroma.treble[i][pc];
+    }
+  }
+  EXPECT_EQ(std::max_element(bass.begin(), bass.end()) - bass.begin(), 9);
+  std::vector<std::size_t> order(12);
+  for (std::size_t pc = 0; pc < 12; ++pc) order[pc] = pc;
+  std::sort(order.begin(), order.end(),
+            [&](std::size_t l, std::size_t r) { return treble[l] > treble[r]; });
+  std::vector<std::size_t> top(order.begin(), order.begin() + 3);
+  std::sort(top.begin(), top.end());
+  EXPECT_EQ(top, (std::vector<std::size_t>{0, 4, 9}));
 }
 
 TEST(SongAnalyzer, RejectsEmptyAudio) {

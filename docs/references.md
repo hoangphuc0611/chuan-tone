@@ -51,8 +51,12 @@ Mọi thuật toán trong ToneCore được viết từ các nguồn công khai 
 - D. Temperley, *Music and Probability*, MIT Press 2007.
 - Á. Faraldo et al., *Key Estimation in Electronic Dance Music*, ECIR 2016 — profile EDMA.
 - D. Fitzgerald, *Harmonic/Percussive Separation using Median Filtering*, DAFx 2010.
-- C. Schörkhuber, A. Klapuri, *Constant-Q transform toolbox for music processing*, SMC 2010.
-- C. Harte, M. Sandler, *Automatic chord identification using a quantised chromagram*, AES 2005 — ước lượng tuning.
+- C. Schörkhuber, A. Klapuri, *Constant-Q transform toolbox for music processing*, SMC 2010 — CQT theo từng quãng 8 + hạ mẫu ÷2 (`key/cqt.cpp`).
+- J. C. Brown, *Calculation of a constant Q spectral transform*, JASA 1991; J. C. Brown, M. S. Puckette, *An efficient algorithm for the calculation of a constant Q transform*, JASA 1992 — kernel phổ thưa.
+- J. B. Allen, L. R. Rabiner, *A unified approach to short-time Fourier analysis and synthesis*, Proc. IEEE 1977 — ISTFT overlap-add có cửa sổ (`key/hpss.cpp`).
+- C. Harte, M. Sandler, *Automatic chord identification using a quantised chromagram*, AES 2005 — ước lượng tuning (`key/tuning.cpp`, làm trên đỉnh STFT thay vì CQT).
+- J. O. Smith, X. Serra, *PARSHL: An Analysis/Synthesis Program for Non-Harmonic Sounds Based on a Sinusoidal Representation*, ICMC 1987 — nội suy parabol đỉnh phổ (QIFFT).
+- M. Müller, *Fundamentals of Music Processing*, Springer 2015 (bản 2, 2021), mục 3.1 — chroma, nén log.
 - J. P. Bello et al., *A Tutorial on Onset Detection in Music Signals*, IEEE TSAP 2005.
 - G. Percival, G. Tzanetakis, *Streamlined Tempo Estimation Based on Autocorrelation and Cross-correlation With Pulses*, IEEE/ACM TASLP 2014.
 - D. Ellis, *Beat Tracking by Dynamic Programming*, JNMR 2007.

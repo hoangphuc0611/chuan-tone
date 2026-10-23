@@ -6,6 +6,7 @@
 #include <cstddef>
 
 #include "dsp/decimator.h"
+#include "key/tuning.h"
 
 namespace tonecore {
 
@@ -17,15 +18,25 @@ double msSince(Clock::time_point t0) {
   return std::chrono::duration<double, std::milli>(Clock::now() - t0).count();
 }
 
-// Khoảng tiến độ tổng của từng giai đoạn. Chỉnh lại theo thời gian đo thật khi thêm các bước
-// B2–B6 (mục tiêu: thanh tiến độ chạy đều).
+// Khoảng tiến độ tổng của từng giai đoạn, theo thời gian đo trên bài thật (Mac M1, B2). Chỉnh
+// lại khi thêm các bước B3–B6 (mục tiêu: thanh tiến độ chạy đều).
 struct ProgressSpan {
   float begin;
   float end;
   float at(float fraction) const noexcept { return begin + (end - begin) * fraction; }
 };
-constexpr ProgressSpan kDecodeSpan{0.0f, 0.3f};
-constexpr ProgressSpan kResampleSpan{0.3f, 1.0f};
+constexpr ProgressSpan kDecodeSpan{0.0f, 0.10f};
+constexpr ProgressSpan kResampleSpan{0.10f, 0.15f};
+constexpr ProgressSpan kSeparateSpan{0.15f, 0.70f};
+constexpr ProgressSpan kSpectrumSpan{0.70f, 1.0f};
+
+ProgressFn stageProgress(AnalysisControl& ctl, AnalysisStage stage, ProgressSpan span) {
+  ctl.report(stage, span.begin);
+  return [&ctl, stage, span](float p) {
+    ctl.report(stage, span.at(p));
+    return !ctl.cancelled();
+  };
+}
 
 // Trộn các kênh về mono ngay trong buffer interleaved: mẫu mono i ghi vào vị trí i ≤ i·ch nên
 // không đè lên dữ liệu chưa đọc.
@@ -60,20 +71,40 @@ tc_result analyzeImpl(DecodedAudio& audio, const AnalysisConfig& cfg, AnalysisCo
 
   // Giai đoạn 2: tín hiệu phân tích mono.
   auto t0 = Clock::now();
-  ctl.report(AnalysisStage::Resampling, kResampleSpan.begin);
   AnalysisSignal signal;
-  const tc_result r = prepareAnalysisSignal(
-      audio, cfg.targetAnalysisRate,
-      [&ctl](float p) {
-        ctl.report(AnalysisStage::Resampling, kResampleSpan.at(p));
-        return !ctl.cancelled();
-      },
-      signal);
+  tc_result r =
+      prepareAnalysisSignal(audio, cfg.targetAnalysisRate,
+                            stageProgress(ctl, AnalysisStage::Resampling, kResampleSpan), signal);
   out.timings.push_back({AnalysisStage::Resampling, msSince(t0)});
   if (r != TC_OK) return r;
   out.analysisRate = signal.rate;
 
-  // B2–B6: HPSS → CQT/tuning/chroma → tone + timeline; onset → BPM; loudness.
+  // Giai đoạn 3: tách hoà âm / bộ gõ; các khung phổ hoà âm dùng luôn để ước lượng tuning.
+  t0 = Clock::now();
+  TuningEstimator tuner(signal.rate, cfg.hpss.fftSize);
+  HpssOutput parts;
+  r = separateHarmonicPercussive(
+      signal.samples, signal.rate, cfg.hpss,
+      [&tuner](const float* mag, std::size_t bins, double) { tuner.addFrame(mag, bins); },
+      stageProgress(ctl, AnalysisStage::Separating, kSeparateSpan), parts);
+  out.timings.push_back({AnalysisStage::Separating, msSince(t0)});
+  if (r != TC_OK) return r;
+  std::vector<float>().swap(signal.samples);
+  out.tuningCents = tuner.estimate();
+
+  // Giai đoạn 4: CQT phần hoà âm (lưới bin dời theo tuning) → chroma bass/treble.
+  t0 = Clock::now();
+  CqtConfig cqtCfg = cfg.cqt;
+  cqtCfg.tuningCents = out.tuningCents.value_or(0.0f);
+  CqtSpectrogram cqt;
+  r = computeCqt(parts.harmonic, signal.rate, cqtCfg,
+                 stageProgress(ctl, AnalysisStage::Spectrum, kSpectrumSpan), cqt);
+  if (r == TC_ERR_INVALID_ARG) r = TC_ERR_NOT_SUPPORTED;  // tần số lấy mẫu quá thấp
+  if (r == TC_OK) out.chroma = computeChroma(cqt, cfg.chroma);
+  out.timings.push_back({AnalysisStage::Spectrum, msSince(t0)});
+  if (r != TC_OK) return r;
+
+  // B3–B6: tone toàn bài + timeline (chroma); BPM (parts.percussive); loudness.
 
   ctl.report(AnalysisStage::Done, 1.0f);
   return TC_OK;

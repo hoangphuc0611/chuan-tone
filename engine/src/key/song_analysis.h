@@ -5,12 +5,13 @@
 #include <optional>
 #include <vector>
 
+#include "key/analysis_common.h"
+#include "key/chroma.h"
+#include "key/cqt.h"
+#include "key/hpss.h"
 #include "tonecore/tonecore.h"
 
 namespace tonecore {
-
-// Mã lỗi khi phân tích bị huỷ giữa chừng. Sẽ thành TC_ERR_CANCELLED trong C API 0.4 (M3 bước B7).
-inline constexpr tc_result kResultCancelled = -7;
 
 enum class KeyMode : int32_t { Major = 0, Minor = 1 };
 
@@ -27,12 +28,14 @@ struct KeySegment {
   float confidence = 0.0f;  // 0..1
 };
 
-// Các giai đoạn phân tích, theo thứ tự chạy. Sẽ thêm dần ở B2–B6 (HPSS, tone, BPM, loudness).
+// Các giai đoạn phân tích, theo thứ tự chạy. Sẽ thêm dần ở B3–B6 (tone, BPM, loudness).
 enum class AnalysisStage : int32_t {
   Idle = 0,
   Decoding = 1,    // giải mã file bằng codec của hệ điều hành
   Resampling = 2,  // trộn mono + đổi về tần số phân tích
-  Done = 3
+  Separating = 3,  // HPSS (tách hoà âm / bộ gõ) + ước lượng tuning
+  Spectrum = 4,    // CQT phần hoà âm → chroma
+  Done = 5
 };
 
 struct StageTiming {
@@ -53,6 +56,7 @@ struct SongAnalysis {
   std::vector<KeySegment> timeline;  // theo dõi chuyển tone; rỗng nếu chưa dò
 
   std::optional<float> tuningCents;  // độ lệch so với La = 440 Hz, −50…+50
+  Chromagram chroma;                 // chroma bass/treble của phần hoà âm (đầu vào dò tone)
   std::optional<float> bpm;
   float bpmConfidence = 0.0f;
   std::optional<float> integratedLufs;  // ITU-R BS.1770-4
@@ -66,6 +70,9 @@ struct AnalysisConfig {
   // 48 kHz. Tần số thực = tần số gốc / round(gốc / mong muốn) (48 kHz → 12 kHz,
   // 44,1 kHz → 11025 Hz) để hạ mẫu bằng hệ số nguyên — rẻ hơn ~10 lần so với resample tỉ lệ lẻ.
   double targetAnalysisRate = 11025.0;
+  HpssConfig hpss;
+  CqtConfig cqt;  // tuningCents bị ghi đè bằng tuning ước lượng được
+  ChromaConfig chroma;
 };
 
 // Kênh trao đổi giữa luồng phân tích và luồng điều khiển (UI / C API): tiến độ, giai đoạn, huỷ.

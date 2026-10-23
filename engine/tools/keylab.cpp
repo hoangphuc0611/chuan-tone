@@ -1,6 +1,9 @@
 // keylab — công cụ thử dò tone / BPM / loudness trên file audio (chạy trên Mac/Linux).
 //
-//   keylab analyze <file> [--rate 11025]          → 1 dòng JSON kết quả phân tích
+//   keylab analyze <file> [--rate 11025] [--chroma out.csv]
+//                                                 → 1 dòng JSON kết quả phân tích; --chroma ghi
+//                                                   chroma từng khung (time, energy_db, bass_*,
+//                                                   treble_*) để xem bằng bảng tính / matplotlib
 //   keylab batch [-j N] [--rate 11025] < danh_sach → JSONL, mỗi dòng một bài (thứ tự xong trước
 //                                                    in trước; trường "file" giữ nguyên đường dẫn)
 //
@@ -35,7 +38,7 @@ namespace {
 int usage() {
   std::fprintf(stderr,
                "Cách dùng:\n"
-               "  keylab analyze <file> [--rate 11025]\n"
+               "  keylab analyze <file> [--rate 11025] [--chroma out.csv]\n"
                "  keylab batch [-j N] [--rate 11025] < danh_sach_file.txt\n");
   return 2;
 }
@@ -53,6 +56,10 @@ const char* stageName(AnalysisStage s) {
       return "decode";
     case AnalysisStage::Resampling:
       return "resample";
+    case AnalysisStage::Separating:
+      return "hpss";
+    case AnalysisStage::Spectrum:
+      return "cqt";
     case AnalysisStage::Idle:
     case AnalysisStage::Done:
       break;
@@ -184,13 +191,35 @@ std::string toJson(const std::string& file, tc_result r, const SongAnalysis& a, 
   return o;
 }
 
-std::string analyzeToJson(const std::string& file, const AnalysisConfig& cfg) {
+bool writeChromaCsv(const std::string& path, const Chromagram& ch) {
+  FILE* f = std::fopen(path.c_str(), "w");
+  if (f == nullptr) return false;
+  std::fputs("time,energy_db", f);
+  for (const char* prefix : {"bass", "treble"}) {
+    for (const char* name : kRootNames) std::fprintf(f, ",%s_%s", prefix, name);
+  }
+  std::fputc('\n', f);
+  for (std::size_t i = 0; i < ch.frames(); ++i) {
+    std::fprintf(f, "%.3f,%.2f", static_cast<double>(i) * ch.frameSec,
+                 static_cast<double>(ch.energyDb[i]));
+    for (const float v : ch.bass[i]) std::fprintf(f, ",%.4f", static_cast<double>(v));
+    for (const float v : ch.treble[i]) std::fprintf(f, ",%.4f", static_cast<double>(v));
+    std::fputc('\n', f);
+  }
+  return std::fclose(f) == 0;
+}
+
+std::string analyzeToJson(const std::string& file, const AnalysisConfig& cfg,
+                          const std::string& chromaCsv = {}) {
   const auto t0 = std::chrono::steady_clock::now();
   AnalysisControl ctl;
   SongAnalysis a;
   const tc_result r = analyzeFile(file, cfg, ctl, a);
   const double ms =
       std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+  if (r == TC_OK && !chromaCsv.empty() && !writeChromaCsv(chromaCsv, a.chroma)) {
+    std::fprintf(stderr, "Không ghi được %s\n", chromaCsv.c_str());
+  }
   return toJson(file, r, a, ms);
 }
 
@@ -206,10 +235,15 @@ bool parseConfigArg(int argc, char** argv, int& i, AnalysisConfig& cfg) {
 int cmdAnalyze(int argc, char** argv) {
   if (argc < 3) return usage();
   AnalysisConfig cfg;
+  std::string chromaCsv;
   for (int i = 3; i < argc; ++i) {
-    if (!parseConfigArg(argc, argv, i, cfg)) return usage();
+    if (std::strcmp(argv[i], "--chroma") == 0 && i + 1 < argc) {
+      chromaCsv = argv[++i];
+    } else if (!parseConfigArg(argc, argv, i, cfg)) {
+      return usage();
+    }
   }
-  const std::string json = analyzeToJson(argv[2], cfg);
+  const std::string json = analyzeToJson(argv[2], cfg, chromaCsv);
   std::printf("%s\n", json.c_str());
   return json.find("\"status\":\"ok\"") != std::string::npos ? 0 : 1;
 }
