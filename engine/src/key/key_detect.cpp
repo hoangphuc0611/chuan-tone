@@ -149,6 +149,7 @@ std::optional<KeyEstimate> estimateGlobalKey(const Chromagram& ch, const KeyDete
     return std::nullopt;
   }
   KeyScores scores = scoreKeys(bass, treble, *profile, cfg.bassWeight);
+  for (std::size_t i = 12; i < 24; ++i) scores[i] += cfg.minorBias;
   if (cfg.endWeight > 0.0f) {
     const int tonic = endingBassPitchClass(ch, voiced, cfg.endSec);
     if (tonic >= 0) {

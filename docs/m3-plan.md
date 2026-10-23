@@ -48,7 +48,11 @@
   (chọn tay thì tắt), tone đang áp dụng to và đổi ngay theo sự kiện; kết quả lưu
   `analysis_cache.json` (khoá tên + kích thước file + phiên bản engine) — 16 test app. Build iOS
   qua CI `ios-ipa` (máy dev chưa có Xcode).
-- [~] **B4 — công cụ đã sẵn, chờ dữ liệu** (2026-10-23): `prelabel.py` (bảng gán nhãn có gợi ý
+- [~] **B4 — dữ liệu Việt có từ 2026-10-23**: tập dev 32 bài + tập test 50 bài (nhãn từ tiêu đề video
+  karaoke, độc lập với ToneCore; 14 bài dev chỉ có gợi ý máy → `dev-pending.csv` chờ người nghe).
+  Dev: 0,709 → **0,741** (gợi ý chủ âm cuối bài 0,05, mặc định mới); prior giọng thứ +1 bài, không
+  bật. **Chạm mốc kiểm dev < 0,80** → chờ chủ dự án chọn hướng (docs/key-results.md).
+- [x] Công cụ B4 (2026-10-23): `prelabel.py` (bảng gán nhãn có gợi ý
   của máy cho dev, bảng trống gán mù cho test, cột `da_kiem`), `train_profile.py` (học profile
   treble + bass từ dữ liệu, kiểm chéo k-fold) + `keylab --profile-file`, gợi ý chủ âm cuối bài
   (`--end-weight`, mặc định tắt). Thử trên GuitarSet: profile học 0,688 (CV) so với 0,706; gợi ý

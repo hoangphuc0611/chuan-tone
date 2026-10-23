@@ -53,6 +53,18 @@ Cột khác (vd. `artist`) được bỏ qua.
    khoảng 60–75. Bỏ trống nếu không chắc.
 6. Ghi tên tone kiểu nào cũng được (`C#` hay `Db`), keytest tự hiểu.
 
+### Nhãn lấy từ tiêu đề video karaoke
+
+Nhiều kênh karaoke (vd. Trọng Hiếu, Nhan KTV) ghi tone của beat ngay trong tiêu đề: "Tone Nam ( Cm )",
+"Tone Nữ ( Am )". Đó là tone do người làm beat ghi — độc lập với thuật toán của ToneCore — nên dùng
+làm đáp án được. Các dòng như vậy có `nguon_nhan = tieu-de` và cột `tieu_de`, `url` để đối chiếu.
+
+- Chỉ là **tone chính** (không có mốc chuyển tone) → bài này được chấm theo tone toàn bài.
+- Có thể sai (kênh gõ nhầm, ghi tone bản gốc thay vì beat) → người biết nhạc nghe kiểm ngẫu nhiên
+  10–20 bài của bộ test; sai nhiều thì phải gán lại.
+- Bài **không** có tone trong tiêu đề: chỉ có gợi ý của máy → để riêng (`dev-pending.csv`), người
+  nghe xác nhận xong mới đưa vào `dev.csv`. Không bao giờ chấm điểm bằng nhãn do chính máy gợi ý.
+
 ### Gán nhãn nhanh hơn với gợi ý của máy
 
 ```sh

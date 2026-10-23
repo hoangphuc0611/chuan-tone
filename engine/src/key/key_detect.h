@@ -21,7 +21,9 @@ namespace tonecore {
 //       điểm = (1 − w)·r_treble + w·r_bass,   w = bassWeight.
 //  (Tuỳ chọn) Gợi ý chủ âm cuối bài: nốt bass nổi nhất trong `endSec` giây có tiếng cuối cùng
 //     thường là chủ âm (bài kết về chủ âm) → cộng `endWeight` vào điểm hai tone có chủ âm đó.
-//     Mặc định tắt; chỉ bật nếu tăng điểm trên tập dev (M3 bước B4).
+//     Trọng số nhỏ (mặc định 0,05) — chọn ở M3 bước B4.
+//  (Tuỳ chọn) Prior giọng thứ: cộng `minorBias` vào điểm các tone thứ — nhạc Việt (bolero, ballad)
+//     phần lớn ở giọng thứ, lỗi hay gặp là đoán nhầm sang trưởng tương đối.
 //  4. Tone điểm cao nhất thắng. Độ tin cậy = (mức áp đảo các tone khác) × (độ rõ tone):
 //       p = exp(0) / Σ_j exp((s_j − s_max)/T)            softmax, nhiệt độ T
 //       c = clamp((s_max − rMin) / (rFull − rMin), 0, 1)  tương quan thấp = không rõ tone
@@ -44,7 +46,10 @@ struct KeyDetectConfig {
   float temperature = 0.02f;
   float clarityMin = 0.3f;   // rMin
   float clarityFull = 0.7f;  // rFull
-  float endWeight = 0.0f;    // gợi ý chủ âm cuối bài; 0 = tắt
+  // Gợi ý chủ âm cuối bài: 0,05 tăng điểm trên cả GuitarSet (0,706 → 0,718) lẫn dev nhạc Việt
+  // (0,709 → 0,741); trọng số lớn hơn thì giảm (docs/key-results.md). 0 = tắt.
+  float endWeight = 0.05f;
+  float minorBias = 0.0f;  // cộng vào điểm 12 tone thứ (prior giọng thứ); 0 = tắt
   float endSec = 10.0f;
   // Profile nạp từ file (loadKeyProfileFile); có thì dùng thay cho `profile`.
   std::optional<KeyProfile> customProfile;

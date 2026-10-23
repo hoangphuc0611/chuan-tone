@@ -34,9 +34,16 @@ Tải bằng `tools/pitch/fetch_datasets.sh` / `tools/keytest/fetch_guitarset.sh
 |---|---|---|---|
 | vocadito v3 (zenodo.org/records/5578807) | CC BY 4.0 | R. M. Bittner, K. Pasalo, J. J. Bosch, G. Meseguer-Brocal, D. Rubinstein, *vocadito: A dataset of solo vocals with f0, note, and lyric annotations*, arXiv:2110.05580, 2021 | Chấm điểm dò cao độ (`tools/pitch/eval_f0.py`, CI) |
 | GuitarSet 1.1.0 (zenodo.org/records/3371780) — chỉ `annotation.zip` + `audio_mono-mic.zip`, tải bằng `tools/keytest/fetch_guitarset.sh` | CC BY 4.0 (đã kiểm trên Zenodo 2026-10-23) | Q. Xi, R. M. Bittner, J. Pauwels, X. Ye, J. P. Bello, *GuitarSet: A Dataset for Guitar Transcription*, ISMIR 2018 | Kiểm tra sơ bộ dò tone / BPM (guitar solo, không phải nhạc Việt) |
+| Bộ beat karaoke Việt (`testdata/vn-key/`, từ 2026-10-23) — tải từ YouTube, nguồn từng bài ở cột `url` của `dev.csv` / `test.csv` | Quyền sử dụng: chủ dự án xác nhận đã xử lý bản quyền (2026-10-23). Chỉ dùng nội bộ để kiểm thử — không commit, không lên CI, không đóng gói vào app | Kênh karaoke ghi ở cột `tieu_de` | Chỉnh và chấm dò tone (M3 B4 / B9) |
 | VocalSet 1.2 (zenodo.org/records/1442513) | CC BY 4.0 | J. Wilkins, P. Seetharaman, A. Wahl, B. Pardo, *VocalSet: A Singing Voice Dataset*, ISMIR 2018 | Thử giọng nam trầm, rung giọng, nghe A/B (chỉ máy dev, tải thủ công) |
 
 Không dùng các bộ chỉ cho phép phi thương mại / nghiên cứu: MIR-1K, MDB-stem-synth, M4Singer, Opencpop, NUS-48E, GTSinger.
+
+## Công cụ ngoài (không nằm trong repo, không ship)
+
+| Công cụ | License | Dùng để |
+|---|---|---|
+| yt-dlp (Homebrew) | Unlicense | Tải audio cho bộ dữ liệu kiểm thử trên máy dev (script để ngoài repo; app không có tính năng tải từ YouTube — CLAUDE.md mục 8) |
 
 ## Dự kiến (chưa thêm)
 

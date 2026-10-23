@@ -1,8 +1,29 @@
 # Kết quả dò tone, BPM, loudness (M3)
 
-Chỉ tiêu M3 tính trên **bộ test 50 bài Việt** (CLAUDE.md mục 9) — chưa có dữ liệu, xem
-`tools/keytest/README.md` để chuẩn bị. Các số dưới đây trên bộ công khai, chỉ để so sánh cấu hình và
-chặn hồi quy.
+Chỉ tiêu M3 tính trên **bộ test 50 bài Việt** (CLAUDE.md mục 9). Bộ test đã có (2026-10-23) nhưng
+**chưa chấm** — để dành cho lần chấm cuối (B9). Số trên nhạc Việt dưới đây là tập dev.
+
+## Nhạc Việt — tập dev (B4, 2026-10-23)
+
+32 beat karaoke (bolero 21, ballad 6, nhạc trẻ 4, dân ca 1; 21 thứ / 11 trưởng), nhãn = tone kênh
+karaoke ghi trong tiêu đề (vd. "Tone Nam ( Cm )") — độc lập với ToneCore, chỉ có tone chính.
+Nguồn và cách lấy nhãn: `tools/keytest/README.md`, `docs/licenses.md`.
+
+| Cấu hình | MIREX dev | Ghi chú |
+|---|---|---|
+| Mặc định B3 (temperley-kp, bass 0,25, L1) | 0,709 | bolero 0,79 · ballad 0,60 · nhạc trẻ 0,375 |
+| **+ gợi ý chủ âm cuối bài 0,05 (mặc định mới)** | **0,741** | cũng tăng trên GuitarSet (0,706 → 0,712) |
+| + prior giọng thứ 0,02–0,08 | 0,762 | chỉ thêm 1 bài, GuitarSet giảm nhẹ → không bật |
+| kk / temperley 1999 / diatonic (tốt nhất mỗi loại) | 0,713 / 0,619 / 0,622 | quét 36 cấu hình |
+
+Mỗi bài ≈ 0,031 điểm → mọi chênh lệch dưới ~0,06 là trong mức nhiễu của 32 bài.
+Lỗi còn lại (cấu hình mặc định mới): **4 bài thứ bị đoán thành trưởng tương đối** (Cm→Eb, G#m→B,
+Bm→D, Gm→Bb), 2 lệch quãng 5, 3 "sai" — trong đó Hoa Trinh Nữ (nhãn G, máy F#) và Đêm Buồn Tỉnh Lẻ
+(nhãn Eb, máy C#m) có tuning ~0 cent nên nghi nhãn tiêu đề sai → cần người nghe kiểm.
+Timeline: 19/32 bài bị đoán có chuyển tone; nhãn tiêu đề không có mốc chuyển tone nên chưa phân
+biệt được chuyển tone thật (bolero lên trưởng ở điệp khúc) với chuyển giả.
+
+**Mốc kiểm B4 (dev < 0,80) đã chạm** → báo chủ dự án chọn hướng (docs/m3-plan.md, rủi ro 2).
 
 Chạy lại: `tools/keytest/fetch_guitarset.sh && python3 tools/keytest/keytest.py run --csv testdata/GuitarSet/guitarset.csv`
 
