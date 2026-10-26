@@ -24,6 +24,10 @@ namespace tonecore {
 //     Trọng số nhỏ (mặc định 0,05) — chọn ở M3 bước B4.
 //  (Tuỳ chọn) Prior giọng thứ: cộng `minorBias` vào điểm các tone thứ — nhạc Việt (bolero, ballad)
 //     phần lớn ở giọng thứ, lỗi hay gặp là đoán nhầm sang trưởng tương đối.
+//  (Tuỳ chọn) Phân xử tone tương đối bằng bass: nhạc Việt giọng thứ hay dùng thứ tự nhiên / ngũ
+//     cung (♭7 mạnh, không có nốt cảm) → chroma treble gần như trùng với trưởng tương đối
+//     (Gm ↔ Bb). Nếu tone thắng và tone tương đối của nó chênh điểm < `relativeMargin`, chọn tone
+//     có nốt bass ở chủ âm mạnh hơn (chủ âm là "nhà" của bass).
 //  4. Tone điểm cao nhất thắng. Độ tin cậy = (mức áp đảo các tone khác) × (độ rõ tone):
 //       p = exp(0) / Σ_j exp((s_j − s_max)/T)            softmax, nhiệt độ T
 //       c = clamp((s_max − rMin) / (rFull − rMin), 0, 1)  tương quan thấp = không rõ tone
@@ -35,10 +39,11 @@ enum class ChromaFrameNorm : int32_t {
   Max = 2    // mỗi khung chia cho giá trị lớn nhất
 };
 
-// Mặc định tạm (B3): tốt nhất khi quét 4 profile × bass {0; 0,25; 0,5} × chuẩn hoá {none, l1}
-// trên GuitarSet (0,706 so với 0,608 của kk/none). Chọn lại trên tập dev nhạc Việt ở B4.
+// Mặc định (B4, 2026-10-26): profile "vn-karaoke" học từ 50 beat karaoke Việt (kiểm chéo 5 phần
+// 0,790 so với temperley-kp 0,758), bass 0,25, chuẩn hoá L1, gợi ý chủ âm cuối bài 0,05.
+// Chi tiết và các cấu hình đã thử: docs/key-results.md.
 struct KeyDetectConfig {
-  std::string profile = "temperley-kp";
+  std::string profile = "vn-karaoke";
   float bassWeight = 0.25f;
   ChromaFrameNorm frameNorm = ChromaFrameNorm::L1;
   float silenceDb = 40.0f;
@@ -49,7 +54,8 @@ struct KeyDetectConfig {
   // Gợi ý chủ âm cuối bài: 0,05 tăng điểm trên cả GuitarSet (0,706 → 0,718) lẫn dev nhạc Việt
   // (0,709 → 0,741); trọng số lớn hơn thì giảm (docs/key-results.md). 0 = tắt.
   float endWeight = 0.05f;
-  float minorBias = 0.0f;  // cộng vào điểm 12 tone thứ (prior giọng thứ); 0 = tắt
+  float minorBias = 0.0f;       // cộng vào điểm 12 tone thứ (prior giọng thứ); 0 = tắt
+  float relativeMargin = 0.0f;  // phân xử tone tương đối bằng bass; 0 = tắt
   float endSec = 10.0f;
   // Profile nạp từ file (loadKeyProfileFile); có thì dùng thay cho `profile`.
   std::optional<KeyProfile> customProfile;
@@ -84,6 +90,10 @@ std::vector<uint8_t> voicedFrames(const Chromagram& ch, float silenceDb);
 std::size_t accumulateChroma(const Chromagram& ch, const std::vector<uint8_t>& voiced,
                              std::size_t from, std::size_t to, ChromaFrameNorm norm,
                              ChromaVector& bass, ChromaVector& treble);
+
+// Nếu tone điểm cao nhất và tone tương đối của nó chênh < margin: đổi sang tone có nốt bass ở chủ
+// âm mạnh hơn (sửa `scores` tại chỗ để pickKey chọn tone đó).
+void resolveRelativeByBass(KeyScores& scores, const ChromaVector& bass, float margin);
 
 // Tone + độ tin cậy từ điểm 24 tone.
 KeyEstimate pickKey(const KeyScores& scores, const KeyDetectConfig& cfg);

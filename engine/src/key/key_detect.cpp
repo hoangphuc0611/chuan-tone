@@ -102,6 +102,22 @@ std::size_t accumulateChroma(const Chromagram& ch, const std::vector<uint8_t>& v
   return used;
 }
 
+void resolveRelativeByBass(KeyScores& scores, const ChromaVector& bass, float margin) {
+  if (!(margin > 0.0f)) return;
+  const auto best =
+      static_cast<int>(std::max_element(scores.begin(), scores.end()) - scores.begin());
+  const MusicalKey k = keyFromIndex(best);
+  // Tương đối: Đô trưởng ↔ La thứ (chủ âm thứ = chủ âm trưởng + 9).
+  const MusicalKey rel = k.mode == KeyMode::Major ? MusicalKey{(k.root + 9) % 12, KeyMode::Minor}
+                                                  : MusicalKey{(k.root + 3) % 12, KeyMode::Major};
+  const auto bi = static_cast<std::size_t>(best);
+  const auto ri = static_cast<std::size_t>(keyIndex(rel));
+  if (scores[bi] - scores[ri] >= margin) return;
+  if (bass[static_cast<std::size_t>(rel.root)] > bass[static_cast<std::size_t>(k.root)]) {
+    scores[ri] = scores[bi] + 1e-4f;
+  }
+}
+
 KeyEstimate pickKey(const KeyScores& scores, const KeyDetectConfig& cfg) {
   KeyEstimate est;
   est.scores = scores;
@@ -150,6 +166,7 @@ std::optional<KeyEstimate> estimateGlobalKey(const Chromagram& ch, const KeyDete
   }
   KeyScores scores = scoreKeys(bass, treble, *profile, cfg.bassWeight);
   for (std::size_t i = 12; i < 24; ++i) scores[i] += cfg.minorBias;
+  resolveRelativeByBass(scores, bass, cfg.relativeMargin);
   if (cfg.endWeight > 0.0f) {
     const int tonic = endingBassPitchClass(ch, voiced, cfg.endSec);
     if (tonic >= 0) {

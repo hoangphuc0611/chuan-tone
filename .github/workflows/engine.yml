@@ -106,8 +106,10 @@ jobs:
       - name: Kiểm tra CSV mẫu
         run: python tools/keytest/validate_csv.py tools/keytest/example.csv --no-check-files
 
-  # Chấm dò tone trên GuitarSet (CC BY 4.0, ~700 MB, cache theo MD5 trong script) để chặn hồi quy.
-  # Không phải chỉ tiêu M3 (chỉ tiêu tính trên bộ bài Việt, chỉ chạy trên máy dev).
+  # Chấm dò tone trên GuitarSet (CC BY 4.0, ~700 MB, cache theo MD5 trong script) để chặn hồi quy
+  # cả chuỗi phân tích trên dữ liệu công khai. Ghim profile temperley-kp: profile mặc định
+  # "vn-karaoke" học riêng cho nhạc Việt (GuitarSet 0,642). Không phải chỉ tiêu M3 (chỉ tiêu tính
+  # trên bộ bài Việt, chỉ chạy trên máy dev).
   key-eval:
     runs-on: ubuntu-24.04
     env:
@@ -128,7 +130,7 @@ jobs:
           cmake -S . -B build/rel -G Ninja -DCMAKE_BUILD_TYPE=Release -DTC_BUILD_TESTS=OFF
           cmake --build build/rel --target keylab
       - name: Chấm điểm (MIREX ≥ 0.68)
-        run: python3 tools/keytest/keytest.py run --csv testdata/GuitarSet/guitarset.csv --min-score 0.68 --out key-eval.md
+        run: python3 tools/keytest/keytest.py run --csv testdata/GuitarSet/guitarset.csv --min-score 0.68 --out key-eval.md -- --profile temperley-kp
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: key-eval, path: key-eval.md }

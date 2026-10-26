@@ -41,22 +41,27 @@ TEST(KeyDetect, ProfileRotationSelfConsistent) {
     for (int i = 0; i < 24; ++i) {
       const MusicalKey k = keyFromIndex(i);
       const auto& base = k.mode == KeyMode::Minor ? p.minor : p.major;
+      const auto& bassOpt = k.mode == KeyMode::Minor ? p.bassMinor : p.bassMajor;
+      const auto& bassBase = bassOpt ? *bassOpt : base;
       ChromaVector v{};
+      ChromaVector b{};
       for (int pc = 0; pc < 12; ++pc) {
-        v[static_cast<std::size_t>(pc)] = base[static_cast<std::size_t>((pc - k.root + 12) % 12)];
+        const auto deg = static_cast<std::size_t>((pc - k.root + 12) % 12);
+        v[static_cast<std::size_t>(pc)] = base[deg];
+        b[static_cast<std::size_t>(pc)] = bassBase[deg];
       }
-      const KeyEstimate est = pickKey(scoreKeys(v, v, p, 0.25f), KeyDetectConfig{});
+      const KeyEstimate est = pickKey(scoreKeys(b, v, p, 0.25f), KeyDetectConfig{});
       EXPECT_EQ(est.key, k) << p.name << " " << name(k) << " → " << name(est.key);
       EXPECT_NEAR(est.scores[static_cast<std::size_t>(i)], 1.0f, 1e-5f);
     }
   }
 }
 
-// Vòng hoà âm I–IV–V–I / i–iv–V–i ở cả 24 tone, voicing ngẫu nhiên: 3 profile chính đúng 24/24.
+// Vòng hoà âm I–IV–V–I / i–iv–V–i ở cả 24 tone, voicing ngẫu nhiên: mọi profile (trừ mốc so sánh
+// "diatonic") đúng 24/24.
 TEST(KeyDetect, CadencesInAll24Keys) {
-  int correct[4] = {0, 0, 0, 0};
   const auto& profiles = builtinKeyProfiles();
-  ASSERT_EQ(profiles.size(), 4u);
+  std::vector<int> correct(profiles.size(), 0);
   for (int i = 0; i < 24; ++i) {
     const MusicalKey truth = keyFromIndex(i);
     std::vector<float> x(static_cast<std::size_t>(kRate * 12.0), 0.0f);
@@ -193,4 +198,27 @@ TEST(KeyDetect, EndingTonicHint) {
   const auto hinted = estimateGlobalKey(ch, cfg);
   ASSERT_TRUE(hinted.has_value());
   EXPECT_EQ(hinted->key, (MusicalKey{9, KeyMode::Minor})) << name(hinted->key);
+}
+
+// Phân xử tương đối bằng bass: Bb trưởng thắng sát nút Sol thứ, bass ở G mạnh hơn Bb → Sol thứ;
+// chênh điểm lớn hơn margin, hoặc bass ở Bb mạnh hơn → giữ Bb trưởng.
+TEST(KeyDetect, RelativeResolvedByBass) {
+  KeyScores s{};
+  s[10] = 0.80f;      // Bb trưởng
+  s[12 + 7] = 0.78f;  // Sol thứ
+  ChromaVector bass{};
+  bass[7] = 0.17f;   // G
+  bass[10] = 0.12f;  // Bb
+  KeyScores a = s;
+  resolveRelativeByBass(a, bass, 0.05f);
+  EXPECT_EQ(pickKey(a, KeyDetectConfig{}).key, (MusicalKey{7, KeyMode::Minor}));
+  KeyScores b = s;
+  resolveRelativeByBass(b, bass, 0.01f);  // chênh 0,02 ≥ margin → không phân xử
+  EXPECT_EQ(pickKey(b, KeyDetectConfig{}).key, (MusicalKey{10, KeyMode::Major}));
+  ChromaVector bassMajor{};
+  bassMajor[7] = 0.10f;
+  bassMajor[10] = 0.20f;
+  KeyScores c = s;
+  resolveRelativeByBass(c, bassMajor, 0.05f);
+  EXPECT_EQ(pickKey(c, KeyDetectConfig{}).key, (MusicalKey{10, KeyMode::Major}));
 }

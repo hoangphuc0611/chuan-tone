@@ -13,9 +13,22 @@ namespace tonecore {
 // bản gốc — chỉ dùng để so sánh.
 //
 // Chưa đưa EDMA (Faraldo 2016) và Albrecht–Shanahan (2013) vào: cần số liệu từ bản gốc của bài
-// báo. Ở B4 sẽ có thêm profile học từ tập dev nhạc Việt.
+// báo. Thay vào đó có "vn-karaoke" — học từ chính nhạc Việt (M3 bước B4).
 const std::vector<KeyProfile>& builtinKeyProfiles() {
   static const std::vector<KeyProfile> profiles = {
+      // Học từ 50 beat karaoke Việt (tập dev, nhãn = tone ghi trên tiêu đề video), 2026-10-26, bằng
+      // tools/keytest/train_profile.py (tools/keytest/profiles/vn-karaoke.txt). Kiểm chéo 5 phần
+      // trên dev: 0,790 so với temperley-kp 0,758. Trên GuitarSet (jazz/funk) thấp hơn: 0,642.
+      {"vn-karaoke",
+       "Học từ 50 beat karaoke Việt (tập dev ChuẩnTone, 2026-10-26)",
+       {0.150654f, 0.034875f, 0.110364f, 0.039581f, 0.126319f, 0.069869f, 0.046029f, 0.167100f,
+        0.035302f, 0.094098f, 0.040072f, 0.085737f},
+       {0.162951f, 0.032839f, 0.104714f, 0.105948f, 0.033762f, 0.101787f, 0.035445f, 0.171128f,
+        0.064996f, 0.042076f, 0.096034f, 0.048321f},
+       std::array<float, 12>{0.155957f, 0.073033f, 0.105043f, 0.069516f, 0.089496f, 0.080845f,
+                             0.063221f, 0.128256f, 0.047019f, 0.071636f, 0.038151f, 0.077827f},
+       std::array<float, 12>{0.145924f, 0.055681f, 0.075088f, 0.081170f, 0.049721f, 0.091291f,
+                             0.060600f, 0.132994f, 0.088104f, 0.057178f, 0.089636f, 0.072611f}},
       {"kk",
        "C. Krumhansl, E. Kessler, Psychological Review 1982 (probe-tone ratings)",
        {6.35f, 2.23f, 3.48f, 2.33f, 4.38f, 4.09f, 2.52f, 5.19f, 2.39f, 3.66f, 2.29f, 2.88f},

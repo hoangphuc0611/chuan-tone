@@ -20,7 +20,8 @@ struct KeyProfile {
   std::optional<std::array<float, 12>> bassMinor;
 };
 
-// Các profile có sẵn: "kk", "temperley", "temperley-kp", "diatonic" (xem key_profiles.cpp).
+// Các profile có sẵn: "vn-karaoke", "kk", "temperley", "temperley-kp", "diatonic" (xem
+// key_profiles.cpp).
 const std::vector<KeyProfile>& builtinKeyProfiles();
 
 // nullptr nếu không có profile tên này.

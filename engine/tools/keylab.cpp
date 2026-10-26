@@ -40,10 +40,11 @@ int usage() {
                "Cách dùng:\n"
                "  keylab analyze <file> [tham số] [--chroma out.csv]\n"
                "  keylab batch [-j N] [tham số] < danh_sach_file.txt\n"
-               "Tham số: --rate 11025  --profile kk|temperley|temperley-kp|diatonic\n"
+               "Tham số: --rate 11025  --profile vn-karaoke|kk|temperley|temperley-kp|diatonic\n"
                "         --bass-weight 0.25  --frame-norm none|l1|max  --silence-db 40\n"
                "         --compression 100  --profile-file p.txt  --end-weight 0\n"
-               "         --end-sec 10  --minor-bias 0  --global-chroma on|off\n"
+               "         --end-sec 10  --minor-bias 0  --relative-margin 0\n"
+               "         --global-chroma on|off\n"
                "Timeline: --timeline on|off  --window-sec 6  --switch-prob 0.002\n"
                "          --related-boost 10  --min-segment 12  --emission-temp 0.1\n"
                "Tempo:    --tempo-prior 120  --tempo-octaves 1.4\n");
@@ -292,6 +293,10 @@ bool parseConfigArg(int argc, char** argv, int& i, Options& options) {
   if (opt == "--end-weight") {
     cfg.key.endWeight = std::stof(val);
     return cfg.key.endWeight >= 0.0f;
+  }
+  if (opt == "--relative-margin") {
+    cfg.key.relativeMargin = std::stof(val);
+    return cfg.key.relativeMargin >= 0.0f && cfg.key.relativeMargin <= 1.0f;
   }
   if (opt == "--minor-bias") {
     cfg.key.minorBias = std::stof(val);

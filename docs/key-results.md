@@ -3,29 +3,37 @@
 Chỉ tiêu M3 tính trên **bộ test 50 bài Việt** (CLAUDE.md mục 9). Bộ test đã có (2026-10-23) nhưng
 **chưa chấm** — để dành cho lần chấm cuối (B9). Số trên nhạc Việt dưới đây là tập dev.
 
-## Nhạc Việt — tập dev (B4, 2026-10-23)
+## Nhạc Việt — tập dev (B4, 2026-10-26)
 
-32 beat karaoke (bolero 21, ballad 6, nhạc trẻ 4, dân ca 1; 21 thứ / 11 trưởng), nhãn = tone kênh
-karaoke ghi trong tiêu đề (vd. "Tone Nam ( Cm )") — độc lập với ToneCore, chỉ có tone chính.
-Nguồn và cách lấy nhãn: `tools/keytest/README.md`, `docs/licenses.md`.
+50 beat karaoke (bolero 27, nhạc trẻ 11, ballad 6, remix 4, dân ca 2; 36 thứ / 14 trưởng), nhãn =
+tone kênh karaoke ghi trong tiêu đề (vd. "Tone Nam ( Cm )") — độc lập với ToneCore, chỉ có tone
+chính. Chủ dự án chọn dùng nhãn tiêu đề, không nghe kiểm (2026-10-26). Nguồn và cách lấy nhãn:
+`tools/keytest/README.md`, `docs/licenses.md`. Mỗi bài ≈ 0,02 điểm.
 
 | Cấu hình | MIREX dev | Ghi chú |
 |---|---|---|
-| Mặc định B3 (temperley-kp, bass 0,25, L1) | 0,709 | bolero 0,79 · ballad 0,60 · nhạc trẻ 0,375 |
-| **+ gợi ý chủ âm cuối bài 0,05 (mặc định mới)** | **0,741** | cũng tăng trên GuitarSet (0,706 → 0,712) |
-| + prior giọng thứ 0,02–0,08 | 0,762 | chỉ thêm 1 bài, GuitarSet giảm nhẹ → không bật |
-| kk / temperley 1999 / diatonic (tốt nhất mỗi loại) | 0,713 / 0,619 / 0,622 | quét 36 cấu hình |
+| B3 (temperley-kp, bass 0,25, L1) | 0,734 | |
+| + gợi ý chủ âm cuối bài 0,05 | 0,758 | cũng tăng trên GuitarSet (0,706 → 0,712) |
+| + prior giọng thứ 0,03 hoặc phân xử tương đối bằng bass 0,05 | 0,772 | < 1 bài, GuitarSet giảm → không bật |
+| bằng chứng nốt cảm (hợp âm át trưởng) | không đổi | bài thứ Việt dùng ♭7, gần như không có nốt cảm → đã gỡ |
+| **profile "vn-karaoke" học từ dev — kiểm chéo 5 phần** | **0,790** | tốt hơn ở 3/5 phần, không phần nào kém |
+| profile "vn-karaoke" (mặc định mới) — chấm trên chính dev | 0,806 | lạc quan (đã học từ dev); dùng số kiểm chéo |
 
-Mỗi bài ≈ 0,031 điểm → mọi chênh lệch dưới ~0,06 là trong mức nhiễu của 32 bài.
-Lỗi còn lại (cấu hình mặc định mới): **4 bài thứ bị đoán thành trưởng tương đối** (Cm→Eb, G#m→B,
-Bm→D, Gm→Bb), 2 lệch quãng 5, 3 "sai" — trong đó Hoa Trinh Nữ (nhãn G, máy F#) và Đêm Buồn Tỉnh Lẻ
-(nhãn Eb, máy C#m) có tuning ~0 cent nên nghi nhãn tiêu đề sai → cần người nghe kiểm.
-Timeline: 19/32 bài bị đoán có chuyển tone; nhãn tiêu đề không có mốc chuyển tone nên chưa phân
-biệt được chuyển tone thật (bolero lên trưởng ở điệp khúc) với chuyển giả.
+Mặc định từ 2026-10-26: **vn-karaoke**, bass 0,25, L1, gợi ý cuối bài 0,05. Theo thể loại (chấm trên
+dev): bolero 0,80 · nhạc trẻ 0,77 · ballad 0,72 · remix 1,00 · dân ca 1,00. Lỗi còn: 2 tương đối
+trưởng/thứ, 2 lệch quãng 5, 6 "sai" (trong đó có bài nghi nhãn tiêu đề sai, vd. Hoa Trinh Nữ G / máy
+F#, tuning ~0 cent).
 
-**Mốc kiểm B4 (dev < 0,80) đã chạm** → báo chủ dự án chọn hướng (docs/m3-plan.md, rủi ro 2).
+Đổi lại, "vn-karaoke" kém hơn trên nhạc không phải Việt: GuitarSet 0,642 (temperley-kp 0,712) → job
+CI `key-eval` ghim temperley-kp để vẫn chặn hồi quy cả chuỗi trên dữ liệu công khai.
 
-Chạy lại: `tools/keytest/fetch_guitarset.sh && python3 tools/keytest/keytest.py run --csv testdata/GuitarSet/guitarset.csv`
+Profile học được: thứ — bậc 1 (0,16) và 5 (0,17) nổi nhất, ♭7 (0,096) mạnh hơn nốt cảm 7 (0,048)
+(ngược với temperley-kp: 7 > ♭7) → nhạc Việt giọng thứ dùng thứ tự nhiên / ngũ cung nhiều.
+
+Timeline: 22/50 bài bị đoán có chuyển tone. Nhãn tiêu đề không có mốc chuyển tone nên chưa phân biệt
+được chuyển tone thật với chuyển giả — cần nhãn mốc chuyển tone (người nghe) để chỉnh tiếp.
+
+**Mốc kiểm B4 (dev < 0,80)**: ước lượng kiểm chéo 0,790 — sát mốc. Bộ test 50 bài vẫn chưa chấm.
 
 ## GuitarSet 1.1.0 (CC BY 4.0) — B3, 2026-10-23
 

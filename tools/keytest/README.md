@@ -143,7 +143,8 @@ python3 tools/keytest/keytest.py run --set dev -- --profile-file tools/keytest/p
 
 Học từ các bài không chuyển tone: chroma cả bài xoay về chủ âm rồi lấy trung bình theo trưởng /
 thứ, riêng cho treble và bass. Chỉ chạy trên dev. Nếu thắng profile có sẵn trên dev thì đưa vào
-`engine/src/key/key_profiles.cpp` làm profile mặc định.
+`engine/src/key/key_profiles.cpp` làm profile mặc định — như "vn-karaoke" (2026-10-26, file gốc ở
+`tools/keytest/profiles/vn-karaoke.txt`).
 
 ### Chống "học vẹt" bộ test
 
