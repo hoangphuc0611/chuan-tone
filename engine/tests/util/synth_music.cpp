@@ -51,6 +51,39 @@ void addClick(std::vector<float>& buf, double rate, double timeSec, float amplit
   }
 }
 
+void addDrum(std::vector<float>& buf, double rate, double timeSec, Drum drum, float amplitude,
+             uint32_t seed) {
+  std::mt19937 rng(seed);
+  std::uniform_real_distribution<double> uni(-1.0, 1.0);
+  const auto begin = static_cast<long long>(std::llround(timeSec * rate));
+  const auto len = static_cast<long long>(0.4 * rate);
+  double prevNoise = 0.0;
+  for (long long i = 0; i < len; ++i) {
+    const long long t = begin + i;
+    if (t < 0 || t >= static_cast<long long>(buf.size())) continue;
+    const double s = static_cast<double>(i) / rate;
+    const double noise = uni(rng);
+    double v = 0.0;
+    switch (drum) {
+      case Drum::Kick: {
+        // Pha = 2π ∫ f(t) dt với f(t) = 50 + 100·e^(−t/0,03).
+        const double phase = 2.0 * kPi * (50.0 * s + 100.0 * 0.03 * (1.0 - std::exp(-s / 0.03)));
+        v = std::sin(phase) * std::exp(-s / 0.05) + 0.5 * noise * std::exp(-s / 0.0005);
+        break;
+      }
+      case Drum::Snare:
+        v = 0.7 * noise * std::exp(-s / 0.04) +
+            0.5 * std::sin(2.0 * kPi * 185.0 * s) * std::exp(-s / 0.03);
+        break;
+      case Drum::HiHat:
+        v = (noise - prevNoise) * 0.5 * std::exp(-s / 0.012);
+        break;
+    }
+    prevNoise = noise;
+    buf[static_cast<std::size_t>(t)] += static_cast<float>(amplitude * v);
+  }
+}
+
 void addCadence(std::vector<float>& buf, double rate, double startSec, int root, bool minor,
                 int loops, double chordSec, uint32_t seed, const NoteSpec& spec) {
   // Bậc (nửa cung tính từ chủ âm) của các nốt trong 4 hợp âm.

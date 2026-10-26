@@ -1,0 +1,53 @@
+#pragma once
+
+// Bộ tín hiệu tổng hợp + chỉ số khách quan cho đổi tone beat (M4). Dùng chung cho unit test và
+// `beatlab eval`. Mọi tín hiệu stereo interleaved, có đáp án biết trước (tần số, onset trống).
+
+#include <cstdint>
+#include <limits>
+#include <string>
+#include <vector>
+
+namespace tonecore::test {
+
+struct StretchSignal {
+  std::string name;
+  double rate = 48000.0;
+  std::vector<float> stereo;       // interleaved L, R
+  double toneHz = 0.0;             // tần số cơ bản cần đo cao độ (0 = không đo)
+  std::vector<double> partialsHz;  // hoạ âm ổn định trong [steadyStart, steadyEnd)
+  double steadyStart = 0.0;
+  double steadyEnd = 0.0;
+  std::vector<double> onsets;  // giây — tiếng trống đứng riêng (đo nhòe)
+  bool measureStereo = false;  // đo tương quan hai kênh + LUFS
+
+  uint64_t frames() const { return stereo.size() / 2; }
+};
+
+// sine 440 Hz · harmonic (La3, 8 hoạ âm) · chord (Đô trưởng + bass) · drums (kick/snare/hi-hat
+// đứng riêng, 80 BPM) · beat (trống + hợp âm + bass, có pan stereo).
+std::vector<StretchSignal> stretchSuite(double rate = 48000.0);
+
+constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
+
+struct StretchMetrics {
+  double pitchErrorCents = kNaN;  // |tần số đo − toneHz·2^(n/12)| (cent)
+  double offPartialDb = kNaN;     // năng lượng ngoài các hoạ âm đã dịch / tổng (dB)
+  double preEchoDb = kNaN;        // trung vị: năng lượng 5–50 ms trước onset / đỉnh (dB)
+  double preEchoWorstDb = kNaN;   // tiếng trống tệ nhất
+  double riseDeltaMs = kNaN;      // trung vị (thời gian lên 10→90% của bản ra − bản gốc)
+  double reboundDb =
+      kNaN;  // tệ nhất: bao biên 5 ms tăng lại sau đỉnh / đỉnh (dB) — "trống đánh đôi"
+  double lagMaxMs = kNaN;          // |lệch thời gian| lớn nhất của tiếng trống so với bản gốc
+  double correlationDelta = kNaN;  // |tương quan L–R bản ra − bản gốc|
+  double lufsDelta = kNaN;         // LUFS bản ra − bản gốc
+};
+
+// So bản ra `out` (cùng độ dài, interleaved stereo) với tín hiệu gốc sau khi đổi `semitones`.
+StretchMetrics measureStretch(const StretchSignal& sig, const std::vector<float>& out,
+                              double semitones);
+
+// Riêng các chỉ số của một tín hiệu khi chưa đổi tone (mốc "gốc" để đọc số tuyệt đối).
+StretchMetrics measureReference(const StretchSignal& sig);
+
+}  // namespace tonecore::test

@@ -250,6 +250,7 @@ Kế hoạch kỹ thuật (cây thư mục, thư viện, thuật toán, rủi ro
 - **Thứ tự nền tảng** (2026-10-21): làm và nghiệm thu trên **iPhone trước**; Android (đo độ trễ ≥ 2 máy, chốt chỉ tiêu tầm trung) làm sau. Code Android vẫn giữ build được trong CI.
 - **Upload tách vocal**: máy người dùng giải mã bằng codec OS rồi nén FLAC (libFLAC, BSD-3) — chốt lại ở M6.
 - **M3** (2026-10-22, `docs/m3-plan.md`): bài chuyển tone chấm theo thời lượng trên timeline; lệch quãng 5 chỉ tính chiều lên (chuẩn MIREX/mir_eval); BPM Acc2 ≥ 90%, Acc1 ≥ 75%; có demo iPhone ở Phòng thử; phân tích là handle riêng `tc_analyzer_*` kiểu kéo (ADR-003 viết ở B7). Chỉ chỉnh tham số trên tập dev.
+- **M4** (2026-10-26, `docs/m4-plan.md`): đổi tone beat bằng render ở luồng nền từ vị trí đang phát (audio thread chỉ đọc PCM + crossfade); mốc so sánh Signalsmith Stretch (MIT) chỉ trong công cụ, như hộp đen; nghiệm thu bằng trang nghe A/B mù (8 beat dev, ±2/±4/±6) + nghe trên iPhone — đạt khi ±1…±4 không nhòe/méo; `tc_set_key` và timeline là tone của beat gốc, engine tự cộng số nửa cung; chưa cache bản render ra đĩa, app nhớ mức tone theo bài.
 
 ## 12. QUY ƯỚC CODE
 

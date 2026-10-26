@@ -5,7 +5,7 @@ project(ToneCore VERSION 0.4.0 LANGUAGES C CXX)
 # ---- Tùy chọn ----
 option(TC_BUILD_TESTS "Build unit test (GoogleTest)" ON)
 option(TC_BUILD_BENCH "Build benchmark (Google Benchmark)" OFF)
-option(TC_BUILD_TOOLS "Build công cụ dòng lệnh (pitchlab, keylab) cho máy dev" ON)
+option(TC_BUILD_TOOLS "Build công cụ dòng lệnh (pitchlab, keylab, beatlab) cho máy dev" ON)
 option(TC_BUILD_FRAMEWORK "Build tonecore dạng Apple framework (iOS)" OFF)
 set(TC_SANITIZER "" CACHE STRING "Sanitizer cho bản host: address, undefined, thread hoặc rỗng")
 
@@ -65,6 +65,7 @@ add_library(tonecore_core STATIC
   src/key/loudness.cpp
   src/key/tempo.cpp
   src/key/song_analyzer.cpp
+  src/stretch/pitch_shifter.cpp
 )
 
 # Mã theo nền tảng: backend âm thanh + bộ giải mã file.
@@ -148,6 +149,10 @@ if(TC_BUILD_FRAMEWORK)
 endif()
 
 # ---- Test & bench ----
+if(TC_BUILD_TESTS OR TC_BUILD_BENCH OR TC_BUILD_TOOLS)
+  add_subdirectory(tests/util)
+endif()
+
 if(TC_BUILD_TESTS)
   enable_testing()
   add_subdirectory(tests)

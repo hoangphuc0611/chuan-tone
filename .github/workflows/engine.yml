@@ -103,6 +103,8 @@ jobs:
           cmake --build build/rel --target keylab
       - name: Test keytest
         run: KEYLAB=engine/build/rel/tools/keylab python -m unittest discover -v tools/keytest/tests
+      - name: Test tools/stretch (trang nghe A/B, beatlab giả)
+        run: python -m unittest discover -v tools/stretch/tests
       - name: Kiểm tra CSV mẫu
         run: python tools/keytest/validate_csv.py tools/keytest/example.csv --no-check-files
 

@@ -18,6 +18,8 @@ Quy tắc (CLAUDE.md mục 0.2): chỉ MIT / BSD / Apache-2.0 / Zlib / ISC. LGPL
 | file_picker | ^13.1.0 | MIT | `app` – chọn file beat | Có |
 | device_info_plus | ^13.3.0 | BSD-3-Clause | `app` – tên máy trong báo cáo độ trễ | Có |
 | mir_eval | 0.8.2 | MIT | `tools/keytest` – kiểm chéo điểm MIREX (không bắt buộc) | Không |
+| Signalsmith Stretch | 1.4.0 (commit `a670068`) | MIT | mốc so sánh A/B trong `engine/tools/beatlab` — gọi như hộp đen qua API công khai, không link vào libtonecore; tải bằng `tools/stretch/fetch_signalsmith.sh` vào `testdata/ref/` (không commit) | Không |
+| Signalsmith Linear | 0.6.4 (commit `de55e6a`) | MIT | phụ thuộc của Signalsmith Stretch (FFT), cùng chỗ | Không |
 | numpy / scipy / decorator | theo mir_eval | BSD-3 / BSD-3 / BSD-2 | phụ thuộc của mir_eval | Không |
 
 Lịch sử đo độ trễ lưu bằng file JSON (`app/lib/data/latency_history.dart`), không dùng `shared_preferences`: bản Android của nó gọi Kotlin qua JNI và lỗi `NoSuchMethodError` ở bản release.
@@ -58,7 +60,6 @@ Không dùng các bộ chỉ cho phép phi thương mại / nghiên cứu: MIR-1
 | FastAPI / uvicorn / PyTorch / Demucs (code) | MIT / BSD-3 / BSD-3 / MIT | M6 | server – **trọng số htdemucs cần xác minh license** |
 | arq / Valkey | MIT / BSD-3 | M6 | hàng đợi job |
 | matplotlib | PSF-BSD | M3 | chỉ trong `tools/` (vẽ chroma/timeline nếu cần) |
-| Signalsmith Stretch | MIT | M4 | chỉ để so A/B chất lượng |
 
 ## Đã loại
 

@@ -25,6 +25,15 @@ void addNote(std::vector<float>& buf, double rate, double startSec, double durSe
 // Tiếng gõ: nhiễu trắng tắt dần nhanh (τ = 4 ms), băng rộng — "đường dọc" trên spectrogram.
 void addClick(std::vector<float>& buf, double rate, double timeSec, float amplitude, uint32_t seed);
 
+// Trống tổng hợp, đánh tức thời (không có attack) tại `timeSec` → biết chính xác onset, dùng để đo
+// nhòe trống khi đổi tone:
+//  - Kick: sin quét 150 → 50 Hz (τ quét 30 ms), tắt dần τ 50 ms, kèm click 1 ms.
+//  - Snare: nhiễu trắng tắt τ 40 ms + âm 185 Hz tắt τ 30 ms.
+//  - Hi-hat: nhiễu thông cao (sai phân bậc 1) tắt τ 12 ms.
+enum class Drum { Kick, Snare, HiHat };
+void addDrum(std::vector<float>& buf, double rate, double timeSec, Drum drum, float amplitude,
+             uint32_t seed);
+
 // Vòng hoà âm I–IV–V–I (trưởng) hoặc i–iv–V–i (thứ; V trưởng như thứ hoà âm) ở tone có chủ âm
 // `root` (0 = Đô), mỗi hợp âm `chordSec` giây, lặp `loops` vòng từ `startSec`. Voicing ngẫu nhiên
 // theo `seed` (thế đảo, vị trí quãng 8 trong G3–G5); nốt bass = gốc hợp âm ở E2–Eb3.
