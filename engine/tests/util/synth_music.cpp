@@ -58,6 +58,9 @@ void addDrum(std::vector<float>& buf, double rate, double timeSec, Drum drum, fl
   const auto begin = static_cast<long long>(std::llround(timeSec * rate));
   const auto len = static_cast<long long>(0.4 * rate);
   double prevNoise = 0.0;
+  double hatLp =
+      0.0;  // lọc thấp một cực ~12 kHz cho hi-hat (hi-hat thật ít năng lượng sát Nyquist)
+  const double hatA = std::exp(-2.0 * kPi * 12000.0 / rate);
   for (long long i = 0; i < len; ++i) {
     const long long t = begin + i;
     if (t < 0 || t >= static_cast<long long>(buf.size())) continue;
@@ -76,7 +79,8 @@ void addDrum(std::vector<float>& buf, double rate, double timeSec, Drum drum, fl
             0.5 * std::sin(2.0 * kPi * 185.0 * s) * std::exp(-s / 0.03);
         break;
       case Drum::HiHat:
-        v = (noise - prevNoise) * 0.5 * std::exp(-s / 0.012);
+        hatLp = (1.0 - hatA) * (noise - prevNoise) + hatA * hatLp;
+        v = hatLp * std::exp(-s / 0.012);
         break;
     }
     prevNoise = noise;

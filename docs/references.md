@@ -44,7 +44,7 @@ Mọi thuật toán trong ToneCore được viết từ các nguồn công khai 
 - J. L. Flanagan, R. M. Golden, *Phase Vocoder*, Bell System Technical Journal 1966 — tần số tức thời từ chênh pha giữa hai khung (`stretch/pitch_shifter.cpp`).
 - M. Dolson, *The Phase Vocoder: A Tutorial*, Computer Music Journal 1986 — kéo giãn thời gian bằng hop phân tích ≠ hop tổng hợp, đổi cao độ = giãn + resample (`stretch/pitch_shifter.cpp`).
 - J. O. Smith, *Digital Audio Resampling Home Page* (CCRMA) — nội suy sinc–Kaiser ở vị trí lẻ khi đọc tín hiệu đã giãn (`stretch/pitch_shifter.cpp`).
-- J. Laroche, M. Dolson, *Improved phase vocoder time-scale modification of audio*, IEEE TSAP 1999 — khoá pha identity (B2).
+- J. Laroche, M. Dolson, *Improved phase vocoder time-scale modification of audio*, IEEE TSAP 1999 — khoá pha identity: đỉnh = lớn hơn 2 bin mỗi bên, vùng ảnh hưởng tới điểm thấp nhất giữa hai đỉnh (`stretch/pitch_shifter.cpp`, B2).
 - C. Duxbury, M. Davies, M. Sandler, *Improved time-scaling of musical audio using phase locking at transients*, AES 112th Convention 2002 (B3).
 - A. Röbel, *A new approach to transient processing in the phase vocoder*, DAFx 2003 (B3).
 - Z. Průša, N. Holighaus, *Phase vocoder done right* (PGHI), EUSIPCO 2017 (ứng viên B4).

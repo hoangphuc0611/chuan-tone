@@ -29,7 +29,7 @@ void addClick(std::vector<float>& buf, double rate, double timeSec, float amplit
 // nhòe trống khi đổi tone:
 //  - Kick: sin quét 150 → 50 Hz (τ quét 30 ms), tắt dần τ 50 ms, kèm click 1 ms.
 //  - Snare: nhiễu trắng tắt τ 40 ms + âm 185 Hz tắt τ 30 ms.
-//  - Hi-hat: nhiễu thông cao (sai phân bậc 1) tắt τ 12 ms.
+//  - Hi-hat: nhiễu thông cao (sai phân bậc 1) qua lọc thấp một cực 12 kHz, tắt τ 12 ms.
 enum class Drum { Kick, Snare, HiHat };
 void addDrum(std::vector<float>& buf, double rate, double timeSec, Drum drum, float amplitude,
              uint32_t seed);

@@ -16,7 +16,14 @@
   lệch cao độ 1–13 cent; phase vocoder cơ bản cao độ đúng nhưng trống nhòe, mất stereo, nhỏ đi
   3–4 dB, lệch thời gian (1 − β)·~35 ms (test căn thời gian để tắt tới B2); render bài 4 phút 5,0 s
   trên M1 (cần nhanh 2–3 lần ở B2).
-- [ ] B2 – B7
+- [x] **B2** (2026-10-26): khoá pha identity (Laroche & Dolson) + chung pha stereo (góc xoay tính
+  trên L + R, áp cho mọi kênh). Căn thời gian và âm lượng phần có cao độ đúng tuyệt đối (±0,00 ms,
+  ±0,02 dB; test căn thời gian đã bật), tạp phổ nốt −59 dB / hợp âm −38 dB, ảnh stereo lệch ≤ 0,005,
+  nhiễu hụt ≤ 1,4 dB (Signalsmith ≤ 1,0). Giữ hop 1024 (512 tốt hơn ~2 dB nhưng chậm gấp đôi). Tăng
+  tốc: bài 4 phút 2,37 s trên M1 (B1 5,0 s), 96–176× thời gian thực. Bỏ chỉ tiêu LUFS cũ (K-weighting
+  đổi theo cao độ; trên beat thật pv cách Signalsmith ≤ 0,41 LU). Trống còn nhòe (khoá pha còn làm
+  tiếng đánh chậm hơn B1) → B3. Chi tiết: docs/stretch-results.md.
+- [ ] B3 – B7
 
 ## Các điểm cần quyết (2026-10-26: duyệt theo đề nghị)
 

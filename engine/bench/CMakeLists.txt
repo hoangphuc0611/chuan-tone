@@ -15,5 +15,6 @@ add_executable(tonecore_bench
   engine_bench.cpp
   spsc_ring_bench.cpp
   pitch_bench.cpp
+  stretch_bench.cpp
 )
 target_link_libraries(tonecore_bench PRIVATE tonecore_core benchmark::benchmark_main)

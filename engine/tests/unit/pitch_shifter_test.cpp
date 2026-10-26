@@ -1,6 +1,6 @@
 // Đổi tone beat (M4): PitchShifter + chỉ số của bộ tín hiệu tổng hợp (tests/util/stretch_eval.h).
-// B1 kiểm tính đúng của khung (cao độ, căn thời gian, chia khối, mono); chỉ tiêu chất lượng trống /
-// stereo / âm lượng thêm ở B2–B3 (xem docs/stretch-results.md).
+// Chỉ tiêu: docs/stretch-results.md. B1: cao độ, chia khối, mono. B2 (khoá pha): căn thời gian,
+// âm lượng phần có cao độ, tạp phổ, ảnh stereo, mức nhiễu. Trống (B3) chưa kiểm ở đây.
 
 #include "stretch/pitch_shifter.h"
 
@@ -64,11 +64,9 @@ TEST(PitchShifter, ChunkingDoesNotChangeOutput) {
 }
 
 // Bản mới khớp thời gian với bản gốc: tâm năng lượng của một "cục" sin (bao Gauss σ 50 ms) giữ
-// nguyên vị trí ±0,5 ms ở mọi mức.
-// TẮT tới B2: phase vocoder cơ bản (B1) lệch (1 − β)·~35 ms — độ nghiêng pha giữa các bin (vị trí
-// của âm trong khung) bị nhân β khi tổng hợp nên không bám theo phổ phân tích. Khoá pha identity
-// (B2) lấy lại quan hệ pha giữa các bin từ phổ phân tích mỗi khung.
-TEST(PitchShifter, DISABLED_TimeAlignedWithOriginal) {
+// nguyên vị trí ±0,5 ms ở mọi mức. Phase vocoder cơ bản (B1) lệch (1 − β)·~35 ms vì độ nghiêng pha
+// giữa các bin bị nhân β; khoá pha identity lấy lại quan hệ đó từ phổ phân tích mỗi khung.
+TEST(PitchShifter, TimeAlignedWithOriginal) {
   const std::size_t frames = static_cast<std::size_t>(2.0 * kRate);
   std::vector<float> x(2 * frames);
   for (std::size_t i = 0; i < frames; ++i) {
@@ -100,6 +98,66 @@ TEST(PitchShifter, MonoStaysMono) {
   const auto& sig = signal("drums");
   const auto y = pitchShiftBuffer(sig.stereo.data(), sig.frames(), 2, -4.0);
   for (std::size_t i = 0; i < sig.frames(); ++i) ASSERT_EQ(y[2 * i], y[2 * i + 1]) << i;
+}
+
+// Phần có cao độ (sin ổn định, hợp âm tắt dần) giữ đúng âm lượng ±0,1 dB.
+TEST(PitchShifter, TonalLevelPreserved) {
+  const std::size_t frames = static_cast<std::size_t>(3.0 * kRate);
+  std::vector<float> x(2 * frames);
+  for (std::size_t i = 0; i < frames; ++i) {
+    const auto v =
+        static_cast<float>(0.4 * std::sin(2 * kPi * 523.25 * static_cast<double>(i) / kRate));
+    x[2 * i] = v;
+    x[2 * i + 1] = v;
+  }
+  const auto power = [&](const std::vector<float>& y) {
+    double e = 0.0;
+    for (std::size_t i = frames / 4; i < 3 * frames / 4; ++i)
+      e += static_cast<double>(y[2 * i]) * y[2 * i];
+    return e;
+  };
+  for (const int n : {-6, -2, 1, 5}) {
+    const auto y = pitchShiftBuffer(x.data(), frames, 2, n);
+    EXPECT_NEAR(10.0 * std::log10(power(y) / power(x)), 0.0, 0.1) << n;
+  }
+}
+
+// Tạp phổ: năng lượng ngoài các hoạ âm đã dịch ≤ −40 dB (một nốt) / −35 dB (hợp âm).
+TEST(PitchShifter, LowSpectralClutter) {
+  for (const int n : {-6, -3, 2, 6}) {
+    const auto& note = signal("harmonic");
+    const auto& chord = signal("chord");
+    EXPECT_LE(
+        test::measureStretch(note, pitchShiftBuffer(note.stereo.data(), note.frames(), 2, n), n)
+            .offPartialDb,
+        -40.0)
+        << n;
+    EXPECT_LE(
+        test::measureStretch(chord, pitchShiftBuffer(chord.stereo.data(), chord.frames(), 2, n), n)
+            .offPartialDb,
+        -35.0)
+        << n;
+  }
+}
+
+// Ảnh stereo: tương quan L–R của beat có pan lệch ≤ 0,02 so với bản gốc (phase vocoder cơ bản xử
+// lý từng kênh riêng làm lệch 0,6–0,9).
+TEST(PitchShifter, StereoImagePreserved) {
+  const auto& sig = signal("beat");
+  for (const int n : {-6, -2, 3, 6}) {
+    const auto y = pitchShiftBuffer(sig.stereo.data(), sig.frames(), 2, n);
+    EXPECT_LE(test::measureStretch(sig, y, n).correlationDelta, 0.02) << n;
+  }
+}
+
+// Nhiễu trắng không hụt quá 1,5 dB so với lý tưởng (các khung nhiễu chồng nhau không đồng pha nên
+// luôn hụt một chút; phase vocoder cơ bản hụt ~3 dB).
+TEST(PitchShifter, NoiseLevelNearIdeal) {
+  const auto& sig = signal("noise");
+  for (const int n : {-6, -3, 3, 6}) {
+    const auto y = pitchShiftBuffer(sig.stereo.data(), sig.frames(), 2, n);
+    EXPECT_GE(test::measureStretch(sig, y, n).noiseLevelDb, -1.5) << n;
+  }
 }
 
 // Chỉ số trên tín hiệu chưa đổi: không có tiếng trước onset, tiếng đánh lên trong ~1 ms (bằng

@@ -20,12 +20,13 @@ struct StretchSignal {
   double steadyEnd = 0.0;
   std::vector<double> onsets;  // giây — tiếng trống đứng riêng (đo nhòe)
   bool measureStereo = false;  // đo tương quan hai kênh + LUFS
+  bool measureNoise = false;   // nhiễu trắng: đo mức so với lý tưởng
 
   uint64_t frames() const { return stereo.size() / 2; }
 };
 
 // sine 440 Hz · harmonic (La3, 8 hoạ âm) · chord (Đô trưởng + bass) · drums (kick/snare/hi-hat
-// đứng riêng, 80 BPM) · beat (trống + hợp âm + bass, có pan stereo).
+// đứng riêng, 80 BPM) · beat (trống + hợp âm + bass, có pan stereo) · noise (nhiễu trắng).
 std::vector<StretchSignal> stretchSuite(double rate = 48000.0);
 
 constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
@@ -41,6 +42,9 @@ struct StretchMetrics {
   double lagMaxMs = kNaN;          // |lệch thời gian| lớn nhất của tiếng trống so với bản gốc
   double correlationDelta = kNaN;  // |tương quan L–R bản ra − bản gốc|
   double lufsDelta = kNaN;         // LUFS bản ra − bản gốc
+  // Nhiễu trắng: công suất bản ra so với lý tưởng (dB). Lý tưởng = giữ công suất khi hạ tone; khi
+  // nâng tone phải bỏ phần trên Nyquist/β (và trên 0,97·Nyquist của bộ lọc) → 10·log10(0,97/β).
+  double noiseLevelDb = kNaN;
 };
 
 // So bản ra `out` (cùng độ dài, interleaved stereo) với tín hiệu gốc sau khi đổi `semitones`.

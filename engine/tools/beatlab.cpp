@@ -1,16 +1,17 @@
 // beatlab — công cụ thử đổi tone beat (M4), chạy trên Mac/Linux.
 //
-//   beatlab render <file> -o out.wav --semitones N [--algo pv|signalsmith] [--start giây]
+//   beatlab render <file> -o out.wav --semitones N [--algo pv|pv-basic|signalsmith] [--start giây]
 //                  [--dur giây] [--fft 4096] [--hop 1024]
 //        → WAV 16-bit cùng tần số lấy mẫu với file vào; in 1 dòng JSON (thời gian render).
-//   beatlab eval [--algo pv,signalsmith] [--levels -6,-4,-2,2,4,6] [--fft 4096] [--hop 1024]
+//   beatlab eval [--algo pv,pv-basic,signalsmith] [--levels -6,-4,-2,2,4,6] [--fft 4096]
+//                [--hop 1024]
 //        → bảng markdown các chỉ số khách quan trên bộ tín hiệu tổng hợp
 //          (tests/util/stretch_eval.h), kèm hàng "gốc" (chưa đổi tone) để đọc số tuyệt đối.
 //   beatlab suite <thư mục> [--algo …] [--levels …]
 //        → ghi bộ tín hiệu tổng hợp (…_goc.wav) và các bản đã đổi tone ra WAV.
 //
-// "pv" = PitchShifter của ToneCore; "signalsmith" = mốc so sánh (chỉ có khi build kèm, xem
-// tools/stretch/README.md).
+// "pv" = PitchShifter của ToneCore (mặc định hiện tại); "pv-basic" = phase vocoder cơ bản B1 (mốc
+// dưới); "signalsmith" = mốc so sánh (chỉ có khi build kèm, xem tools/stretch/README.md).
 
 #include <chrono>
 #include <cmath>
@@ -34,7 +35,7 @@ namespace {
 int usage() {
   std::fprintf(stderr,
                "Cách dùng:\n"
-               "  beatlab render <file> -o out.wav --semitones N [--algo pv|signalsmith]\n"
+               "  beatlab render <file> -o out.wav --semitones N [--algo pv|pv-basic|signalsmith]\n"
                "                 [--start giây] [--dur giây] [--fft 4096] [--hop 1024]\n"
                "  beatlab eval [--algo pv,signalsmith] [--levels -6,-4,-2,2,4,6]\n"
                "               [--fft 4096] [--hop 1024]\n"
@@ -54,6 +55,11 @@ bool haveSignalsmith() {
 std::vector<float> shift(const std::string& algo, const float* in, uint64_t frames, int channels,
                          double rate, double semitones, const PitchShiftConfig& cfg) {
   if (algo == "pv") return pitchShiftBuffer(in, frames, channels, semitones, cfg);
+  if (algo == "pv-basic") {
+    PitchShiftConfig basic = cfg;
+    basic.phaseLock = false;
+    return pitchShiftBuffer(in, frames, channels, semitones, basic);
+  }
 #ifdef TC_HAVE_SIGNALSMITH
   if (algo == "signalsmith") return signalsmithShift(in, frames, channels, rate, semitones);
 #endif
@@ -185,17 +191,18 @@ struct Row {
   double offChord = test::kNaN;
   test::StretchMetrics drums;
   test::StretchMetrics beat;
+  double noiseDb = test::kNaN;
   double realtimeX = test::kNaN;
 };
 
 void printRow(const std::string& label, const Row& r) {
-  std::printf("| %s | %s | %s | %s | %s | %s / %s | %s | %s | %s | %s | %s | %s |\n", label.c_str(),
-              fmt(r.sineCents, "%.2f").c_str(), fmt(r.harmonicCents, "%.2f").c_str(),
+  std::printf("| %s | %s | %s | %s | %s | %s / %s | %s | %s | %s | %s | %s | %s | %s |\n",
+              label.c_str(), fmt(r.sineCents, "%.2f").c_str(), fmt(r.harmonicCents, "%.2f").c_str(),
               fmt(r.offHarmonic).c_str(), fmt(r.offChord).c_str(), fmt(r.drums.preEchoDb).c_str(),
               fmt(r.drums.preEchoWorstDb).c_str(), fmt(r.drums.riseDeltaMs, "%.2f").c_str(),
               fmt(r.drums.reboundDb).c_str(), fmt(r.drums.lagMaxMs, "%.2f").c_str(),
               fmt(r.beat.correlationDelta, "%.3f").c_str(), fmt(r.beat.lufsDelta, "%.2f").c_str(),
-              fmt(r.realtimeX, "%.0f").c_str());
+              fmt(r.noiseDb, "%.2f").c_str(), fmt(r.realtimeX, "%.0f").c_str());
 }
 
 void absorb(Row& row, const test::StretchSignal& sig, const test::StretchMetrics& m) {
@@ -207,6 +214,7 @@ void absorb(Row& row, const test::StretchSignal& sig, const test::StretchMetrics
   if (sig.name == "chord") row.offChord = m.offPartialDb;
   if (sig.name == "drums") row.drums = m;
   if (sig.name == "beat") row.beat = m;
+  if (sig.name == "noise") row.noiseDb = m.noiseLevelDb;
 }
 
 // Ghi bộ tín hiệu tổng hợp và các bản đã đổi tone ra WAV (để nghe / soi phổ).
@@ -278,9 +286,10 @@ int cmdEval(int argc, char** argv) {
   std::printf(
       "| Thuật toán, mức | Cao độ sin (cent) | Cao độ hoạ âm (cent) | Ngoài hoạ âm: nốt "
       "(dB) | Ngoài hoạ âm: hợp âm (dB) | Trước onset: trung vị / tệ nhất (dB) | Thời gian "
-      "lên +ms | Dội sau đỉnh (dB) | Lệch onset (ms) | Δ tương quan L–R | Δ LUFS | × thời "
+      "lên +ms | Dội sau đỉnh (dB) | Lệch onset (ms) | Δ tương quan L–R | Δ LUFS | Nhiễu so với "
+      "lý tưởng (dB) | × thời "
       "gian thực |\n");
-  std::printf("|---|---|---|---|---|---|---|---|---|---|---|---|\n");
+  std::printf("|---|---|---|---|---|---|---|---|---|---|---|---|---|\n");
   Row ref;
   for (const auto& sig : suite) absorb(ref, sig, test::measureReference(sig));
   printRow("gốc (chưa đổi)", ref);

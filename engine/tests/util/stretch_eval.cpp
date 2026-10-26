@@ -264,6 +264,19 @@ StretchMetrics measure(const StretchSignal& sig, const std::vector<float>& out, 
     m.reboundDb = worstRebound;
     m.lagMaxMs = maxLag;
   }
+  if (sig.measureNoise) {
+    const auto skip = static_cast<std::size_t>(0.5 * sig.rate);
+    double pin = 0.0;
+    double pout = 0.0;
+    for (std::size_t i = skip; i + skip < mono.size(); ++i) {
+      const auto& ref = sig.stereo;
+      const double r = 0.5 * (static_cast<double>(ref[2 * i]) + ref[2 * i + 1]);
+      pin += r * r;
+      pout += static_cast<double>(mono[i]) * mono[i];
+    }
+    const double ideal = isReference ? 1.0 : 0.97 * std::min(1.0, 1.0 / beta);
+    m.noiseLevelDb = 10.0 * std::log10(pout / pin / ideal);
+  }
   if (sig.measureStereo) {
     m.correlationDelta =
         isReference ? correlation(out, sig.rate)
@@ -375,6 +388,21 @@ std::vector<StretchSignal> stretchSuite(double rate) {
     }
     s.stereo = toStereo(l, r);
     s.measureStereo = true;
+    suite.push_back(std::move(s));
+  }
+  {
+    StretchSignal s;
+    s.name = "noise";
+    s.rate = rate;
+    std::vector<float> x(frames(3.0));
+    uint32_t state = 12345;
+    for (auto& v : x) {
+      // LCG đơn giản → nhiễu đều [−0,25, 0,25], cố định giữa các nền tảng.
+      state = state * 1664525u + 1013904223u;
+      v = 0.5f * (static_cast<float>(state >> 8) / 16777216.0f - 0.5f);
+    }
+    s.stereo = toStereo(x, x);
+    s.measureNoise = true;
     suite.push_back(std::move(s));
   }
   return suite;
