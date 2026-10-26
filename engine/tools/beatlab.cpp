@@ -10,8 +10,9 @@
 //   beatlab suite <thư mục> [--algo …] [--levels …]
 //        → ghi bộ tín hiệu tổng hợp (…_goc.wav) và các bản đã đổi tone ra WAV.
 //
-// "pv" = PitchShifter của ToneCore (mặc định hiện tại); "pv-basic" = phase vocoder cơ bản B1 (mốc
-// dưới); "signalsmith" = mốc so sánh (chỉ có khi build kèm, xem tools/stretch/README.md).
+// "pv" = PitchShifter của ToneCore (mặc định hiện tại); "pv-b2" = khoá pha, chưa giữ transient
+// (B2); "pv-basic" = phase vocoder cơ bản B1 (mốc dưới); "signalsmith" = mốc so sánh (chỉ có khi
+// build kèm, xem tools/stretch/README.md).
 
 #include <chrono>
 #include <cmath>
@@ -37,6 +38,7 @@ int usage() {
                "Cách dùng:\n"
                "  beatlab render <file> -o out.wav --semitones N [--algo pv|pv-basic|signalsmith]\n"
                "                 [--start giây] [--dur giây] [--fft 4096] [--hop 1024]\n"
+               "  (cả ba lệnh) --transients on|off\n"
                "  beatlab eval [--algo pv,signalsmith] [--levels -6,-4,-2,2,4,6]\n"
                "               [--fft 4096] [--hop 1024]\n"
                "  beatlab suite <thư mục> [--algo pv,signalsmith] [--levels -6,…]\n");
@@ -55,6 +57,11 @@ bool haveSignalsmith() {
 std::vector<float> shift(const std::string& algo, const float* in, uint64_t frames, int channels,
                          double rate, double semitones, const PitchShiftConfig& cfg) {
   if (algo == "pv") return pitchShiftBuffer(in, frames, channels, semitones, cfg);
+  if (algo == "pv-b2") {
+    PitchShiftConfig b2 = cfg;
+    b2.transients = false;
+    return pitchShiftBuffer(in, frames, channels, semitones, b2);
+  }
   if (algo == "pv-basic") {
     PitchShiftConfig basic = cfg;
     basic.phaseLock = false;
@@ -131,6 +138,8 @@ int cmdRender(int argc, char** argv) {
       cfg.fftSize = std::atoi(argv[++i]);
     } else if (a == "--hop" && hasVal) {
       cfg.synthesisHop = std::atoi(argv[++i]);
+    } else if (a == "--transients" && hasVal) {
+      cfg.transients = std::strcmp(argv[++i], "off") != 0;
     } else {
       return usage();
     }
@@ -142,6 +151,7 @@ int cmdRender(int argc, char** argv) {
     return 1;
   }
   const int ch = static_cast<int>(dec.channels);
+  cfg.sampleRate = dec.sampleRate;
   const auto first =
       std::min<uint64_t>(dec.frames, static_cast<uint64_t>(startSec * dec.sampleRate));
   uint64_t frames = dec.frames - first;
@@ -237,6 +247,8 @@ int cmdSuite(int argc, char** argv) {
       cfg.fftSize = std::atoi(argv[++i]);
     } else if (a == "--hop" && hasVal) {
       cfg.synthesisHop = std::atoi(argv[++i]);
+    } else if (a == "--transients" && hasVal) {
+      cfg.transients = std::strcmp(argv[++i], "off") != 0;
     } else {
       return usage();
     }
@@ -277,6 +289,8 @@ int cmdEval(int argc, char** argv) {
       cfg.fftSize = std::atoi(argv[++i]);
     } else if (a == "--hop" && hasVal) {
       cfg.synthesisHop = std::atoi(argv[++i]);
+    } else if (a == "--transients" && hasVal) {
+      cfg.transients = std::strcmp(argv[++i], "off") != 0;
     } else {
       return usage();
     }

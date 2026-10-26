@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "dsp/fft.h"
+#include "stretch/transient_detector.h"
 
 namespace tonecore {
 
@@ -15,6 +16,10 @@ struct PitchShiftConfig {
   // true: khoá pha identity + chung pha các kênh (B2, mặc định). false: phase vocoder cơ bản, từng
   // kênh riêng (B1 — chỉ giữ làm mốc so sánh trong beatlab).
   bool phaseLock = true;
+  // Giữ transient (B3, cần phaseLock): dò onset nhìn trước, căn các bin trội của tiếng đánh về
+  // cùng một vị trí ở mọi khung chứa onset.
+  bool transients = true;
+  double sampleRate = 48000.0;  // chỉ dùng cho các hằng số thời gian của bộ dò onset
 };
 
 // Đổi cao độ beat n nửa cung, giữ nguyên độ dài và vị trí từng mẫu.
@@ -37,6 +42,16 @@ struct PitchShiftConfig {
 //     - Cùng góc θ áp cho mọi kênh → chênh pha / biên độ giữa L và R giữ nguyên từng bin (ảnh
 //       stereo giữ, beat mono ra vẫn mono). Chỉ tính atan2 / sincos cho các đỉnh.
 //     - Khung trước im lặng (> 100 dB thấp hơn) → θ = 0 (lấy nguyên pha phân tích).
+//  2b. Giữ transient (B3). Tiếng đánh ở thời điểm gốc t0 nằm trong mọi khung phân tích j có
+//      a_j < t0 < a_j + N, ở vị trí d_j = t0 − a_j trong khung. Phase vocoder đặt bản sao của nó
+//      (sau resample) lệch (d_j − N/2)·(1/β − 1) mẫu so với t0 — mỗi khung một chỗ → nhòe trước /
+//      sau tới ±N/2·|1/β − 1| (±17 ms ở ±6). Với các bin mà tiếng đánh trội (TransientDetector:
+//      năng lượng tăng ≥ 3…9 dB so với ngay trước onset), thay góc xoay bằng pha tuyến tính
+//          θ_k = ω_k·Δs_j,   Δs_j = (t0 − a_j − N/2)·(1 − β)
+//      = dời nội dung khung sớm lên Δs_j mẫu trên trục giãn → bản sao của mọi khung trùng nhau ở
+//      β·t0 + (t − t0): tiếng đánh được neo tại onset (như phát nhanh / chậm một sample: cao độ ×β,
+//      độ dài ×1/β), không còn nhòe. Bin nền (hợp âm ngân) giữ khoá pha. Sau khi onset ra khỏi
+//      khung, các bin đó tiến pha tiếp từ góc vừa dùng → không gãy pha.
 //  3. IFFT, nhân cửa sổ, cộng chồng (OLA) với bước Hs vào tín hiệu đã giãn; chia cho tổng w².
 //  4. Mẫu ra m đọc tín hiệu đã giãn tại vị trí β·m bằng nội suy sinc–Kaiser (J. O. Smith, "Digital
 //     Audio Resampling"); khi β > 1 hạ tần số cắt xuống 0,5/β để chống alias. Trọng số tính một lần
@@ -65,6 +80,7 @@ class PitchShifter {
   void analyze(int64_t analysis) noexcept;
   void lockPhases(float hopA, float frameMax) noexcept;
   void propagateBasic(float hopA) noexcept;
+  void applyTransients(int64_t analysis) noexcept;
   void synthesize(int64_t synthStart) noexcept;
   void interpolate(double pos, float* out) noexcept;
 
@@ -72,6 +88,7 @@ class PitchShifter {
   double beta_;
   bool bypass_;
   bool phaseLock_;
+  bool transients_;
   int n_;
   int hop_;
   int bins_;
@@ -92,14 +109,15 @@ class PitchShifter {
   std::size_t ringCap_ = 0;  // số ô chính của vòng đệm (luỹ thừa 2); sau đó là taps_ ô gương
 
   // Khoá pha (chung mọi kênh).
-  std::vector<std::complex<float>> ref_;      // phổ tham chiếu khung hiện tại (L + R)
-  std::vector<std::complex<float>> prevRef_;  // … khung trước
-  std::vector<float> power_;                  // Σ |X_c|² từng bin
-  std::vector<float> rot_;                    // góc xoay θ từng bin (khung trước → khung này)
-  std::vector<std::complex<float>> unit_;     // e^{iθ} từng bin
+  std::vector<std::complex<float>> ref_;       // phổ tham chiếu khung hiện tại (L + R)
+  std::vector<std::complex<float>> prevRef_;   // … khung trước
+  std::vector<float> power_;                   // Σ |X_c|² từng bin
+  std::vector<std::complex<float>> unit_;      // e^{iθ} từng bin, khung hiện tại
+  std::vector<std::complex<float>> prevUnit_;  // … khung trước
   std::vector<int> peaks_;
   std::vector<float> peakTheta_;
   float prevMax_ = 0.0f;  // đỉnh công suất khung trước
+  TransientDetector detector_;
 
   // Phase vocoder cơ bản (phaseLock = false), theo kênh.
   std::vector<std::vector<float>> prevPhase_;

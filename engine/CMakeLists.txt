@@ -66,6 +66,7 @@ add_library(tonecore_core STATIC
   src/key/tempo.cpp
   src/key/song_analyzer.cpp
   src/stretch/pitch_shifter.cpp
+  src/stretch/transient_detector.cpp
 )
 
 # Mã theo nền tảng: backend âm thanh + bộ giải mã file.

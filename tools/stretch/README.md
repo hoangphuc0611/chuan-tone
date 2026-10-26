@@ -18,10 +18,11 @@ A/B — không link vào libtonecore, không ship, không đọc / chép mã bê
 
 ```sh
 beatlab eval                                   # bảng chỉ số trên bộ tín hiệu tổng hợp, pv + signalsmith
-beatlab eval --algo pv,pv-basic,signalsmith    # thêm mốc dưới (phase vocoder cơ bản B1)
+beatlab eval --algo pv,pv-b2,pv-basic,signalsmith  # thêm B2 (chưa giữ transient) và B1 (cơ bản)
 beatlab eval --algo pv --levels -6,6 --hop 512 # chỉ một thuật toán / mức / tham số
 beatlab suite out_dir                          # ghi tín hiệu tổng hợp + bản đã đổi tone ra WAV
 beatlab render beat.m4a -o out.wav --semitones 3 [--algo signalsmith] [--start 40 --dur 30]
+beatlab render beat.m4a -o out.wav --semitones 3 --transients off   # tắt giữ transient để nghe so
 ```
 
 `render` in một dòng JSON (`duration_sec`, `song_sec`, `render_sec`, `realtime_x`).

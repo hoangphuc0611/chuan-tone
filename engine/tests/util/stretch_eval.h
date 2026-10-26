@@ -37,9 +37,9 @@ struct StretchMetrics {
   double preEchoDb = kNaN;        // trung vị: năng lượng 5–50 ms trước onset / đỉnh (dB)
   double preEchoWorstDb = kNaN;   // tiếng trống tệ nhất
   double riseDeltaMs = kNaN;      // trung vị (thời gian lên 10→90% của bản ra − bản gốc)
-  double reboundDb =
-      kNaN;  // tệ nhất: bao biên 5 ms tăng lại sau đỉnh / đỉnh (dB) — "trống đánh đôi"
-  double lagMaxMs = kNaN;          // |lệch thời gian| lớn nhất của tiếng trống so với bản gốc
+  // Tệ nhất: bao biên 5 ms của sai phân bậc 1 tăng lại sau đỉnh / đỉnh (dB) — trống "đánh đôi".
+  double reboundDb = kNaN;
+  double lagMaxMs = kNaN;  // |lệch thời điểm bắt đầu (bao biên vượt 10% đỉnh)| lớn nhất (ms)
   double correlationDelta = kNaN;  // |tương quan L–R bản ra − bản gốc|
   double lufsDelta = kNaN;         // LUFS bản ra − bản gốc
   // Nhiễu trắng: công suất bản ra so với lý tưởng (dB). Lý tưởng = giữ công suất khi hạ tone; khi

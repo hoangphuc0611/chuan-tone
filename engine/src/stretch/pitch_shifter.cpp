@@ -39,11 +39,13 @@ PitchShifter::PitchShifter(int channels, double semitones, const PitchShiftConfi
       beta_(std::pow(2.0, semitones / 12.0)),
       bypass_(semitones == 0.0),
       phaseLock_(cfg.phaseLock),
+      transients_(cfg.phaseLock && cfg.transients),
       n_(cfg.fftSize),
       hop_(cfg.synthesisHop),
       bins_(cfg.fftSize / 2 + 1),
       fft_(static_cast<std::size_t>(cfg.fftSize)),
       window_(static_cast<std::size_t>(cfg.fftSize)),
+      detector_(channels, cfg.sampleRate, cfg.fftSize),
       frame_(static_cast<std::size_t>(cfg.fftSize)) {
   // Hann tuần hoàn: tổng w² dịch theo bước Hs là hằng số khi N/Hs ≥ 3.
   for (int i = 0; i < n_; ++i) {
@@ -102,8 +104,8 @@ PitchShifter::PitchShifter(int channels, double semitones, const PitchShiftConfi
     ref_.resize(bins);
     prevRef_.resize(bins);
     power_.resize(bins);
-    rot_.resize(bins, 0.0f);
     unit_.resize(bins, 1.0f);
+    prevUnit_.resize(bins, 1.0f);
     peaks_.reserve(bins / 2 + 1);
     peakTheta_.reserve(bins / 2 + 1);
   }
@@ -122,7 +124,11 @@ void PitchShifter::start(const float* in, uint64_t inFrames, uint64_t begin) noe
   completeUpTo_ = nextFrame_ * hop_;
   zeroedUpTo_ = completeUpTo_;
   prevMax_ = 0.0f;
-  std::fill(rot_.begin(), rot_.end(), 0.0f);
+  if (transients_) {
+    const double center = static_cast<double>(nextFrame_ * hop_ + n_ / 2) / beta_;
+    detector_.start(in, inFrames, static_cast<int64_t>(std::floor(center)) - n_ / 2);
+  }
+  std::fill(prevUnit_.begin(), prevUnit_.end(), std::complex<float>(1.0f, 0.0f));
   for (auto& m : prevMag_) std::fill(m.begin(), m.end(), 0.0f);
   for (auto& r : ring_) std::fill(r.begin(), r.end(), 0.0f);
 }
@@ -142,7 +148,7 @@ void PitchShifter::analyze(int64_t analysis) noexcept {
   }
 }
 
-// Khoá pha identity trên phổ tham chiếu (ref_, power_ đã tính). Ghi rot_ / unit_.
+// Khoá pha identity trên phổ tham chiếu (ref_, power_ đã tính). Ghi unit_ (đọc prevUnit_).
 void PitchShifter::lockPhases(float hopA, float frameMax) noexcept {
   const auto bins = static_cast<std::size_t>(bins_);
   peaks_.clear();
@@ -155,12 +161,11 @@ void PitchShifter::lockPhases(float hopA, float frameMax) noexcept {
     }
   }
   if (peaks_.empty()) {
-    std::fill(rot_.begin(), rot_.end(), 0.0f);
     std::fill(unit_.begin(), unit_.end(), std::complex<float>(1.0f, 0.0f));
     return;
   }
 
-  // Góc xoay của từng đỉnh — đọc rot_ (góc khung trước) trước khi ghi đè.
+  // Góc xoay của từng đỉnh, từ góc khung trước θ_trước(p) = arg(prevUnit_[p]).
   //   φ_s(p) = φ_a,trước(p) + θ_trước(p) + ω_tt·Hs  và  φ_a(p) ≡ φ_a,trước(p) + ω_tt·Ha
   //   ⇒ θ_p = θ_trước(p) + ω_tt·(Hs − Ha).
   const float omegaScale = kTwoPi / static_cast<float>(n_);
@@ -171,7 +176,7 @@ void PitchShifter::lockPhases(float hopA, float frameMax) noexcept {
     const float omega = omegaScale * static_cast<float>(p);
     const float dphi = std::arg(ref_[pp] * std::conj(prevRef_[pp]));
     const float inst = omega + wrapPi(dphi - omega * hopA) / hopA;
-    peakTheta_.push_back(wrapPi(rot_[pp] + inst * (hs - hopA)));
+    peakTheta_.push_back(wrapPi(std::arg(prevUnit_[pp]) + inst * (hs - hopA)));
   }
 
   // Vùng của mỗi đỉnh kéo tới bin thấp nhất giữa nó và đỉnh kế tiếp.
@@ -190,7 +195,6 @@ void PitchShifter::lockPhases(float hopA, float frameMax) noexcept {
     const float theta = peakTheta_[i];
     const std::complex<float> u = std::polar(1.0f, theta);
     for (std::size_t k = begin; k < end; ++k) {
-      rot_[k] = theta;
       unit_[k] = u;
     }
     begin = end;
@@ -230,6 +234,62 @@ void PitchShifter::propagateBasic(float hopA) noexcept {
       prev[k] = phase;
       prevMag[k] = mag;
       spec[k] = std::polar(mag, synth[k]);
+    }
+  }
+}
+
+// Giữ transient: các bin trội của mọi onset trong khung [analysis, analysis + N) được căn về vị trí
+// neo tại onset (xem pitch_shifter.h, bước 2b). Ghi đè unit_ của các bin đó.
+void PitchShifter::applyTransients(int64_t analysis) noexcept {
+  constexpr int kMaxActive = 4;
+  detector_.ensure(analysis + n_);
+  detector_.dropBefore(static_cast<double>(analysis));
+  struct Active {
+    const float* g;
+    float w2;   // trọng số cửa sổ tại vị trí onset (chọn onset trội nhất cho từng bin)
+    double ds;  // Δs: dời sớm bao nhiêu mẫu trên trục giãn
+    std::complex<double> step;  // e^{i·ω_1·Δs}
+    std::complex<double> cur;   // e^{i·ω_k·Δs} của bin đang xét (nhân dồn)
+  };
+  Active act[kMaxActive];
+  int na = 0;
+  const double end = static_cast<double>(analysis + n_);
+  for (std::size_t i = 0; i < detector_.count() && na < kMaxActive; ++i) {
+    const auto& o = detector_.onset(i);
+    if (o.time >= end) break;
+    const double d = o.time - static_cast<double>(analysis);
+    if (d <= 0.0) continue;
+    const float w = window_[static_cast<std::size_t>(d)];
+    const double ds = (d - static_cast<double>(n_) / 2.0) * (1.0 - beta_);
+    const std::complex<double> step =
+        std::polar(1.0, 2.0 * dsp::kPi / static_cast<double>(n_) * ds);
+    act[na++] = {o.g.data(), w * w, ds, step, step};  // cur bắt đầu ở bin 1
+  }
+  if (na == 0) return;
+  for (std::size_t k = 1; k + 1 < static_cast<std::size_t>(bins_); ++k, [&] {
+         for (int a = 0; a < na; ++a) act[a].cur *= act[a].step;
+       }()) {
+    int best = -1;
+    float score = 0.0f;
+    for (int a = 0; a < na; ++a) {
+      const float s = act[a].g[k] * act[a].w2;
+      if (s > score) {
+        score = s;
+        best = a;
+      }
+    }
+    if (best < 0) continue;
+    const float g = act[best].g[k];
+    const std::complex<float> aligned(static_cast<float>(act[best].cur.real()),
+                                      static_cast<float>(act[best].cur.imag()));
+    if (g >= 1.0f) {
+      unit_[k] = aligned;
+    } else {
+      // Trộn góc nền (khoá pha) với góc căn onset theo mức trội g: nội suy rồi chuẩn hoá vector
+      // đơn vị (gần đúng nội suy góc; hai góc ngược hẳn nhau thì lấy góc căn).
+      const std::complex<float> mix = (1.0f - g) * unit_[k] + g * aligned;
+      const float len = std::abs(mix);
+      unit_[k] = len > 1e-3f ? mix / len : aligned;
     }
   }
 }
@@ -291,15 +351,16 @@ void PitchShifter::computeFrame() noexcept {
     if (prevMax_ <= kSilencePower * frameMax) {
       // Khung trước im lặng: pha khung trước vô nghĩa → lấy nguyên pha phân tích (θ = 0) cho cả
       // khung, mọi bin cùng lúc để giữ quan hệ pha giữa các bin.
-      std::fill(rot_.begin(), rot_.end(), 0.0f);
       std::fill(unit_.begin(), unit_.end(), std::complex<float>(1.0f, 0.0f));
     } else {
       lockPhases(hopA, frameMax);
     }
+    if (transients_) applyTransients(analysis);
     for (auto& spec : spec_) {
       for (std::size_t k = 0; k < bins; ++k) spec[k] *= unit_[k];
     }
     std::swap(ref_, prevRef_);
+    std::swap(unit_, prevUnit_);  // unit_ được ghi lại toàn bộ ở khung sau
     prevMax_ = frameMax;
   } else {
     propagateBasic(hopA);

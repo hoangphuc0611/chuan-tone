@@ -23,7 +23,15 @@
   tốc: bài 4 phút 2,37 s trên M1 (B1 5,0 s), 96–176× thời gian thực. Bỏ chỉ tiêu LUFS cũ (K-weighting
   đổi theo cao độ; trên beat thật pv cách Signalsmith ≤ 0,41 LU). Trống còn nhòe (khoá pha còn làm
   tiếng đánh chậm hơn B1) → B3. Chi tiết: docs/stretch-results.md.
-- [ ] B3 – B7
+- [x] **B3** (2026-10-26): giữ transient — dò onset nhìn trước (`stretch/transient_detector.*`:
+  spectral flux + tinh chỉnh miền thời gian + cổng năng lượng mới), bin trội của mọi khung chứa onset
+  dùng pha tuyến tính để mọi bản sao trùng nhau tại onset. Trước onset −61…−77 dB (B2 −21…−29),
+  tiếng đánh lên +0,4 ms (B2 +17), lệch onset ≤ 0,12 ms — đạt mọi chỉ tiêu trống, tốt hơn Signalsmith
+  ở mọi mức (trừ chỉ số dội ở +6: −18,9 so với −25,4 dB, vẫn đạt chỉ tiêu −12). Beat thật: năng lượng trước onset cách bản gốc 0–2 dB (Signalsmith 3–7 dB). Sửa 2 lỗi
+  phân loại bin (cửa sổ xoá tiếng click, sàn quá cao). Bài 4 phút 2,8–3,0 s trên M1. Không cần B4.
+  Chi tiết: docs/stretch-results.md.
+- [ ] ~~B4~~ (không cần: B3 đạt mọi chỉ tiêu khách quan; xem lại nếu nghe A/B ở B7 chưa đạt)
+- [ ] B5 – B7
 
 ## Các điểm cần quyết (2026-10-26: duyệt theo đề nghị)
 

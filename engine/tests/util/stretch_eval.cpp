@@ -112,10 +112,13 @@ struct HitStats {
   double preEchoDb;
   double riseMs;
   double reboundDb;
+  double startMs;  // thời điểm bao biên vượt 10% đỉnh, so với onset đáp án
 };
 
-// `env`: bao biên 1 ms (đỉnh, thời gian lên); `env5`: bao biên 5 ms (dội sau đỉnh — mịn hơn để
-// dao động tự nhiên của nhiễu snare/hi-hat không bị tính là dội).
+// `env`: bao biên 1 ms (đỉnh, thời gian lên, thời điểm bắt đầu); `env5`: bao biên 5 ms của sai phân
+// bậc 1 (dội sau đỉnh — nhấn cao tần, nơi trống "đánh đôi" nghe rõ; thân kick trầm gợn theo từng
+// nửa chu kỳ nên không tính; cửa sổ 5 ms mịn hơn để dao động tự nhiên của nhiễu snare/hi-hat không
+// bị tính là dội).
 HitStats hitStats(const std::vector<float>& x, const std::vector<double>& env,
                   const std::vector<double>& env5, double rate, std::size_t t0) {
   const auto ms = [rate](double v) { return static_cast<std::size_t>(v * 0.001 * rate); };
@@ -155,31 +158,14 @@ HitStats hitStats(const std::vector<float>& x, const std::vector<double>& env,
   }
   return {10.0 * std::log10(std::max(pre, 1e-30) / (peak * peak)),
           1000.0 * static_cast<double>(i90 - i10) / rate,
-          20.0 * std::log10(std::max(rebound, 1e-12) / std::max(env5[peak5], 1e-12))};
+          20.0 * std::log10(std::max(rebound, 1e-12) / std::max(env5[peak5], 1e-12)),
+          1000.0 * (static_cast<double>(i10) - static_cast<double>(t0)) / rate};
 }
 
-// Lệch thời gian (ms) làm bao biên bản ra khớp nhất bản gốc quanh onset, trong ±20 ms.
-double hitLagMs(const std::vector<double>& envRef, const std::vector<double>& envOut, double rate,
-                std::size_t t0) {
-  const auto a = t0 - static_cast<std::size_t>(0.020 * rate);
-  const auto b = t0 + static_cast<std::size_t>(0.060 * rate);
-  const auto maxLag = static_cast<long long>(0.020 * rate);
-  double best = -1.0;
-  long long bestLag = 0;
-  for (long long lag = -maxLag; lag <= maxLag; ++lag) {
-    double acc = 0.0;
-    for (std::size_t i = a; i < b; ++i) {
-      const long long j = static_cast<long long>(i) + lag;
-      if (j >= 0 && j < static_cast<long long>(envOut.size())) {
-        acc += envRef[i] * envOut[static_cast<std::size_t>(j)];
-      }
-    }
-    if (acc > best) {
-      best = acc;
-      bestLag = lag;
-    }
-  }
-  return 1000.0 * static_cast<double>(bestLag) / rate;
+std::vector<float> firstDifference(const std::vector<float>& x) {
+  std::vector<float> d(x.size());
+  for (std::size_t i = 1; i < x.size(); ++i) d[i] = x[i] - x[i - 1];
+  return d;
 }
 
 double median(std::vector<double> v) {
@@ -241,8 +227,8 @@ StretchMetrics measure(const StretchSignal& sig, const std::vector<float>& out, 
     const std::vector<float> refMono = monoOf(sig.stereo);
     const auto envOut = envelope(mono, sig.rate);
     const auto envRef = envelope(refMono, sig.rate);
-    const auto env5Out = envelope(mono, sig.rate, 0.005);
-    const auto env5Ref = envelope(refMono, sig.rate, 0.005);
+    const auto env5Out = envelope(firstDifference(mono), sig.rate, 0.005);
+    const auto env5Ref = envelope(firstDifference(refMono), sig.rate, 0.005);
     std::vector<double> pre;
     std::vector<double> rise;
     double worstPre = -1e9;
@@ -256,7 +242,7 @@ StretchMetrics measure(const StretchSignal& sig, const std::vector<float>& out, 
       rise.push_back(isReference ? o.riseMs : o.riseMs - r.riseMs);
       worstPre = std::max(worstPre, o.preEchoDb);
       worstRebound = std::max(worstRebound, o.reboundDb);
-      maxLag = std::max(maxLag, std::abs(hitLagMs(envRef, envOut, sig.rate, t0)));
+      maxLag = std::max(maxLag, std::abs(o.startMs - r.startMs));
     }
     m.preEchoDb = median(pre);
     m.preEchoWorstDb = worstPre;
