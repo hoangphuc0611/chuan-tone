@@ -1,7 +1,52 @@
 # Kết quả dò tone, BPM, loudness (M3)
 
-Chỉ tiêu M3 tính trên **bộ test 50 bài Việt** (CLAUDE.md mục 9). Bộ test đã có (2026-10-23) nhưng
-**chưa chấm** — để dành cho lần chấm cuối (B9). Số trên nhạc Việt dưới đây là tập dev.
+Chỉ tiêu M3 tính trên **bộ test 50 bài Việt** (CLAUDE.md mục 9): **0,864 ≥ 0,85 — đạt** (chấm một
+lần, 2026-10-26, commit b215032). Các số khác trên nhạc Việt là tập dev.
+
+## Nhạc Việt — bộ test (B9, 2026-10-26)
+
+50 beat karaoke (bolero 22, ballad 13, nhạc trẻ 9, dân ca 4, remix 2; 40 thứ / 10 trưởng), nhãn =
+tone ghi trong tiêu đề, cùng cách lấy với dev nhưng khác bài (đã đối chiếu tên bài và link: không
+trùng; "Hồng Nhan" ở dev và "Ải Hồng Nhan" remix ở test là hai bài khác nhau). Cấu hình mặc định của
+engine, không tham số thêm. Lần chạy bộ test **thứ 1** (`testdata/vn-key/test-runs.jsonl`).
+
+| Chỉ số | Giá trị |
+|---|---|
+| **Điểm MIREX** (chỉ tiêu ≥ 0,85) | **0,864** |
+| Tính lệch quãng 5 cả hai chiều | 0,884 |
+| Đúng hẳn | 43/50 (86%) |
+| Lệch quãng 5 xuống (tính 0) / song song / sai | 2 / 1 / 4 |
+| Điểm timeline so với nhãn một tone | 0,818 |
+| Kiểm chéo mir_eval | khớp 50/50 |
+
+| Thể loại | Số bài | MIREX | Đúng hẳn |
+|---|---|---|---|
+| bolero | 22 | 0,909 | 91% |
+| ballad | 13 | 0,923 | 92% |
+| nhạc trẻ | 9 | **0,578** | 56% |
+| dân ca | 4 | 1,000 | 100% |
+| remix | 2 | 1,000 | 100% |
+
+Bài không đúng hẳn:
+
+| Bài | Nhãn | Máy | Ghi chú |
+|---|---|---|---|
+| Hơn Cả Yêu | F | F# | tuning −49 cent: beat nằm giữa F và F#; F#(−49) cùng lưới cao độ với F(+51) → chỉnh giọng vẫn khớp beat |
+| Nửa Đêm Ngoài Phố | Gm | Abm | tuning ~0, độ tin cậy 1,0 — nghi audio khác tone ghi ở tiêu đề |
+| Thư Tình Em Gái | Em | Dm | tuning ~0, độ tin cậy 1,0 — nghi như trên |
+| Thà Rằng Như Thế | Bbm | Am | tuning ~0, độ tin cậy 0,89 — nghi như trên |
+| Tình Nhạt Phai | Dm | Gm | lệch quãng 5 xuống (MIREX tính 0) |
+| Trái Tim Bên Lề | Dm | Gm | lệch quãng 5 xuống |
+| Tình Thôi Xót Xa | Ebm | Eb | song song (0,2) |
+
+Đọc kết quả:
+- Vượt chỉ tiêu 0,014 điểm — **chưa tới 1 bài** (mỗi bài 0,02). Sai số chuẩn trên 50 bài ≈ 0,045,
+  nên 0,864 khớp với ước lượng kiểm chéo trên dev (0,790); test cao hơn chủ yếu vì có nhiều bolero
+  và ballad (hai thể loại máy làm tốt), ít nhạc trẻ.
+- **Nhạc trẻ là điểm yếu** ở cả dev (0,77) lẫn test (0,58): lỗi quãng 5 xuống (nhầm sang tone hạ át)
+  và song song. Cải tiến tiếp nên nhắm vào thể loại này (cần thêm bài nhạc trẻ ở dev).
+- Điểm chính thức giữ theo nhãn tiêu đề; không sửa nhãn sau khi xem kết quả (sửa chỉ những bài máy
+  sai sẽ làm điểm lạc quan).
 
 ## Nhạc Việt — tập dev (B4, 2026-10-26)
 
@@ -30,10 +75,13 @@ CI `key-eval` ghim temperley-kp để vẫn chặn hồi quy cả chuỗi trên 
 Profile học được: thứ — bậc 1 (0,16) và 5 (0,17) nổi nhất, ♭7 (0,096) mạnh hơn nốt cảm 7 (0,048)
 (ngược với temperley-kp: 7 > ♭7) → nhạc Việt giọng thứ dùng thứ tự nhiên / ngũ cung nhiều.
 
-Timeline: 22/50 bài bị đoán có chuyển tone. Nhãn tiêu đề không có mốc chuyển tone nên chưa phân biệt
-được chuyển tone thật với chuyển giả — cần nhãn mốc chuyển tone (người nghe) để chỉnh tiếp.
+Timeline: 22/50 bài dev (19/50 bài test) được máy báo có chuyển tone. Chủ dự án xác nhận
+(2026-10-26) các bài này **thật sự đổi tone liên tục trong bài** (kiểu phiên khúc thứ ↔ điệp khúc
+trưởng tương đối / song song) → giữ nguyên tham số timeline. Nhãn tiêu đề chỉ có tone chính, nên số
+"chuyển tone giả" và điểm timeline trong báo cáo `keytest` ở các bài này không phản ánh lỗi (điểm
+timeline là cận dưới).
 
-**Mốc kiểm B4 (dev < 0,80)**: ước lượng kiểm chéo 0,790 — sát mốc. Bộ test 50 bài vẫn chưa chấm.
+**Mốc kiểm B4 (dev < 0,80)**: ước lượng kiểm chéo 0,790 — sát mốc. Bộ test: 0,864 (xem trên).
 
 ## GuitarSet 1.1.0 (CC BY 4.0) — B3, 2026-10-23
 
@@ -167,6 +215,9 @@ GuitarSet (tempo theo lead sheet; guitar không có trống): **Acc1 58% / Acc2 
 Giữ mặc định của Ellis 2007: prior hẹp quanh 120 sẽ đẩy bolero (nhạc công đếm ~65) lên ~130. Prior
 theo thể loại chọn trên tập dev Việt (B4); chỉ tiêu đề xuất Acc2 ≥ 90%, Acc1 ≥ 75%.
 
+**Chưa đo được trên nhạc Việt**: nhãn tiêu đề không có BPM, nên dev và test chưa có nhãn BPM. Chỉ tiêu
+BPM còn mở cho tới khi có nhãn BPM độc lập (vd. người gõ nhịp 20–30 bài).
+
 ## Loudness (B6, 2026-10-23)
 
 ITU-R BS.1770-4 (`engine/src/key/loudness.*`): hệ số K-weighting tính lại được đúng bảng 48 kHz của
@@ -177,4 +228,6 @@ trong ±0,1 LU ở cả 48 kHz và 44,1 kHz. Beat mono tính như mono kép, fil
 ## Thời gian phân tích
 
 Bài tổng hợp 4 phút stereo 48 kHz, Mac M1, Release: **1,12 s** (giải mã 0,03 · LUFS 0,12 · hạ mẫu
-0,12 · HPSS 0,52 · CQT 0,15 · tone 0,001 · BPM 0,19). Ngân sách: ≤ 5 s trên iPhone 13 Pro (đo ở B9).
+0,12 · HPSS 0,52 · CQT 0,15 · tone 0,001 · BPM 0,19). Ngân sách: ≤ 5 s trên iPhone 13 Pro — **chưa đo
+trên máy thật**. Bộ test (m4a 3–8 phút, chạy song song nhiều bài trên Mac M1): trung vị 2,49 s, lớn
+nhất 3,74 s.

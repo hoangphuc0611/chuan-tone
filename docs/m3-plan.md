@@ -58,7 +58,11 @@
   treble + bass từ dữ liệu, kiểm chéo k-fold) + `keylab --profile-file`, gợi ý chủ âm cuối bài
   (`--end-weight`, mặc định tắt). Thử trên GuitarSet: profile học 0,688 (CV) so với 0,706; gợi ý
   cuối bài 0,05 → 0,718. Chọn cấu hình thật trên dev nhạc Việt.
-- [ ] B9 (chờ dữ liệu nhạc Việt)
+- [~] **B9** (2026-10-26): bộ test 50 bài chấm một lần với mặc định của engine — **MIREX 0,864 ≥ 0,85,
+  đạt chỉ tiêu M3** (bolero 0,91 · ballad 0,92 · nhạc trẻ 0,58 · dân ca / remix 1,00). Chủ dự án xác
+  nhận các bài máy báo chuyển tone thật sự đổi tone → giữ tham số timeline. Còn mở: đo thời gian /
+  RAM phân tích trên iPhone; chỉ tiêu BPM trên nhạc Việt (chưa có nhãn BPM). Chi tiết:
+  docs/key-results.md.
 
 ## Các điểm cần quyết (2026-10-22: duyệt theo đề nghị)
 
@@ -268,7 +272,8 @@ B1–B3 và B7 làm được ngay. B4–B6 và B9 phải đợi dữ liệu.
 
 **Cách bạn tự kiểm tra khi xong M3**:
 - `ctest --preset host` xanh.
-- `python3 tools/keytest/keytest.py --set test` → điểm trung bình ≥ 0,85, kèm báo cáo từng bài.
+- `python3 tools/keytest/keytest.py run --set test` → điểm trung bình ≥ 0,85, kèm báo cáo từng bài
+  (mỗi lần chạy được ghi vào `testdata/vn-key/test-runs.jsonl`).
 - `keylab analyze bai_bat_ky.mp3` để thử bài mới.
 - Trên iPhone: nạp beat → thấy tone/BPM sau vài giây → hát có chỉnh giọng. Ở bài chuyển tone, key tự
   đổi đúng chỗ.
