@@ -370,6 +370,60 @@ void main() {
     engine.clearKeyTimeline();
   });
 
+  test(
+    'đổi tone beat (v0.5): key áp dụng cộng nửa cung, sự kiện, về 0',
+    () async {
+      final engine = ToneCoreEngine.create(maxBlockFrames: 256);
+      addTearDown(engine.dispose);
+      engine.start();
+      final path = '${Directory.systemTemp.path}/tonecore_dart_tr_beat.wav';
+      _writeSineWav(path, seconds: 3, sampleRate: 48000);
+      addTearDown(() => File(path).deleteSync());
+      expect(() => engine.transpose = 2, throwsA(isA<ToneCoreException>()));
+      await engine.loadBeatAndWait(path);
+      engine.key = const MusicKey(0, MusicScale.major);
+      engine.play();
+      expect(engine.playback.transpose, 0);
+      expect(engine.playback.transposeProgress, 1.0);
+
+      engine.transpose = 3;
+      expect(engine.transpose, 3);
+      expect(engine.playback.transposePending, isTrue);
+      final events = <ToneCoreEvent>[];
+      // Chạy audio (luồng nền render song song) tới khi beat nghe ở tone mới.
+      final deadline = DateTime.now().add(const Duration(seconds: 30));
+      while (engine.playback.audibleTranspose != 3) {
+        expect(DateTime.now().isBefore(deadline), isTrue);
+        engine.processOffline(null, 256);
+        events.addAll(engine.pollEvents());
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      expect(engine.key, const MusicKey(0, MusicScale.major));
+      expect(engine.appliedKey, const MusicKey(3, MusicScale.major));
+      events.addAll(engine.pollEvents());
+      expect(
+        events.where((e) => e.type == ToneCoreEventType.keyChanged).last.key,
+        const MusicKey(3, MusicScale.major),
+      );
+      while (engine.playback.transposeProgress < 1.0) {
+        expect(DateTime.now().isBefore(deadline), isTrue);
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      events.addAll(engine.pollEvents());
+      final ready = events.where(
+        (e) => e.type == ToneCoreEventType.transposeReady,
+      );
+      expect(ready.single.code, 3);
+
+      engine.transpose = 0;
+      engine.processOffline(null, 256);
+      expect(engine.playback.audibleTranspose, 0);
+      expect(engine.appliedKey, const MusicKey(0, MusicScale.major));
+      expect(() => engine.transpose = 9, throwsA(isA<ToneCoreException>()));
+    },
+  );
+
   test('block quá lớn bị từ chối ở phía Dart', () {
     final engine = ToneCoreEngine.create(maxBlockFrames: 64);
     addTearDown(engine.dispose);

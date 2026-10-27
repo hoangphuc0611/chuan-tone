@@ -250,6 +250,46 @@ class ToneCoreBindings {
         int Function(ffi.Pointer<tc_engine>, ffi.Pointer<tc_playback_state>)
       >();
 
+  /// ---- Đổi tone beat (từ v0.5, xem docs/adr/004-beat-transpose.md) ----
+  /// semitones −6…+6, giữ nguyên tempo và vị trí. Render ở luồng nền bắt đầu từ vị trí đang phát:
+  /// beat đang nghe tiếp tục tới khi bản mới sẵn tại vị trí phát (~0,1 s), rồi chuyển bằng crossfade
+  /// 20 ms. 0 = beat gốc (chuyển ngay). Gọi liên tiếp → chỉ lần cuối được render.
+  /// Tua tới vùng chưa render: beat im lặng, vị trí đứng yên tới khi vùng đó xong (~0,1 s).
+  /// Khi bản mới bắt đầu được nghe, engine tự cộng số nửa cung vào key chỉnh giọng (key chọn tay và
+  /// timeline vẫn là tone của beat GỐC) và phát TC_EVENT_KEY_CHANGED. Xong cả bài →
+  /// TC_EVENT_TRANSPOSE_READY. Cần đã nạp beat (TC_ERR_INVALID_STATE nếu chưa). tc_load_beat → tone về
+  /// 0.
+  int tc_set_transpose(ffi.Pointer<tc_engine> engine, int semitones) {
+    return _tc_set_transpose(engine, semitones);
+  }
+
+  late final _tc_set_transposePtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(ffi.Pointer<tc_engine>, ffi.Int32)
+        >
+      >('tc_set_transpose');
+  late final _tc_set_transpose = _tc_set_transposePtr
+      .asFunction<int Function(ffi.Pointer<tc_engine>, int)>();
+
+  int tc_get_transpose(
+    ffi.Pointer<tc_engine> engine,
+    ffi.Pointer<ffi.Int32> out_semitones,
+  ) {
+    return _tc_get_transpose(engine, out_semitones);
+  }
+
+  late final _tc_get_transposePtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(ffi.Pointer<tc_engine>, ffi.Pointer<ffi.Int32>)
+        >
+      >('tc_get_transpose');
+  late final _tc_get_transpose = _tc_get_transposePtr
+      .asFunction<
+        int Function(ffi.Pointer<tc_engine>, ffi.Pointer<ffi.Int32>)
+      >();
+
   /// ---- Route ----
   /// Android: lớp Kotlin báo loại thiết bị (NDK không đọc được). iOS: engine tự phát hiện.
   int tc_set_route_hint(ffi.Pointer<tc_engine> engine, int route) {
@@ -377,6 +417,7 @@ class ToneCoreBindings {
   late final _tc_set_key = _tc_set_keyPtr
       .asFunction<int Function(ffi.Pointer<tc_engine>, int, int)>();
 
+  /// Key của beat GỐC: chọn tay, hoặc đoạn timeline đang áp dụng.
   int tc_get_key(
     ffi.Pointer<tc_engine> engine,
     ffi.Pointer<ffi.Int32> out_root,
@@ -396,6 +437,35 @@ class ToneCoreBindings {
         >
       >('tc_get_key');
   late final _tc_get_key = _tc_get_keyPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<tc_engine>,
+          ffi.Pointer<ffi.Int32>,
+          ffi.Pointer<ffi.Int32>,
+        )
+      >();
+
+  /// (từ v0.5) Key đang dùng để chỉnh giọng = tc_get_key + số nửa cung beat đang nghe. Hiển thị cái
+  /// này.
+  int tc_get_applied_key(
+    ffi.Pointer<tc_engine> engine,
+    ffi.Pointer<ffi.Int32> out_root,
+    ffi.Pointer<ffi.Int32> out_scale,
+  ) {
+    return _tc_get_applied_key(engine, out_root, out_scale);
+  }
+
+  late final _tc_get_applied_keyPtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(
+            ffi.Pointer<tc_engine>,
+            ffi.Pointer<ffi.Int32>,
+            ffi.Pointer<ffi.Int32>,
+          )
+        >
+      >('tc_get_applied_key');
+  late final _tc_get_applied_key = _tc_get_applied_keyPtr
       .asFunction<
         int Function(
           ffi.Pointer<tc_engine>,
@@ -477,7 +547,8 @@ class ToneCoreBindings {
   /// Engine tự đổi key chỉnh giọng theo vị trí beat (cả khi tua). Các đoạn phải tăng dần theo
   /// start_ms, không chồng nhau, tối đa 256 đoạn; khoảng trống giữa hai đoạn giữ key đoạn trước.
   /// count = 0 → tắt. Gọi tc_set_key → tắt chế độ theo timeline (người dùng chọn tay).
-  /// Mỗi lần engine tự đổi key → sự kiện TC_EVENT_KEY_CHANGED; tc_get_key trả key đang áp dụng.
+  /// Mỗi lần engine tự đổi key → sự kiện TC_EVENT_KEY_CHANGED; tc_get_key trả key đoạn đang áp dụng
+  /// (tone beat gốc), tc_get_applied_key cộng thêm tone đang nghe.
   int tc_set_key_timeline(
     ffi.Pointer<tc_engine> engine,
     ffi.Pointer<tc_key_segment> segments,
@@ -819,8 +890,12 @@ sealed class tc_event_type {
   /// nghe lại giọng bị chặn vì đang dùng Bluetooth
   static const TC_EVENT_MONITOR_BLOCKED = 7;
 
-  /// (từ v0.4) Engine tự đổi key chỉnh giọng theo timeline: code = chủ âm 0..11, value = tc_scale
+  /// (từ v0.4) Key chỉnh giọng đang áp dụng đổi — theo timeline, hoặc (từ v0.5) beat bắt đầu nghe ở
+  /// tone mới. code = chủ âm 0..11 (đã cộng số nửa cung đổi tone), value = tc_scale.
   static const TC_EVENT_KEY_CHANGED = 8;
+
+  /// (từ v0.5) Đã render xong cả bài ở tone mới: code = số nửa cung, value = thời gian render (ms)
+  static const TC_EVENT_TRANSPOSE_READY = 9;
 }
 
 final class tc_engine extends ffi.Opaque {}
@@ -936,6 +1011,18 @@ final class tc_playback_state extends ffi.Struct {
 
   @ffi.Double()
   external double duration_ms;
+
+  /// số nửa cung đã yêu cầu (tc_set_transpose)
+  @ffi.Int32()
+  external int transpose;
+
+  /// số nửa cung đang nghe (đổi sau ~0,1 s khi bản mới sẵn)
+  @ffi.Int32()
+  external int audible_transpose;
+
+  /// 0..1: phần bài đã render ở tone yêu cầu (1 khi transpose = 0)
+  @ffi.Float()
+  external double transpose_progress;
 }
 
 final class tc_latency_result extends ffi.Struct {
@@ -1188,8 +1275,8 @@ final class tc_analyzer extends ffi.Opaque {}
 
 const int TC_API_VERSION_MAJOR = 0;
 
-const int TC_API_VERSION_MINOR = 4;
+const int TC_API_VERSION_MINOR = 5;
 
 const int TC_API_VERSION_PATCH = 0;
 
-const int TC_API_VERSION = 1024;
+const int TC_API_VERSION = 1280;

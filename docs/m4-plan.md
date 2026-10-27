@@ -39,7 +39,13 @@
   0.4). Key chỉnh giọng tự cộng số nửa cung khi bản mới bắt đầu được nghe. Mac M1 Release, beat thật:
   bấm đổi tone giữa bài → nghe sau 7 ms, render cả bài 2,2–3,3 s. 212 test (thêm 14), TSan / ASan /
   UBSan sạch, audio thread không cấp phát. ADR-004.
-- [ ] B6 – B7
+- [x] **B6** (2026-10-27): binding Dart 0.5 (ffigen sinh lại; `ToneCoreEngine.transpose`,
+  `appliedKey`, `PlaybackState.transpose / audibleTranspose / transposeProgress / transposePending`,
+  sự kiện `transposeReady`) — 16 test binding. Phòng thử: nút tone beat − / + (to, chặn ±6), "Đang đổi
+  tone…" / "Đang chuẩn bị cả bài: N%", tone hiển thị = tone đang nghe kèm "beat +2"; chọn tone tay
+  khi beat đã đổi thì quy về tone gốc trước khi giao engine; nhớ tone theo bài (`song_prefs.json`,
+  khoá tên + kích thước file, không gắn phiên bản engine) và tự đặt lại khi mở bài — 24 test app.
+- [ ] B7
 
 ## Các điểm cần quyết (2026-10-26: duyệt theo đề nghị)
 

@@ -1,0 +1,132 @@
+import 'dart:io';
+
+import 'package:chuantone/data/song_prefs.dart';
+import 'package:chuantone/engine/labels.dart';
+import 'package:chuantone/widgets/transpose_control.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:tonecore_flutter/tonecore_flutter.dart';
+
+void main() {
+  group('nhãn đổi tone', () {
+    test('Gốc / +n / −n (dấu trừ thật)', () {
+      expect(transposeLabel(0), 'Gốc');
+      expect(transposeLabel(2), '+2');
+      expect(transposeLabel(-3), '−3');
+    });
+
+    test('tone sau khi đổi và quy về tone gốc', () {
+      const am = MusicKey(9, MusicScale.naturalMinor);
+      expect(transposedKey(am, 2), const MusicKey(11, MusicScale.naturalMinor));
+      expect(transposedKey(am, 5), const MusicKey(2, MusicScale.naturalMinor));
+      expect(
+        transposedKey(am, -10),
+        const MusicKey(11, MusicScale.naturalMinor),
+      );
+      // Beat đang +2, người dùng chọn Si thứ (đang nghe) → engine nhận La thứ (gốc).
+      expect(
+        baseKeyForHeard(const MusicKey(11, MusicScale.naturalMinor), 2),
+        am,
+      );
+      expect(
+        baseKeyForHeard(const MusicKey(0, MusicScale.major), -3),
+        const MusicKey(3, MusicScale.major),
+      );
+    });
+  });
+
+  group('nhớ tone theo bài', () {
+    late Directory dir;
+    setUp(() => dir = Directory.systemTemp.createTempSync('song_prefs'));
+    tearDown(() => dir.deleteSync(recursive: true));
+
+    test('lưu, đọc lại, về 0 thì xoá', () async {
+      final prefs = SongPrefs(baseDir: dir);
+      expect(await prefs.transposeFor(name: 'a.m4a', size: 10), 0);
+      await prefs.setTranspose(name: 'a.m4a', size: 10, semitones: -2);
+      await prefs.setTranspose(name: 'b.mp3', size: 20, semitones: 4);
+      expect(
+        await SongPrefs(baseDir: dir).transposeFor(name: 'a.m4a', size: 10),
+        -2,
+      );
+      expect(await prefs.transposeFor(name: 'b.mp3', size: 20), 4);
+      expect(await prefs.transposeFor(name: 'a.m4a', size: 11), 0); // khác file
+      await prefs.setTranspose(name: 'a.m4a', size: 10, semitones: 0);
+      expect(await prefs.transposeFor(name: 'a.m4a', size: 10), 0);
+      expect(
+        File('${dir.path}/song_prefs.json').readAsStringSync(),
+        isNot(contains('a.m4a')),
+      );
+    });
+
+    test('file hỏng hoặc giá trị ngoài −6…+6 → coi như 0', () async {
+      File('${dir.path}/song_prefs.json')
+          .writeAsStringSync('{"a|1": {"transpose": 9}');
+      expect(await SongPrefs(baseDir: dir).transposeFor(name: 'a', size: 1), 0);
+      File('${dir.path}/song_prefs.json')
+          .writeAsStringSync('{"a|1": {"transpose": 9}}');
+      expect(await SongPrefs(baseDir: dir).transposeFor(name: 'a', size: 1), 0);
+    });
+
+    test('giữ tối đa ${SongPrefs.maxEntries} bài, bỏ bài cũ nhất', () async {
+      final prefs = SongPrefs(baseDir: dir);
+      for (var i = 0; i <= SongPrefs.maxEntries; i++) {
+        await prefs.setTranspose(name: 'bai$i', size: i, semitones: 1);
+      }
+      expect(await prefs.transposeFor(name: 'bai0', size: 0), 0);
+      expect(await prefs.transposeFor(name: 'bai1', size: 1), 1);
+    });
+  });
+
+  group('nút đổi tone', () {
+    Future<List<int>> pump(
+      WidgetTester tester, {
+      required int value,
+      int? audible,
+      double progress = 1.0,
+    }) async {
+      final calls = <int>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TransposeControl(
+              value: value,
+              audible: audible ?? value,
+              progress: progress,
+              onChanged: calls.add,
+            ),
+          ),
+        ),
+      );
+      return calls;
+    }
+
+    testWidgets('bấm + / − đổi một nửa cung', (tester) async {
+      final calls = await pump(tester, value: 2);
+      expect(find.text('+2'), findsOneWidget);
+      await tester.tap(find.byTooltip('Nâng tone'));
+      await tester.tap(find.byTooltip('Hạ tone'));
+      expect(calls, [3, 1]);
+      expect(find.textContaining('Đã nâng 2 nửa cung'), findsOneWidget);
+    });
+
+    testWidgets('chặn ở ±6', (tester) async {
+      final calls = await pump(tester, value: 6);
+      await tester.tap(find.byTooltip('Nâng tone'));
+      expect(calls, isEmpty);
+      final down = await pump(tester, value: -6);
+      await tester.tap(find.byTooltip('Hạ tone'));
+      expect(down, isEmpty);
+    });
+
+    testWidgets('đang chờ bản mới / đang render cả bài', (tester) async {
+      await pump(tester, value: 3, audible: 0, progress: 0.1);
+      expect(find.text('Đang đổi tone…'), findsOneWidget);
+      await pump(tester, value: 3, progress: 0.4);
+      expect(find.text('Đang chuẩn bị cả bài: 40%'), findsOneWidget);
+      await pump(tester, value: 0);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(find.text('Gốc'), findsOneWidget);
+    });
+  });
+}

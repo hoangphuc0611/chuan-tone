@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:tonecore_flutter/tonecore_flutter.dart';
 
+import 'labels.dart';
+
 /// Giữ một engine ToneCore dùng chung cho cả app (thiết bị âm thanh thật).
 ///
 /// Mở engine khi màn đầu tiên cần, xin quyền micro trước khi mở.
@@ -19,7 +21,8 @@ class AudioService extends ChangeNotifier {
   String? lastError;
   bool micGranted = false;
 
-  /// Tone chọn tay cho tự chỉnh giọng (mặc định La thứ – tone phổ biến của nhạc Việt).
+  /// Tone chọn tay cho tự chỉnh giọng, tính theo beat GỐC (mặc định La thứ – tone phổ biến của
+  /// nhạc Việt). Khi beat đã đổi tone, engine tự cộng số nửa cung.
   MusicKey key = const MusicKey(9, MusicScale.naturalMinor);
 
   /// Kết quả phân tích của beat đang nạp (null = chưa có).
@@ -34,8 +37,12 @@ class AudioService extends ChangeNotifier {
 
   ToneCoreEngine? get engine => _engine;
 
-  /// Tone đang áp dụng (khi theo bài thì đổi theo vị trí beat).
-  MusicKey get currentKey => _engine?.key ?? key;
+  /// Tone đang áp dụng = tone đang nghe (khi theo bài thì đổi theo vị trí beat; đã cộng số nửa
+  /// cung đổi tone beat).
+  MusicKey get currentKey => _engine?.appliedKey ?? key;
+
+  /// Tone beat đã chọn (−6…+6, 0 = gốc).
+  int get transpose => _engine?.transpose ?? 0;
   bool get isRunning => _engine != null;
 
   /// Sự kiện từ engine (nạp beat xong, đổi route, đo độ trễ xong...).
@@ -68,12 +75,26 @@ class AudioService extends ChangeNotifier {
     return _engine != null;
   }
 
-  /// Chọn tone tay → thôi theo bài.
-  void setKey(MusicKey k) {
-    key = k;
+  /// Chọn tay tone đang NGHE (như hiển thị) → thôi theo bài. Beat đã đổi tone thì quy về tone
+  /// beat gốc trước khi giao engine.
+  void setKey(MusicKey heard) {
+    key = baseKeyForHeard(heard, transpose);
     followSong = false;
-    _engine?.key = k;
+    _engine?.key = key;
     notifyListeners();
+  }
+
+  /// Đổi tone beat (−6…+6). Trả false nếu chưa nạp beat.
+  bool setTranspose(int semitones) {
+    final e = _engine;
+    if (e == null) return false;
+    try {
+      e.transpose = semitones.clamp(-6, 6);
+    } on ToneCoreException {
+      return false;
+    }
+    notifyListeners();
+    return true;
   }
 
   /// Nhận kết quả phân tích của beat mới (null khi đổi beat mà chưa có kết quả): áp tuning, và

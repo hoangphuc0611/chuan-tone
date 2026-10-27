@@ -6,12 +6,14 @@ import 'package:flutter/material.dart';
 import 'package:tonecore_flutter/tonecore_flutter.dart';
 
 import '../data/analysis_cache.dart';
+import '../data/song_prefs.dart';
 import '../engine/audio_service.dart';
 import '../engine/labels.dart';
 import '../widgets/pitch_meter.dart';
+import '../widgets/transpose_control.dart';
 
-/// Màn thử M1–M3: phát beat, tự dò tone / BPM khi nạp bài, nghe lại giọng, tự chỉnh giọng theo
-/// tone của bài, đồng hồ cao độ, số đo engine.
+/// Màn thử M1–M4: phát beat, đổi tone beat (nhớ theo bài), tự dò tone / BPM khi nạp bài, nghe lại
+/// giọng, tự chỉnh giọng theo tone của bài (tự cộng số nửa cung đổi tone), đồng hồ cao độ, số đo.
 class TestRoomPage extends StatefulWidget {
   const TestRoomPage({super.key});
 
@@ -41,6 +43,10 @@ class _TestRoomPageState extends State<TestRoomPage> {
   AnalysisStatus? _analysisStatus;
   String? _analysisError;
   MusicKey? _currentKey;
+  final _prefs = SongPrefs();
+  String?
+  _beatFile; // tên + kích thước của beat đang nạp: khoá nhớ tone theo bài
+  int? _beatSize;
 
   @override
   void initState() {
@@ -104,6 +110,19 @@ class _TestRoomPageState extends State<TestRoomPage> {
 
   void _show(String text) => setState(() => _message = text);
 
+  void _setTranspose(int semitones) {
+    final e = _service.engine;
+    if (e == null || !_service.setTranspose(semitones)) return;
+    setState(() => _playback = e.playback);
+    final name = _beatFile;
+    final size = _beatSize;
+    if (name != null && size != null) {
+      unawaited(
+        _prefs.setTranspose(name: name, size: size, semitones: semitones),
+      );
+    }
+  }
+
   Future<void> _pickBeat() async {
     final e = _service.engine;
     if (e == null) return;
@@ -123,6 +142,15 @@ class _TestRoomPageState extends State<TestRoomPage> {
       await e.loadBeatAndWait(path);
       _beatName = files.single.name;
       final size = await File(path).length();
+      _beatFile = files.single.name;
+      _beatSize = size;
+      // Nạp beat mới → engine về tone gốc; đặt lại tone người dùng đã chọn cho bài này.
+      final saved = await _prefs.transposeFor(
+        name: files.single.name,
+        size: size,
+      );
+      if (saved != 0) _service.setTranspose(saved);
+      _playback = e.playback;
       unawaited(_analyze(path, files.single.name, size));
     } on ToneCoreException catch (err) {
       _show('Không mở được file (${err.codeName}). Hãy thử MP3, M4A hoặc WAV.');
@@ -268,6 +296,13 @@ class _TestRoomPageState extends State<TestRoomPage> {
               icon: Icon(p.playing ? Icons.pause : Icons.play_arrow),
             ),
           ),
+          const SizedBox(height: 8),
+          TransposeControl(
+            value: p.transpose,
+            audible: p.audibleTranspose,
+            progress: p.transposeProgress,
+            onChanged: _setTranspose,
+          ),
         ],
         _GainSlider(
           label: 'Âm lượng nhạc',
@@ -325,6 +360,7 @@ class _TestRoomPageState extends State<TestRoomPage> {
         const SizedBox(height: 8),
         _KeyPicker(
           value: _currentKey ?? _service.currentKey,
+          transpose: pb?.audibleTranspose ?? 0,
           followingSong: _service.followSong,
           onChanged: (k) => setState(() {
             _service.setKey(k);
@@ -444,11 +480,14 @@ class _AnalysisCard extends StatelessWidget {
 class _KeyPicker extends StatelessWidget {
   const _KeyPicker({
     required this.value,
+    required this.transpose,
     required this.followingSong,
     required this.onChanged,
   });
 
+  /// Tone đang nghe (đã cộng [transpose]).
   final MusicKey value;
+  final int transpose;
   final bool followingSong;
   final ValueChanged<MusicKey> onChanged;
 
@@ -465,7 +504,10 @@ class _KeyPicker extends StatelessWidget {
           ),
         ),
         Text(
-          followingSong ? 'Theo bài · chọn bên dưới để đổi tay' : 'Chọn tay',
+          [
+            followingSong ? 'Theo bài · chọn bên dưới để đổi tay' : 'Chọn tay',
+            if (transpose != 0) 'beat ${transposeLabel(transpose)}',
+          ].join(' · '),
           style: theme.textTheme.bodySmall,
         ),
         Wrap(

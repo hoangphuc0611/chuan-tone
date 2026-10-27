@@ -78,6 +78,24 @@ String keyLabel(MusicKey k) {
   return '${noteNameVi(k.root)} ${scaleLabel(k.scale)} (${keySymbol(k)})';
 }
 
+// ---- Đổi tone beat ----
+
+/// "Gốc", "+2", "−3" (dấu trừ thật, không phải gạch nối).
+String transposeLabel(int semitones) => semitones == 0
+    ? 'Gốc'
+    : semitones > 0
+    ? '+$semitones'
+    : '\u2212${-semitones}';
+
+/// Tone sau khi đổi beat `semitones` nửa cung.
+MusicKey transposedKey(MusicKey k, int semitones) =>
+    MusicKey((k.root + semitones) % 12, k.scale);
+
+/// Người dùng chọn tay tone đang NGHE khi beat đã đổi `semitones` → tone của beat gốc (engine
+/// nhận tone gốc rồi tự cộng số nửa cung).
+MusicKey baseKeyForHeard(MusicKey heard, int semitones) =>
+    transposedKey(heard, -semitones);
+
 // ---- Phân tích bài ----
 
 String analysisStageLabel(AnalysisStage s) => switch (s) {

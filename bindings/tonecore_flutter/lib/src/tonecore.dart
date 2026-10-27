@@ -215,6 +215,9 @@ enum ToneCoreEventType {
   streamRestarted,
   monitorBlocked,
   keyChanged,
+
+  /// (từ v0.5) Đã render xong cả bài ở tone mới: code = số nửa cung, value = thời gian render (ms).
+  transposeReady,
 }
 
 T _enumAt<T>(List<T> values, int index, T fallback) =>
@@ -330,12 +333,27 @@ class PlaybackState {
     required this.playing,
     required this.position,
     required this.duration,
+    this.transpose = 0,
+    this.audibleTranspose = 0,
+    this.transposeProgress = 1.0,
   });
 
   final bool hasBeat;
   final bool playing;
   final Duration position;
   final Duration duration;
+
+  /// (từ v0.5) Số nửa cung đã yêu cầu ([ToneCoreEngine.transpose]).
+  final int transpose;
+
+  /// Số nửa cung beat đang NGHE — đổi sau ~0,1 s khi bản mới sẵn tại vị trí phát.
+  final int audibleTranspose;
+
+  /// 0..1: phần bài đã render ở tone yêu cầu (1 khi [transpose] = 0).
+  final double transposeProgress;
+
+  /// Đã đổi tone nhưng bản mới chưa nghe được (đang render đoạn tại vị trí phát).
+  bool get transposePending => transpose != audibleTranspose;
 }
 
 class LatencyResult {
@@ -381,7 +399,8 @@ class ToneCoreEvent {
 
   bool get ok => code == TcResult.ok;
 
-  /// Với [ToneCoreEventType.keyChanged]: key engine vừa tự chuyển sang theo timeline.
+  /// Với [ToneCoreEventType.keyChanged]: key chỉnh giọng đang áp dụng vừa đổi — theo timeline, hoặc
+  /// (từ v0.5) beat bắt đầu nghe ở tone mới. Đã cộng số nửa cung đổi tone.
   MusicKey? get key => type == ToneCoreEventType.keyChanged
       ? MusicKey(
           code,
@@ -505,6 +524,7 @@ class ToneCoreEngine implements Finalizable {
   set key(MusicKey k) =>
       _check('tc_set_key', _bindings.tc_set_key(_h, k.root, k.scale.index));
 
+  /// Key của beat GỐC: chọn tay, hoặc đoạn timeline đang áp dụng (chưa cộng [transpose]).
   MusicKey get key {
     return using((arena) {
       final root = arena<Int32>();
@@ -514,6 +534,36 @@ class ToneCoreEngine implements Finalizable {
         root.value,
         _enumAt(MusicScale.values, scale.value, MusicScale.chromatic),
       );
+    });
+  }
+
+  /// (từ v0.5) Key đang dùng để chỉnh giọng = [key] + số nửa cung beat đang nghe. Hiển thị cái này.
+  MusicKey get appliedKey {
+    return using((arena) {
+      final root = arena<Int32>();
+      final scale = arena<Int32>();
+      _check(
+        'tc_get_applied_key',
+        _bindings.tc_get_applied_key(_h, root, scale),
+      );
+      return MusicKey(
+        root.value,
+        _enumAt(MusicScale.values, scale.value, MusicScale.chromatic),
+      );
+    });
+  }
+
+  /// (từ v0.5) Đổi tone beat −6…+6 nửa cung, giữ tempo. Render ở luồng nền từ vị trí đang phát;
+  /// nghe tone mới sau ~0,1 s (crossfade 20 ms). Key chỉnh giọng tự cộng theo khi bản mới được
+  /// nghe (sự kiện [ToneCoreEventType.keyChanged]). Cần đã nạp beat; nạp beat mới → về 0.
+  set transpose(int semitones) =>
+      _check('tc_set_transpose', _bindings.tc_set_transpose(_h, semitones));
+
+  int get transpose {
+    return using((arena) {
+      final out = arena<Int32>();
+      _check('tc_get_transpose', _bindings.tc_get_transpose(_h, out));
+      return out.value;
     });
   }
 
@@ -624,6 +674,9 @@ class ToneCoreEngine implements Finalizable {
         playing: s.ref.playing != 0,
         position: Duration(microseconds: (s.ref.position_ms * 1000).round()),
         duration: Duration(microseconds: (s.ref.duration_ms * 1000).round()),
+        transpose: s.ref.transpose,
+        audibleTranspose: s.ref.audible_transpose,
+        transposeProgress: s.ref.transpose_progress,
       );
     });
   }
