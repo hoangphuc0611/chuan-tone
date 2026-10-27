@@ -1,7 +1,7 @@
 # Kết quả đổi tone beat (M4)
 
-> Tình trạng 2026-10-27: sau nghe A/B lần 1 — đã sửa méo (limiter) và bộ dò onset; nâng tone đang chờ
-> nghe lại (xem "B4").
+> Tình trạng 2026-10-27: đã nghe A/B mù 2 lần (xem "B4") — chủ dự án chốt chất lượng hiện tại; còn
+> nghe và đo trên iPhone (B7).
 
 Chỉ tiêu M4 (CLAUDE.md mục 9): **không méo, không nhòe trống khi nghe A/B** — nghiệm thu bằng tai
 (trang nghe mù `tools/stretch/ab.py` + iPhone, xem `docs/m4-plan.md` điểm 3). Các số khách quan
@@ -129,6 +129,17 @@ Kết quả hiện tại (`realeval.py`, 7 beat dev × 15 s, có limiter cả ha
 - "Hơi méo" không do limiter: tỉ lệ mẫu vượt 0,98 trước limiter ngang nhau giữa hai thuật toán (Trống
   Cơm 0,66% / 0,54%, các beat khác ≤ 0,17%). Nhiều khả năng là tiếng "phơ" của phase vocoder ở phần có
   cao độ khi giãn ×β > 1.
+- **Quyết định** (chủ dự án, 2026-10-27): chốt chất lượng hiện tại, sang nghe trên iPhone. "Hơi méo"
+  khi nâng tone để lại cho M9 (hướng thử: cửa sổ ngắn hơn / đổi cửa sổ quanh tiếng trống khi nâng).
+
+**Tốc độ sau B4** (bộ dò onset mới + limiter; `beatlab render`, Mac M1 Release, 8 beat dev cả bài
+200–369 s): nâng +4 **107–110×**, hạ −4 **153–167×** thời gian thực → bài 4 phút 2,2 s / 1,5 s (ngân sách
+iPhone ≤ 4 s). Nâng tone chậm hơn vì giãn thời gian ×β > 1 (nhiều khung hơn).
+
+**RAM** (tính): bản đổi tone lưu int16 stereo → bài 4 phút thêm 46 MB (chỉ tiêu ≤ 50 MB), bài 6 phút
+71 MB. Bộ nhớ khối chưa render chưa được ghi nên hệ điều hành chưa cấp trang thật → lúc chuyển giữa hai
+mức, bản cũ (đã render) và bản mới (mới vài khối) gần như không chồng nhau. Số đo thật: dòng "RAM" ở
+Phòng thử trên iPhone.
 
 ## B3 — giữ transient
 

@@ -9,6 +9,7 @@ import '../data/analysis_cache.dart';
 import '../data/song_prefs.dart';
 import '../engine/audio_service.dart';
 import '../engine/labels.dart';
+import '../engine/transpose_timing.dart';
 import '../widgets/pitch_meter.dart';
 import '../widgets/transpose_control.dart';
 
@@ -44,6 +45,12 @@ class _TestRoomPageState extends State<TestRoomPage> {
   String? _analysisError;
   MusicKey? _currentKey;
   final _prefs = SongPrefs();
+  // Số đo trên máy thật (M4 B7): bấm tone → nghe, render cả bài, thời gian phân tích, RAM.
+  final _clock = Stopwatch()..start();
+  final _timing = TransposeTiming();
+  Duration? _analysisTime;
+  int _rssMb = 0;
+  int _maxRssMb = 0;
   String?
   _beatFile; // tên + kích thước của beat đang nạp: khoá nhớ tone theo bài
   int? _beatSize;
@@ -72,7 +79,15 @@ class _TestRoomPageState extends State<TestRoomPage> {
     _pitchTicker = Timer.periodic(const Duration(milliseconds: 33), (_) {
       final eng = _service.engine;
       if (eng == null || !mounted) return;
-      setState(() => _pitch = eng.pitchState);
+      setState(() {
+        _pitch = eng.pitchState;
+        if (_timing.pending) {
+          final pb = eng.playback;
+          if (_timing.observe(pb.audibleTranspose, _clock.elapsed)) {
+            _playback = pb;
+          }
+        }
+      });
     });
   }
 
@@ -83,6 +98,8 @@ class _TestRoomPageState extends State<TestRoomPage> {
       _playback = e.playback;
       _metrics = e.metrics;
       _currentKey = _service.currentKey;
+      _rssMb = ProcessInfo.currentRss >> 20;
+      _maxRssMb = ProcessInfo.maxRss >> 20;
     });
   }
 
@@ -91,6 +108,8 @@ class _TestRoomPageState extends State<TestRoomPage> {
     switch (ev.type) {
       case ToneCoreEventType.keyChanged:
         setState(() => _currentKey = ev.key);
+      case ToneCoreEventType.transposeReady:
+        setState(() => _timing.rendered(ev.code, ev.value));
       case ToneCoreEventType.monitorBlocked:
         _show(
           'Tai nghe Bluetooth bị trễ nhiều nên đã tắt nghe lại giọng. Hãy dùng tai nghe có dây.',
@@ -113,6 +132,7 @@ class _TestRoomPageState extends State<TestRoomPage> {
   void _setTranspose(int semitones) {
     final e = _service.engine;
     if (e == null || !_service.setTranspose(semitones)) return;
+    _timing.requested(semitones, _clock.elapsed);
     setState(() => _playback = e.playback);
     final name = _beatFile;
     final size = _beatSize;
@@ -149,7 +169,11 @@ class _TestRoomPageState extends State<TestRoomPage> {
         name: files.single.name,
         size: size,
       );
-      if (saved != 0) _service.setTranspose(saved);
+      _timing.reset();
+      _analysisTime = null;
+      if (saved != 0 && _service.setTranspose(saved)) {
+        _timing.requested(saved, _clock.elapsed);
+      }
       _playback = e.playback;
       unawaited(_analyze(path, files.single.name, size));
     } on ToneCoreException catch (err) {
@@ -175,6 +199,7 @@ class _TestRoomPageState extends State<TestRoomPage> {
     var result = await cache.lookup(name: name, size: size);
     if (result == null) {
       final analyzer = _analyzer = SongAnalyzer.create();
+      final started = _clock.elapsed;
       try {
         result = await analyzer.analyze(
           path,
@@ -182,6 +207,7 @@ class _TestRoomPageState extends State<TestRoomPage> {
             if (mounted) setState(() => _analysisStatus = s);
           },
         );
+        _analysisTime = _clock.elapsed - started;
         await cache.store(name: name, size: size, analysis: result);
       } on StateError {
         return; // đã chọn beat khác: analyzer này bị dispose giữa chừng
@@ -397,7 +423,14 @@ class _TestRoomPageState extends State<TestRoomPage> {
         PitchMeter(state: _pitch),
         const Divider(height: 32),
         // ---- Số đo ----
-        if (m != null) _MetricsCard(metrics: m),
+        if (m != null)
+          _MetricsCard(
+            metrics: m,
+            timing: _timing,
+            analysisTime: _analysisTime,
+            rssMb: _rssMb,
+            maxRssMb: _maxRssMb,
+          ),
       ],
     );
   }
@@ -572,9 +605,19 @@ class _GainSlider extends StatelessWidget {
 }
 
 class _MetricsCard extends StatelessWidget {
-  const _MetricsCard({required this.metrics});
+  const _MetricsCard({
+    required this.metrics,
+    required this.timing,
+    required this.analysisTime,
+    required this.rssMb,
+    required this.maxRssMb,
+  });
 
   final EngineMetrics metrics;
+  final TransposeTiming timing;
+  final Duration? analysisTime;
+  final int rssMb;
+  final int maxRssMb;
 
   @override
   Widget build(BuildContext context) {
@@ -594,6 +637,14 @@ class _MetricsCard extends StatelessWidget {
       ),
       ('Trễ xử lý', '${m.algorithmLatencyMs.toStringAsFixed(1)} ms'),
       ('Xrun (rè)', '${m.xruns}'),
+      ('Đổi tone beat', transposeTimingLabel(timing)),
+      (
+        'Phân tích bài',
+        analysisTime == null
+            ? '—'
+            : '${(analysisTime!.inMilliseconds / 1000).toStringAsFixed(1)} s',
+      ),
+      ('RAM', '$rssMb MB (đỉnh $maxRssMb MB)'),
     ];
     return Card(
       child: Padding(

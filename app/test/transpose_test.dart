@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:chuantone/data/song_prefs.dart';
 import 'package:chuantone/engine/labels.dart';
+import 'package:chuantone/engine/transpose_timing.dart';
 import 'package:chuantone/widgets/transpose_control.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -127,6 +128,34 @@ void main() {
       await pump(tester, value: 0);
       expect(find.byType(LinearProgressIndicator), findsNothing);
       expect(find.text('Gốc'), findsOneWidget);
+    });
+  });
+
+  group('số đo đổi tone (Phòng thử)', () {
+    const ms = Duration(milliseconds: 1);
+
+    test('bấm → nghe: tính từ lần bấm cuối tới khi nghe đúng mức đó', () {
+      final t = TransposeTiming();
+      expect(transposeTimingLabel(t), 'chưa đổi');
+      t.requested(1, ms * 1000);
+      t.requested(2, ms * 1100); // bấm tiếp trước khi kịp nghe +1
+      expect(t.observe(1, ms * 1120), isFalse);
+      expect(transposeTimingLabel(t), 'đang đổi…');
+      expect(t.observe(2, ms * 1140), isTrue);
+      expect(t.lastSwitch, ms * 40);
+      expect(t.observe(2, ms * 1200), isFalse); // đã đo xong
+      expect(transposeTimingLabel(t), 'nghe sau 40 ms (+2)');
+    });
+
+    test('render cả bài: chỉ nhận của mức đang chọn', () {
+      final t = TransposeTiming()..requested(-3, Duration.zero);
+      t.observe(-3, ms * 30);
+      t.rendered(2, 2500); // bản cũ, đã bỏ
+      expect(t.lastRender, isNull);
+      t.rendered(-3, 3140.4);
+      expect(transposeTimingLabel(t), 'nghe sau 30 ms (−3) · cả bài 3.1 s');
+      t.reset();
+      expect(transposeTimingLabel(t), 'chưa đổi');
     });
   });
 }

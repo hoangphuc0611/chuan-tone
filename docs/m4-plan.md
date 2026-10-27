@@ -5,6 +5,36 @@
 
 ---
 
+## Báo cáo M4 (bản nháp 2026-10-27 — chờ số đo iPhone)
+
+**Đã xong**
+- Đổi tone beat ±6 nửa cung, giữ tempo: phase vocoder khoá pha identity + chung pha stereo, giữ
+  transient bằng căn pha tuyến tính quanh onset, resample sinc–Kaiser, limiter đỉnh nhìn trước.
+- Render ở luồng nền từ vị trí đang phát, chuyển bằng crossfade 20 ms, tua vào vùng chưa render thì
+  ưu tiên vùng đó; audio thread chỉ đọc PCM (không cấp phát, TSan sạch).
+- Key chỉnh giọng tự cộng số nửa cung khi bản mới bắt đầu được nghe; app hiện tone đang nghe, nhớ
+  mức tone theo bài. C API 0.5, binding Dart 0.5, ADR-004.
+
+**Số đo**
+| Mục | Chỉ tiêu | Mac M1 | iPhone |
+|---|---|---|---|
+| Bấm tone → nghe tone mới | ≤ 300 ms | 7 ms | _chờ đo_ |
+| Render cả bài 4 phút | ≤ 4 s | 1,5 s (hạ) / 2,2 s (nâng) | _chờ đo_ |
+| RAM thêm, bài 4 phút | ≤ 50 MB | 46 MB (tính) | _chờ đo_ |
+| Nghe A/B mù ±2…±4 | không nhòe / méo "rõ" | hạ tone tốt hơn Signalsmith; nâng: 0 "rõ", "hơi méo" 4 / 8 | _chờ nghe_ |
+| Mẫu bị cắt sau đổi tone | 0 | 0 (7 beat × 6 mức) | — |
+| Test | xanh | 215 engine + 16 binding + 26 app; ASan / UBSan / TSan sạch | — |
+
+**Vấn đề còn lại**
+- Nâng tone (+4…+6) "hơi méo / phơ" ở vài beat, kém Signalsmith một chút; Trống Cơm +6 nhòe rõ → M9.
+- RAM tăng theo độ dài bài (6 phút ≈ 71 MB) — nếu Android tầm trung căng: chỉ giữ cửa sổ quanh đầu
+  phát (rủi ro 3).
+- Chưa cache bản render ra đĩa (đổi tone lại phải render lại, ~2 s).
+
+**Cách tự kiểm tra**: mục "Cách bạn tự kiểm tra khi xong M4" ở phần 5.
+
+---
+
 ## Tiến độ
 
 - [x] **B1** (2026-10-26): `PitchShifter` (`engine/src/stretch/`, phase vocoder cơ bản + resample
@@ -30,12 +60,13 @@
   ở mọi mức (trừ chỉ số dội ở +6: −18,9 so với −25,4 dB, vẫn đạt chỉ tiêu −12). Beat thật: năng lượng trước onset cách bản gốc 0–2 dB (Signalsmith 3–7 dB). Sửa 2 lỗi
   phân loại bin (cửa sổ xoá tiếng click, sàn quá cao). Bài 4 phút 2,8–3,0 s trên M1. Không cần B4.
   Chi tiết: docs/stretch-results.md.
-- [~] **B4** (2026-10-27, mở lại sau nghe A/B lần 1 — hạ tone tốt hơn Signalsmith, nâng tone nhòe /
+- [x] **B4** (2026-10-27, mở lại sau nghe A/B lần 1 — hạ tone tốt hơn Signalsmith, nâng tone nhòe /
   méo ở vài đoạn): (1) méo = cắt đỉnh sau đổi pha → limiter đỉnh nhìn trước trong render (0 mẫu bị cắt);
   (2) nhòe = neo cả khung kéo lệch các tiếng sát nhau + bộ dò bỏ sót → bộ dò onset mới (năng lượng cao
   tần bước 1 ms); phép đo trên beat thật `tools/stretch/realeval.py`. Đã thử và bỏ: tách trống HPSS +
-  OLA, neo một phần khi nâng tone. Nâng tone vẫn nhiều "onset ma" hơn Signalsmith → chờ nghe lại
-  (`testdata/beat-ab-2/`, 16 mục). Chi tiết: docs/stretch-results.md.
+  OLA, neo một phần khi nâng tone. Nghe lại lần 2 (+4 / +6, 16 mục): không còn mục "rõ" ở +4, nhòe
+  ngang Signalsmith, "hơi méo" 4 / 8 đoạn (Signalsmith 2 / 8), 12 / 16 "như nhau" → chủ dự án chốt chất
+  lượng hiện tại; "hơi méo" khi nâng tone để lại M9. Chi tiết: docs/stretch-results.md.
 - [x] **B5** (2026-10-27): engine đổi tone beat — `TransposedTrack` (khối 4096 frame, cờ atomic,
   int16 dư 6 dB), `BeatRenderer` (render nền từ vị trí đang phát, từng bước 8 khối, ưu tiên chỗ vừa
   tua, nối lượt bằng crossfade), `BeatPlayer` viết lại (chờ khối, crossfade 20 ms, fade ra trước khối
@@ -50,7 +81,11 @@
   tone…" / "Đang chuẩn bị cả bài: N%", tone hiển thị = tone đang nghe kèm "beat +2"; chọn tone tay
   khi beat đã đổi thì quy về tone gốc trước khi giao engine; nhớ tone theo bài (`song_prefs.json`,
   khoá tên + kích thước file, không gắn phiên bản engine) và tự đặt lại khi mở bài — 24 test app.
-- [ ] B7
+- [~] **B7** (2026-10-27): Phòng thử hiện số đo trên máy thật — "Đổi tone beat: nghe sau … ms ·
+  cả bài … s", "Phân tích bài: … s" (cho việc còn mở của M3), "RAM: … MB (đỉnh … MB)"
+  (`app/lib/engine/transpose_timing.dart`, 26 test app). Tốc độ sau B4 trên M1: nâng 107–110×, hạ
+  153–167× (bài 4 phút 2,2 / 1,5 s). Trang A/B: xong (2 lần nghe). **Còn**: nghe + đo trên iPhone,
+  báo cáo M4 (bản nháp ở đầu file).
 
 ## Các điểm cần quyết (2026-10-26: duyệt theo đề nghị)
 
