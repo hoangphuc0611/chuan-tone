@@ -3,20 +3,29 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 #include "core/spsc_ring.h"
 #include "player/track.h"
+#include "player/transposed_track.h"
 
 namespace tonecore {
 
-// Phát beat từ Track trong RAM.
+// Phát beat từ Track trong RAM, có thể đổi tone (bản TransposedTrack render dần ở luồng nền).
 //
-// Đồng bộ giữa luồng điều khiển và audio thread không dùng khóa:
-//  - Track mới: luồng điều khiển đẩy con trỏ vào hàng đợi `incoming_`; audio thread nhận ở đầu
-//    block kế tiếp, đẩy track cũ vào `retired_`. Luồng điều khiển huỷ track cũ khi dọn dẹp →
-//    audio thread không bao giờ cấp phát hay giải phóng bộ nhớ.
+// Đồng bộ giữa luồng nền và audio thread không dùng khóa:
+//  - Lệnh (beat mới / đổi tone): luồng nền đẩy con trỏ thô vào hàng đợi `incoming_`; audio thread
+//    nhận ở đầu block kế tiếp. Con trỏ không còn dùng được audio thread trả về `retired_`; luồng
+//    nền (giữ quyền sở hữu bằng shared_ptr) mới huỷ → audio thread không bao giờ cấp phát hay giải
+//    phóng. Chỉ MỘT luồng (engine dùng Worker) được gọi setTrack / setTransposed / collectGarbage.
 //  - Phát/tạm dừng: cờ atomic; âm lượng chuyển dần 5 ms để không có tiếng "bụp".
 //  - Tua: yêu cầu atomic, audio thread áp dụng ở block kế tiếp.
+//  - Đổi tone: audio thread tiếp tục phát bản đang nghe cho tới khi khối tại vị trí phát của bản
+//  mới
+//    đã render (TransposedTrack::blockReady), rồi chuyển bằng crossfade công suất đều 20 ms. Về
+//    tone 0 = về beat gốc (luôn sẵn) → chuyển ngay.
+//  - Vị trí phát rơi vào khối chưa render (vừa tua tới vùng mới): phát im lặng, vị trí đứng yên
+//    (như đang tải) tới khi khối xong, rồi fade vào 5 ms.
 class BeatPlayer {
  public:
   explicit BeatPlayer(uint32_t sampleRate);
@@ -25,9 +34,16 @@ class BeatPlayer {
   BeatPlayer(const BeatPlayer&) = delete;
   BeatPlayer& operator=(const BeatPlayer&) = delete;
 
-  // ---- Luồng điều khiển ----
-  // Thay track (vị trí về 0, trạng thái tạm dừng). Trả false nếu hàng đợi đầy (rất hiếm).
-  bool setTrack(std::unique_ptr<Track> track);
+  // ---- Luồng nền (một luồng duy nhất) ----
+  // Thay beat (vị trí về 0, tạm dừng, tone 0). Trả false nếu hàng đợi đầy (rất hiếm).
+  bool setTrack(std::shared_ptr<const Track> track);
+  // Đổi tone: phát `track` (đang render) khi sẵn; nullptr = về beat gốc.
+  bool setTransposed(std::shared_ptr<TransposedTrack> track);
+  // Huỷ các track audio thread đã trả về.
+  void collectGarbage();
+  bool hasGarbage() const noexcept { return retired_.sizeApprox() > 0; }
+
+  // ---- Luồng bất kỳ ----
   void play() noexcept;
   void pause() noexcept;
   void seekFrames(uint64_t frame) noexcept;
@@ -37,26 +53,53 @@ class BeatPlayer {
   bool hasTrack() const noexcept { return duration_.load(std::memory_order_relaxed) > 0; }
   // true một lần sau khi phát hết bài (đọc xong thì xoá cờ).
   bool consumeEnded() noexcept { return ended_.exchange(false, std::memory_order_acq_rel); }
-  // Huỷ các track cũ mà audio thread đã trả về. Chỉ MỘT luồng được gọi hàm này và setTrack()
-  // (engine dùng luồng nền) vì `retired_` là hàng đợi một bên đọc.
-  void collectGarbage();
-  // Ước lượng có track cũ đang chờ huỷ (gọi từ luồng bất kỳ).
-  bool hasGarbage() const noexcept { return retired_.sizeApprox() > 0; }
+  // Số nửa cung của bản đang NGHE (đổi lúc bắt đầu crossfade sang bản mới).
+  int audibleSemitones() const noexcept { return audible_.load(std::memory_order_relaxed); }
+  // true khi đang chờ khối chưa render tại vị trí phát.
+  bool starved() const noexcept { return starved_.load(std::memory_order_relaxed); }
 
   // ---- Audio thread ----
   // Ghi beat (stereo interleaved, float −1..1) vào `outStereo`, `frames` frame. [RT]
   void render(float* outStereo, uint32_t frames) noexcept;
 
  private:
-  void adoptIncoming() noexcept;
+  struct Command {
+    const Track* track;   // != nullptr: beat mới
+    TransposedTrack* tt;  // bản đổi tone (nullptr = beat gốc)
+  };
+  struct Retired {
+    const Track* track;
+    TransposedTrack* tt;
+  };
 
-  SpscRing<Track*> incoming_{8};
-  SpscRing<Track*> retired_{16};  // > incoming_ → không bao giờ đầy giữa 2 lần dọn
-  Track* current_ = nullptr;      // chỉ audio thread (và destructor)
-  uint64_t cursor_ = 0;           // chỉ audio thread
-  // Fade phát/dừng tuyến tính đúng 5 ms (đường mũ tiến về 0 quá lâu → vị trí vẫn trôi sau
-  // khi dừng). Chỉ audio thread dùng.
+  void adoptCommands() noexcept;
+  void retire(const Track* track, TransposedTrack* tt) noexcept;
+  bool available(const TransposedTrack* src, uint64_t frame) const noexcept;
+  void sampleAt(const TransposedTrack* src, uint64_t frame, float& l, float& r) const noexcept;
+
+  SpscRing<Command> incoming_{16};
+  SpscRing<Retired> retired_{64};
+
+  // Luồng nền: giữ quyền sở hữu những gì audio thread đang (hoặc có thể đang) dùng.
+  std::vector<std::shared_ptr<const Track>> liveTracks_;
+  std::vector<std::shared_ptr<TransposedTrack>> liveTransposed_;
+
+  // Audio thread (và destructor).
+  const Track* track_ = nullptr;
+  TransposedTrack* active_ = nullptr;  // bản đang phát; nullptr = beat gốc
+  TransposedTrack* next_ = nullptr;    // bản chờ chuyển sang (hasNext_)
+  bool hasNext_ = false;
+  TransposedTrack* fadeFrom_ = nullptr;  // bản cũ đang crossfade ra (fadeFromValid_)
+  bool fadeFromValid_ = false;
+  uint32_t xfade_ = 0;  // số frame crossfade còn lại (0 = không crossfade)
+  uint32_t xfadeLen_;
+  Retired deferred_[8]{};  // trả về chưa được (hàng đợi đầy) → thử lại block sau
+  uint32_t deferredCount_ = 0;
+  uint64_t cursor_ = 0;
+  // Fade phát/dừng tuyến tính đúng 5 ms (đường mũ tiến về 0 quá lâu → vị trí vẫn trôi sau khi
+  // dừng). Chỉ audio thread dùng.
   float fade_ = 0.0f;
+  uint32_t fadeFrames_;
   float fadeStep_ = 1.0f;
 
   std::atomic<bool> playing_{false};
@@ -64,6 +107,8 @@ class BeatPlayer {
   std::atomic<uint64_t> position_{0};
   std::atomic<uint64_t> duration_{0};
   std::atomic<bool> ended_{false};
+  std::atomic<int> audible_{0};
+  std::atomic<bool> starved_{false};
 };
 
 }  // namespace tonecore

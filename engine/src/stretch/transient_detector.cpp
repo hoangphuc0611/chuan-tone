@@ -87,17 +87,14 @@ TransientDetector::TransientDetector(int channels, double sampleRate, int binsFf
 }
 
 float TransientDetector::sample(int64_t t) const noexcept {
-  if (t < 0 || static_cast<uint64_t>(t) >= inFrames_) return 0.0f;
-  const auto ch = static_cast<std::size_t>(channels_);
-  const float* p = in_ + static_cast<std::size_t>(t) * ch;
-  float s = 0.0f;
-  for (std::size_t c = 0; c < ch; ++c) s += p[c];
-  return s / static_cast<float>(ch);
+  if (t < 0 || static_cast<uint64_t>(t) >= in_.frames) return 0.0f;
+  float sum = 0.0f;
+  for (int c = 0; c < channels_; ++c) sum += in_.at(t, c);
+  return sum / static_cast<float>(channels_);
 }
 
-void TransientDetector::start(const float* in, uint64_t inFrames, int64_t from) noexcept {
+void TransientDetector::start(const InputView& in, int64_t from) noexcept {
   in_ = in;
-  inFrames_ = inFrames;
   count_ = 0;
   head_ = 0;
   const auto first = static_cast<int64_t>(

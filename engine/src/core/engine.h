@@ -15,6 +15,7 @@
 #include "latency/latency_probe.h"
 #include "pitch/voice_pitch_node.h"
 #include "player/beat_player.h"
+#include "player/beat_renderer.h"
 #include "tonecore/tonecore.h"
 
 namespace tonecore {
@@ -41,6 +42,11 @@ struct EngineConfig {
 // thread tìm đoạn chứa vị trí beat hiện tại; sang đoạn mới thì đặt key override cho
 // VoicePitchNode và tăng bộ đếm → pollEvents phát TC_EVENT_KEY_CHANGED. Timeline cũ được trả
 // về hàng đợi khác và huỷ ở luồng điều khiển.
+//
+// Đổi tone beat (từ v0.5, ADR-004): tc_set_transpose → luồng nền tạo TransposedTrack, giao cho
+// BeatPlayer và render dần từ vị trí đang phát (BeatRenderer). Khi bản mới bắt đầu được nghe,
+// audio thread cộng số nửa cung vào key chỉnh giọng (VoicePitchNode::setTranspose) — key chọn tay
+// và timeline vẫn là tone của beat gốc. Nạp beat mới → tone về 0.
 class Engine : public BackendHost {
  public:
   explicit Engine(const EngineConfig& config);
@@ -60,6 +66,9 @@ class Engine : public BackendHost {
   tc_result play() noexcept;
   tc_result pause() noexcept;
   tc_result seekMs(double ms) noexcept;
+  // Đổi tone beat −6…+6 nửa cung (render nền; nghe sau ~0,1 s). 0 = beat gốc.
+  tc_result setTranspose(int32_t semitones);
+  int32_t transpose() const noexcept { return requestedSemis_.load(std::memory_order_relaxed); }
   void fillPlayback(tc_playback_state& s) const noexcept;
 
   tc_result setRouteHint(int32_t route);
@@ -67,6 +76,8 @@ class Engine : public BackendHost {
   // Tự chỉnh giọng
   tc_result setKey(int32_t root, int32_t scale) noexcept;
   void key(int32_t& root, int32_t& scale) const noexcept;
+  // Key đang dùng để chỉnh giọng = key beat gốc (tay hoặc timeline) + số nửa cung đang nghe.
+  void appliedKey(int32_t& root, int32_t& scale) const noexcept;
   tc_result setCorrectionPreset(int32_t preset) noexcept;
   tc_result setTuning(float cents) noexcept;
   float tuning() const noexcept { return pitch_.tuningCents(); }
@@ -134,6 +145,16 @@ class Engine : public BackendHost {
   std::atomic<int32_t> autoKey_{0};      // packKey của key đang theo timeline
   std::atomic<uint32_t> autoKeySeq_{0};  // audio thread tăng mỗi lần tự đổi key
   uint32_t autoKeySeen_ = 0;             // luồng điều khiển
+  int lastAudible_ = 0;                  // luồng điều khiển: tone đang nghe đã báo qua sự kiện
+  int pitchTranspose_ = 0;               // audio thread: tone đã áp cho VoicePitchNode
+
+  // Đổi tone beat (từ v0.5).
+  std::atomic<int32_t> requestedSemis_{0};
+  std::atomic<uint32_t> transposeGen_{0};  // tăng mỗi lần đổi tone / nạp beat
+  std::atomic<float> transposeProgress_{1.0f};
+  // Chỉ luồng nền (Worker) dùng.
+  std::shared_ptr<const Track> currentTrack_;
+  std::shared_ptr<TransposedTrack> requestedTrack_;
 
   // Thành phần
   BeatPlayer player_;

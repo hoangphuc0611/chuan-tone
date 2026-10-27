@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "dsp/fft.h"
+#include "stretch/input_view.h"
 
 namespace tonecore {
 
@@ -35,7 +36,10 @@ class TransientDetector {
 
   TransientDetector(int channels, double sampleRate, int binsFftSize);
 
-  void start(const float* in, uint64_t inFrames, int64_t from) noexcept;
+  void start(const InputView& in, int64_t from) noexcept;
+  void start(const float* in, uint64_t inFrames, int64_t from) noexcept {
+    start(InputView{in, nullptr, inFrames, channels_}, from);
+  }
   // Dò tới khi chắc chắn đã có mọi onset có thời điểm < `pos`.
   void ensure(int64_t pos) noexcept;
   // Các onset đã dò, thời điểm tăng dần. Onset cũ hơn `before` có thể bị bỏ để giữ chỗ.
@@ -79,8 +83,7 @@ class TransientDetector {
   std::size_t head_ = 0;
   std::size_t count_ = 0;
 
-  const float* in_ = nullptr;
-  uint64_t inFrames_ = 0;
+  InputView in_;
   int64_t firstFrame_ = 0;   // khung dò đầu tiên của lần start() này
   int64_t nextFrame_ = 0;    // khung sẽ tính flux tiếp
   int64_t decidedUpTo_ = 0;  // các khung < giá trị này đã quyết định có / không có onset

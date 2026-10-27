@@ -200,8 +200,31 @@ tc_result tc_seek(tc_engine* engine, double position_ms) {
 
 tc_result tc_get_playback_state(tc_engine* engine, tc_playback_state* out_state) {
   if (engine == nullptr || out_state == nullptr) return TC_ERR_INVALID_ARG;
-  if (out_state->struct_size != sizeof(tc_playback_state)) return TC_ERR_INVALID_ARG;
-  engine->impl.fillPlayback(*out_state);
+  // Chấp nhận struct của binding v0.4 (kết thúc ở duration_ms): chỉ ghi phần người gọi có.
+  constexpr uint32_t kMinSize = offsetof(tc_playback_state, duration_ms) + sizeof(double);
+  const uint32_t size = out_state->struct_size;
+  if (size < kMinSize || size > sizeof(tc_playback_state)) return TC_ERR_INVALID_ARG;
+  tc_playback_state full{};
+  full.struct_size = size;
+  engine->impl.fillPlayback(full);
+  std::memcpy(out_state, &full, size);
+  return TC_OK;
+}
+
+tc_result tc_set_transpose(tc_engine* engine, int32_t semitones) {
+  if (engine == nullptr) return TC_ERR_INVALID_ARG;
+  try {
+    return engine->impl.setTranspose(semitones);
+  } catch (const std::bad_alloc&) {
+    return TC_ERR_OUT_OF_MEMORY;
+  } catch (...) {
+    return TC_ERR_INTERNAL;
+  }
+}
+
+tc_result tc_get_transpose(tc_engine* engine, int32_t* out_semitones) {
+  if (engine == nullptr || out_semitones == nullptr) return TC_ERR_INVALID_ARG;
+  *out_semitones = engine->impl.transpose();
   return TC_OK;
 }
 
@@ -213,6 +236,12 @@ tc_result tc_set_key(tc_engine* engine, int32_t root, int32_t scale) {
 tc_result tc_get_key(tc_engine* engine, int32_t* out_root, int32_t* out_scale) {
   if (engine == nullptr || out_root == nullptr || out_scale == nullptr) return TC_ERR_INVALID_ARG;
   engine->impl.key(*out_root, *out_scale);
+  return TC_OK;
+}
+
+tc_result tc_get_applied_key(tc_engine* engine, int32_t* out_root, int32_t* out_scale) {
+  if (engine == nullptr || out_root == nullptr || out_scale == nullptr) return TC_ERR_INVALID_ARG;
+  engine->impl.appliedKey(*out_root, *out_scale);
   return TC_OK;
 }
 

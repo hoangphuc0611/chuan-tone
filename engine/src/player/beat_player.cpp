@@ -1,38 +1,44 @@
 #include "player/beat_player.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace tonecore {
 
 namespace {
-constexpr double kFadeSec = 0.005;  // 5 ms: đủ ngắn để không trễ, đủ dài để không "bụp"
+constexpr double kFadeSec = 0.005;       // 5 ms: đủ ngắn để không trễ, đủ dài để không "bụp"
+constexpr double kCrossfadeSec = 0.020;  // đổi tone: 20 ms (CLAUDE.md 3.2: 10–20 ms)
 constexpr float kInt16ToFloat = 1.0f / 32768.0f;
+constexpr float kTransposedToFloat = kInt16ToFloat / TransposedTrack::kStoreGain;
+constexpr float kHalfPi = 1.57079632679489661923f;
 }  // namespace
 
 BeatPlayer::BeatPlayer(uint32_t sampleRate)
-    : fadeStep_(static_cast<float>(1.0 / (kFadeSec * sampleRate))) {}
+    : xfadeLen_(std::max<uint32_t>(1, static_cast<uint32_t>(kCrossfadeSec * sampleRate))),
+      fadeFrames_(static_cast<uint32_t>(kFadeSec * sampleRate)),
+      fadeStep_(static_cast<float>(1.0 / (kFadeSec * sampleRate))) {}
 
-BeatPlayer::~BeatPlayer() {
-  Track* t = nullptr;
-  while (incoming_.pop(t)) delete t;
-  while (retired_.pop(t)) delete t;
-  delete current_;
-}
+// Audio thread đã dừng: mọi con trỏ thô đều thuộc liveTracks_ / liveTransposed_, tự huỷ theo.
+BeatPlayer::~BeatPlayer() = default;
 
-bool BeatPlayer::setTrack(std::unique_ptr<Track> track) {
+bool BeatPlayer::setTrack(std::shared_ptr<const Track> track) {
   collectGarbage();
   if (!track) return false;
+  if (!incoming_.push(Command{track.get(), nullptr})) return false;
   const uint64_t frames = track->frames;
-  Track* raw = track.release();
-  if (!incoming_.push(raw)) {
-    delete raw;
-    return false;
-  }
+  liveTracks_.push_back(std::move(track));
   playing_.store(false, std::memory_order_relaxed);
   seekRequest_.store(-1, std::memory_order_relaxed);
   position_.store(0, std::memory_order_relaxed);
   duration_.store(frames, std::memory_order_relaxed);
   ended_.store(false, std::memory_order_relaxed);
+  return true;
+}
+
+bool BeatPlayer::setTransposed(std::shared_ptr<TransposedTrack> track) {
+  collectGarbage();
+  if (!incoming_.push(Command{nullptr, track.get()})) return false;
+  if (track) liveTransposed_.push_back(std::move(track));
   return true;
 }
 
@@ -54,56 +60,173 @@ void BeatPlayer::seekFrames(uint64_t frame) noexcept {
 }
 
 void BeatPlayer::collectGarbage() {
-  Track* t = nullptr;
-  while (retired_.pop(t)) delete t;
+  Retired r{};
+  while (retired_.pop(r)) {
+    if (r.track != nullptr) {
+      liveTracks_.erase(std::remove_if(liveTracks_.begin(), liveTracks_.end(),
+                                       [&](const auto& p) { return p.get() == r.track; }),
+                        liveTracks_.end());
+    }
+    if (r.tt != nullptr) {
+      liveTransposed_.erase(std::remove_if(liveTransposed_.begin(), liveTransposed_.end(),
+                                           [&](const auto& p) { return p.get() == r.tt; }),
+                            liveTransposed_.end());
+    }
+  }
 }
 
 // [RT]
-void BeatPlayer::adoptIncoming() noexcept {
-  Track* t = nullptr;
-  while (incoming_.pop(t)) {
-    if (current_ != nullptr && !retired_.push(current_)) {
-      // Hàng đợi trả về đầy (luồng điều khiển chưa dọn): giữ track cũ lại, trả track mới về
-      // để không phải giải phóng trong audio thread. Không xảy ra với nhịp dùng bình thường.
-      retired_.push(t);
+void BeatPlayer::retire(const Track* track, TransposedTrack* tt) noexcept {
+  if (track == nullptr && tt == nullptr) return;
+  if (retired_.push(Retired{track, tt})) return;
+  // Hàng đợi trả về đầy (luồng nền chưa dọn): giữ lại thử ở block sau. Hết chỗ nữa thì để nguyên
+  // (luồng nền vẫn giữ shared_ptr → chỉ chậm giải phóng, không hỏng). Không xảy ra khi dùng bình
+  // thường.
+  if (deferredCount_ < std::size(deferred_)) deferred_[deferredCount_++] = Retired{track, tt};
+}
+
+// [RT]
+void BeatPlayer::adoptCommands() noexcept {
+  // Thử trả lại những gì lần trước chưa trả được.
+  uint32_t kept = 0;
+  for (uint32_t i = 0; i < deferredCount_; ++i) {
+    if (!retired_.push(deferred_[i])) deferred_[kept++] = deferred_[i];
+  }
+  deferredCount_ = kept;
+
+  Command cmd{};
+  while (incoming_.pop(cmd)) {
+    if (cmd.track != nullptr) {
+      // Beat mới: trả lại mọi thứ của beat cũ, về đầu bài, tone 0.
+      retire(track_, active_);
+      if (hasNext_) retire(nullptr, next_);
+      if (fadeFromValid_) retire(nullptr, fadeFrom_);
+      track_ = cmd.track;
+      active_ = nullptr;
+      hasNext_ = false;
+      fadeFromValid_ = false;
+      xfade_ = 0;
+      cursor_ = 0;
+      fade_ = 0.0f;
+      audible_.store(0, std::memory_order_relaxed);
       continue;
     }
-    current_ = t;
-    cursor_ = 0;
-    fade_ = 0.0f;
+    // Đổi tone: bản chờ cũ (chưa kịp nghe) bị thay luôn.
+    if (hasNext_) retire(nullptr, next_);
+    next_ = cmd.tt;
+    hasNext_ = next_ != active_;
+  }
+}
+
+// [RT]
+bool BeatPlayer::available(const TransposedTrack* src, uint64_t frame) const noexcept {
+  if (track_ == nullptr || frame >= track_->frames) return false;
+  return src == nullptr || src->blockReady(frame);
+}
+
+// [RT]
+void BeatPlayer::sampleAt(const TransposedTrack* src, uint64_t frame, float& l,
+                          float& r) const noexcept {
+  const auto i = 2 * static_cast<std::size_t>(frame);
+  if (src == nullptr) {
+    l = static_cast<float>(track_->pcm[i]) * kInt16ToFloat;
+    r = static_cast<float>(track_->pcm[i + 1]) * kInt16ToFloat;
+  } else {
+    l = static_cast<float>(src->pcm[i]) * kTransposedToFloat;
+    r = static_cast<float>(src->pcm[i + 1]) * kTransposedToFloat;
   }
 }
 
 // [RT] Không cấp phát, không khóa.
 void BeatPlayer::render(float* outStereo, uint32_t frames) noexcept {
-  adoptIncoming();
+  adoptCommands();
 
   const int64_t seek = seekRequest_.exchange(-1, std::memory_order_relaxed);
-  if (seek >= 0 && current_ != nullptr) {
-    cursor_ = std::min<uint64_t>(static_cast<uint64_t>(seek), current_->frames);
+  if (seek >= 0 && track_ != nullptr) {
+    cursor_ = std::min<uint64_t>(static_cast<uint64_t>(seek), track_->frames);
+    if (xfade_ > 0) {  // tua giữa lúc crossfade: bỏ luôn bản cũ
+      xfade_ = 0;
+      retire(nullptr, fadeFrom_);
+      fadeFromValid_ = false;
+    }
   }
 
-  const bool wantPlay = playing_.load(std::memory_order_relaxed) && current_ != nullptr;
+  // Bản mới đã có tại vị trí phát → chuyển (cả khi đang tạm dừng: key chỉnh giọng và tone hiển thị
+  // đổi ngay). Bản cũ đang phát được thì crossfade, không thì (đang chờ khối / tạm dừng) chuyển
+  // thẳng.
+  if (hasNext_ && available(next_, std::min(cursor_, track_ != nullptr ? track_->frames - 1 : 0))) {
+    if (fadeFromValid_) retire(nullptr, fadeFrom_);  // crossfade trước chưa xong: bỏ bản cũ nhất
+    fadeFromValid_ = false;
+    xfade_ = 0;
+    if (available(active_, cursor_) && fade_ > 0.0f) {
+      fadeFrom_ = active_;
+      fadeFromValid_ = true;
+      xfade_ = xfadeLen_;
+    } else {
+      retire(nullptr, active_);
+    }
+    active_ = next_;
+    hasNext_ = false;
+    audible_.store(active_ != nullptr ? active_->semitones : 0, std::memory_order_relaxed);
+  }
 
-  if (current_ == nullptr || (!wantPlay && fade_ <= 0.0f)) {
+  const bool wantPlay = playing_.load(std::memory_order_relaxed) && track_ != nullptr;
+  if (track_ == nullptr || (!wantPlay && fade_ <= 0.0f)) {
     std::fill(outStereo, outStereo + 2 * static_cast<std::size_t>(frames), 0.0f);
+    starved_.store(false, std::memory_order_relaxed);
+    if (track_ != nullptr && seekRequest_.load(std::memory_order_relaxed) < 0) {
+      position_.store(cursor_, std::memory_order_relaxed);
+    }
     return;
   }
 
-  const int16_t* pcm = current_->pcm.data();
-  const uint64_t total = current_->frames;
+  const uint64_t total = track_->frames;
+  bool starved = false;
   for (uint32_t i = 0; i < frames; ++i) {
-    fade_ = wantPlay ? std::min(1.0f, fade_ + fadeStep_) : std::max(0.0f, fade_ - fadeStep_);
-    const float g = fade_ * kInt16ToFloat;
-    if (cursor_ < total && g > 0.0f) {
-      outStereo[2 * i] = static_cast<float>(pcm[2 * cursor_]) * g;
-      outStereo[2 * i + 1] = static_cast<float>(pcm[2 * cursor_ + 1]) * g;
-      ++cursor_;
-    } else {
-      outStereo[2 * i] = 0.0f;
-      outStereo[2 * i + 1] = 0.0f;
+    float& outL = outStereo[2 * i];
+    float& outR = outStereo[2 * i + 1];
+    if (cursor_ < total && !available(active_, cursor_)) {
+      // Khối tại vị trí phát chưa render (vừa tua tới): im lặng, đứng yên, sẵn thì fade vào lại.
+      starved = true;
+      fade_ = 0.0f;
+      outL = 0.0f;
+      outR = 0.0f;
+      continue;
     }
+    // Nhìn trước 5 ms: khối sắp tới chưa render (luồng render bị chậm) → fade ra như tạm dừng thay
+    // vì tắt phụt (click), rồi đứng yên chờ.
+    const bool aheadReady = available(active_, std::min(cursor_ + fadeFrames_, total - 1));
+    if (wantPlay && !aheadReady) starved = true;
+    fade_ = wantPlay && aheadReady ? std::min(1.0f, fade_ + fadeStep_)
+                                   : std::max(0.0f, fade_ - fadeStep_);
+    if (cursor_ >= total || fade_ <= 0.0f) {
+      outL = 0.0f;
+      outR = 0.0f;
+      continue;
+    }
+    float l = 0.0f;
+    float r = 0.0f;
+    sampleAt(active_, cursor_, l, r);
+    if (xfade_ > 0) {
+      // Crossfade công suất đều (hai bản khác cao độ → gần như không tương quan).
+      const float x = 1.0f - static_cast<float>(xfade_) / static_cast<float>(xfadeLen_);
+      const float gNew = std::sin(kHalfPi * x);
+      const float gOld = std::cos(kHalfPi * x);
+      float ol = 0.0f;
+      float orr = 0.0f;
+      if (available(fadeFrom_, cursor_)) sampleAt(fadeFrom_, cursor_, ol, orr);
+      l = gNew * l + gOld * ol;
+      r = gNew * r + gOld * orr;
+      if (--xfade_ == 0) {
+        retire(nullptr, fadeFrom_);
+        fadeFromValid_ = false;
+      }
+    }
+    outL = l * fade_;
+    outR = r * fade_;
+    ++cursor_;
   }
+  starved_.store(starved, std::memory_order_relaxed);
 
   if (cursor_ >= total && wantPlay) {
     playing_.store(false, std::memory_order_relaxed);

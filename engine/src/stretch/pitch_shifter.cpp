@@ -112,8 +112,15 @@ PitchShifter::PitchShifter(int channels, double semitones, const PitchShiftConfi
 }
 
 void PitchShifter::start(const float* in, uint64_t inFrames, uint64_t begin) noexcept {
+  startView(InputView{in, nullptr, inFrames, channels_}, begin);
+}
+
+void PitchShifter::start(const int16_t* in, uint64_t inFrames, uint64_t begin) noexcept {
+  startView(InputView{nullptr, in, inFrames, channels_}, begin);
+}
+
+void PitchShifter::startView(const InputView& in, uint64_t begin) noexcept {
   in_ = in;
-  inFrames_ = inFrames;
   outPos_ = begin;
   if (bypass_) return;
   // Mẫu giãn thấp nhất cần cho frame ra đầu tiên, rồi khung tổng hợp đầu tiên phủ tới nó.
@@ -126,7 +133,7 @@ void PitchShifter::start(const float* in, uint64_t inFrames, uint64_t begin) noe
   prevMax_ = 0.0f;
   if (transients_) {
     const double center = static_cast<double>(nextFrame_ * hop_ + n_ / 2) / beta_;
-    detector_.start(in, inFrames, static_cast<int64_t>(std::floor(center)) - n_ / 2);
+    detector_.start(in, static_cast<int64_t>(std::floor(center)) - n_ / 2);
   }
   std::fill(prevUnit_.begin(), prevUnit_.end(), std::complex<float>(1.0f, 0.0f));
   for (auto& m : prevMag_) std::fill(m.begin(), m.end(), 0.0f);
@@ -139,9 +146,7 @@ void PitchShifter::analyze(int64_t analysis) noexcept {
   for (std::size_t c = 0; c < ch; ++c) {
     for (int i = 0; i < n_; ++i) {
       const int64_t t = analysis + i;
-      const float x = (t >= 0 && static_cast<uint64_t>(t) < inFrames_)
-                          ? in_[static_cast<std::size_t>(t) * ch + c]
-                          : 0.0f;
+      const float x = in_.at(t, static_cast<int>(c));
       frame_[static_cast<std::size_t>(i)] = x * window_[static_cast<std::size_t>(i)];
     }
     fft_.forward(frame_.data(), spec_[c].data());
@@ -396,8 +401,7 @@ void PitchShifter::pull(float* out, uint32_t frames) noexcept {
   if (bypass_) {
     for (uint32_t f = 0; f < frames; ++f, ++outPos_) {
       for (std::size_t c = 0; c < ch; ++c) {
-        out[f * ch + c] =
-            outPos_ < inFrames_ ? in_[static_cast<std::size_t>(outPos_) * ch + c] : 0.0f;
+        out[f * ch + c] = in_.at(static_cast<int64_t>(outPos_), static_cast<int>(c));
       }
     }
     return;

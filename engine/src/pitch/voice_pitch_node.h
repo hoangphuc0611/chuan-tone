@@ -65,6 +65,9 @@ class VoicePitchNode {
   void process(float* io, uint32_t n) noexcept;
   // [RT] Key do engine tự đặt theo timeline; active = false → quay về key chọn tay.
   void setKeyOverride(bool active, int root, Scale scale) noexcept;
+  // [RT] Beat đang nghe đã đổi tone `semitones` nửa cung → cộng vào chủ âm của key (tay hoặc
+  // timeline — cả hai là tone của beat gốc). Tuning giữ nguyên (đổi đúng 2^(n/12)).
+  void setTranspose(int semitones) noexcept;
 
  private:
   void syncParams() noexcept;
@@ -87,6 +90,7 @@ class VoicePitchNode {
   std::atomic<float> tuningCents_{0.0f};
   float tuningSemis_ = 0.0f;     // audio thread
   bool overrideActive_ = false;  // audio thread
+  int transpose_ = 0;            // audio thread
   int overrideRoot_ = 0;         // audio thread
   Scale overrideScale_ = Scale::Chromatic;
   std::atomic<float> retuneMs_;

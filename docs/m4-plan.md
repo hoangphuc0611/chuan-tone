@@ -31,7 +31,15 @@
   phân loại bin (cửa sổ xoá tiếng click, sàn quá cao). Bài 4 phút 2,8–3,0 s trên M1. Không cần B4.
   Chi tiết: docs/stretch-results.md.
 - [ ] ~~B4~~ (không cần: B3 đạt mọi chỉ tiêu khách quan; xem lại nếu nghe A/B ở B7 chưa đạt)
-- [ ] B5 – B7
+- [x] **B5** (2026-10-27): engine đổi tone beat — `TransposedTrack` (khối 4096 frame, cờ atomic,
+  int16 dư 6 dB), `BeatRenderer` (render nền từ vị trí đang phát, từng bước 8 khối, ưu tiên chỗ vừa
+  tua, nối lượt bằng crossfade), `BeatPlayer` viết lại (chờ khối, crossfade 20 ms, fade ra trước khối
+  thiếu, sở hữu shared_ptr ở luồng nền). C API 0.5: `tc_set_transpose / tc_get_transpose /
+  tc_get_applied_key`, `TC_EVENT_TRANSPOSE_READY`, `tc_playback_state` thêm 3 trường (nhận struct
+  0.4). Key chỉnh giọng tự cộng số nửa cung khi bản mới bắt đầu được nghe. Mac M1 Release, beat thật:
+  bấm đổi tone giữa bài → nghe sau 7 ms, render cả bài 2,2–3,3 s. 212 test (thêm 14), TSan / ASan /
+  UBSan sạch, audio thread không cấp phát. ADR-004.
+- [ ] B6 – B7
 
 ## Các điểm cần quyết (2026-10-26: duyệt theo đề nghị)
 

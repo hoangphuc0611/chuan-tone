@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(ToneCore VERSION 0.4.0 LANGUAGES C CXX)
+project(ToneCore VERSION 0.5.0 LANGUAGES C CXX)
 
 # ---- Tùy chọn ----
 option(TC_BUILD_TESTS "Build unit test (GoogleTest)" ON)
@@ -55,6 +55,7 @@ add_library(tonecore_core STATIC
   src/pitch/voice_pitch_node.cpp
   src/player/track.cpp
   src/player/beat_player.cpp
+  src/player/beat_renderer.cpp
   src/key/hpss.cpp
   src/key/tuning.cpp
   src/key/cqt.cpp

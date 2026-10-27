@@ -168,3 +168,56 @@ TEST(RealTime, KeyTimelineDoesNotAllocate) {
   std::remove(path.c_str());
 #endif
 }
+
+// Đổi tone beat (v0.5): audio thread nhận bản mới, chờ khối, crossfade, tua, về beat gốc — vẫn
+// không cấp phát (render, tạo bản mới, huỷ bản cũ đều ở luồng nền).
+TEST(RealTime, TransposeDoesNotAllocate) {
+#ifdef TC_SANITIZED
+  GTEST_SKIP() << "Sanitizer tự thay operator new – chạy ở bản build thường.";
+#else
+  tc_engine* e = nullptr;
+  ASSERT_EQ(tc_engine_create(nullptr, &e), TC_OK);
+  ASSERT_EQ(tc_engine_start(e), TC_OK);
+  ASSERT_EQ(tc_set_param(e, TC_NODE_PITCH, TC_PARAM_ENABLED, 1.0f), TC_OK);
+  ASSERT_EQ(tc_set_key(e, 0, TC_SCALE_MAJOR), TC_OK);
+
+  const std::string path = tonecore::test::tempPath("rt_transpose_beat.wav");
+  ASSERT_TRUE(tonecore::test::writeWav16(
+      path, tonecore::test::sineInt16(330.0, 48000, 48000 * 4, 2, 0.3), 48000, 2));
+  ASSERT_EQ(tc_load_beat(e, path.c_str()), TC_OK);
+  bool loaded = false;
+  for (int i = 0; i < 5000 && !loaded; ++i) {
+    tc_event ev[8];
+    const int32_t n = tc_poll_events(e, ev, 8);
+    for (int32_t k = 0; k < n; ++k) loaded = loaded || ev[k].type == TC_EVENT_BEAT_LOADED;
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  ASSERT_TRUE(loaded);
+  ASSERT_EQ(tc_play(e), TC_OK);
+
+  const auto s = tonecore::test::synthVoice(
+      tonecore::test::vietTone(tonecore::test::VietTone::Nga, 200.0), 2.0);
+  std::vector<float> out(2 * 512);
+  std::size_t off = 0;
+  g_allocs.store(0);
+  const int32_t tones[] = {3, -2, 5, 0, -6};
+  for (int round = 0; round < 400; ++round) {
+    if (off + 512 > s.audio.size()) off = 0;
+    g_counting = true;
+    const tc_result r = tc_engine_process_offline(e, s.audio.data() + off, out.data(), 512);
+    g_counting = false;
+    ASSERT_EQ(r, TC_OK);
+    off += 512;
+    // Luồng điều khiển (được phép cấp phát): đổi tone, tua, lấy sự kiện. Chậm lại một chút để
+    // luồng render kịp → audio thread đi qua cả nhánh chờ khối lẫn crossfade.
+    if (round % 60 == 10) ASSERT_EQ(tc_set_transpose(e, tones[(round / 60) % 5]), TC_OK);
+    if (round == 200) ASSERT_EQ(tc_seek(e, 2500.0), TC_OK);
+    if (round % 4 == 0) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    tc_event ev[8];
+    tc_poll_events(e, ev, 8);
+  }
+  EXPECT_EQ(g_allocs.load(), 0);
+  tc_engine_destroy(e);
+  std::remove(path.c_str());
+#endif
+}

@@ -97,8 +97,8 @@ CorrectorParams VoicePitchNode::params() const noexcept {
 
 // [RT]
 uint16_t VoicePitchNode::activeKeyMask() const noexcept {
-  if (overrideActive_) return keyMask(overrideRoot_, overrideScale_);
-  return keyMask(keyRoot_.load(std::memory_order_relaxed),
+  if (overrideActive_) return keyMask((overrideRoot_ + transpose_) % 12, overrideScale_);
+  return keyMask((keyRoot_.load(std::memory_order_relaxed) + transpose_) % 12,
                  static_cast<Scale>(keyScale_.load(std::memory_order_relaxed)));
 }
 
@@ -117,6 +117,12 @@ void VoicePitchNode::setKeyOverride(bool active, int root, Scale scale) noexcept
   overrideActive_ = active;
   overrideRoot_ = ((root % 12) + 12) % 12;
   overrideScale_ = scale;
+  corrector_.setKeyMask(activeKeyMask());
+}
+
+// [RT]
+void VoicePitchNode::setTranspose(int semitones) noexcept {
+  transpose_ = ((semitones % 12) + 12) % 12;
   corrector_.setKeyMask(activeKeyMask());
 }
 

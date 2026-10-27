@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "dsp/fft.h"
+#include "stretch/input_view.h"
 #include "stretch/transient_detector.h"
 
 namespace tonecore {
@@ -72,10 +73,13 @@ class PitchShifter {
   // Bắt đầu render từ frame `begin` của beat `in` (interleaved, `inFrames` frame). `in` phải còn
   // sống tới khi xong. Ngoài [0, inFrames) coi là im lặng.
   void start(const float* in, uint64_t inFrames, uint64_t begin) noexcept;
+  // Như trên cho PCM int16 (Track của engine), đọc thẳng không chép.
+  void start(const int16_t* in, uint64_t inFrames, uint64_t begin) noexcept;
   // Ghi `frames` frame tiếp theo (interleaved) vào `out`.
   void pull(float* out, uint32_t frames) noexcept;
 
  private:
+  void startView(const InputView& in, uint64_t begin) noexcept;
   void computeFrame() noexcept;
   void analyze(int64_t analysis) noexcept;
   void lockPhases(float hopA, float frameMax) noexcept;
@@ -126,8 +130,7 @@ class PitchShifter {
 
   std::vector<float> frame_;
 
-  const float* in_ = nullptr;
-  uint64_t inFrames_ = 0;
+  InputView in_;
   int64_t nextFrame_ = 0;     // chỉ số khung tổng hợp sẽ tính tiếp
   int64_t prevAnalysis_ = 0;  // vị trí bắt đầu khung phân tích trước
   int64_t completeUpTo_ = 0;  // mẫu giãn < giá trị này đã cộng đủ mọi khung

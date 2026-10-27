@@ -199,6 +199,11 @@ tc_result Engine::setKey(int32_t root, int32_t scale) noexcept {
   return TC_OK;
 }
 
+void Engine::appliedKey(int32_t& root, int32_t& scale) const noexcept {
+  key(root, scale);
+  root = (root + player_.audibleSemitones() + 12) % 12;
+}
+
 void Engine::key(int32_t& root, int32_t& scale) const noexcept {
   if (followTimeline_.load(std::memory_order_acquire)) {
     const int32_t k = autoKey_.load(std::memory_order_relaxed);
@@ -292,12 +297,22 @@ tc_result Engine::loadBeat(const std::string& path) {
     tc_result r = decodeFile(path, decoded);
     double durationMs = 0.0;
     if (r == TC_OK) {
-      std::unique_ptr<Track> track = prepareTrack(std::move(decoded), rate);
+      std::shared_ptr<const Track> track = prepareTrack(std::move(decoded), rate);
       if (!track) {
         r = TC_ERR_NOT_SUPPORTED;
       } else {
         durationMs = 1000.0 * static_cast<double>(track->frames) / rate;
-        if (!player_.setTrack(std::move(track))) r = TC_ERR_INTERNAL;
+        // Beat mới → tone về 0 (app tự đặt lại tone đã nhớ cho bài).
+        transposeGen_.fetch_add(1, std::memory_order_relaxed);
+        if (requestedTrack_) requestedTrack_->cancelled.store(true, std::memory_order_relaxed);
+        requestedTrack_.reset();
+        requestedSemis_.store(0, std::memory_order_relaxed);
+        transposeProgress_.store(1.0f, std::memory_order_relaxed);
+        if (player_.setTrack(track)) {
+          currentTrack_ = std::move(track);
+        } else {
+          r = TC_ERR_INTERNAL;
+        }
       }
     }
     events_.push(TC_EVENT_BEAT_LOADED, r, durationMs);
@@ -319,7 +334,50 @@ tc_result Engine::pause() noexcept {
 tc_result Engine::seekMs(double ms) noexcept {
   if (!player_.hasTrack()) return TC_ERR_INVALID_STATE;
   if (!(ms >= 0.0)) return TC_ERR_INVALID_ARG;
-  player_.seekFrames(static_cast<uint64_t>(ms * config_.sampleRate / 1000.0));
+  const auto frame = static_cast<uint64_t>(ms * config_.sampleRate / 1000.0);
+  player_.seekFrames(frame);
+  // Đang đổi tone: báo luồng render ưu tiên vùng vừa tua tới (nếu chưa có).
+  if (requestedSemis_.load(std::memory_order_relaxed) != 0) {
+    worker_.post([this, frame] {
+      if (requestedTrack_) {
+        requestedTrack_->wantFrame.store(static_cast<int64_t>(frame), std::memory_order_relaxed);
+      }
+    });
+  }
+  return TC_OK;
+}
+
+tc_result Engine::setTranspose(int32_t semitones) {
+  if (semitones < -6 || semitones > 6) return TC_ERR_INVALID_ARG;
+  if (!player_.hasTrack()) return TC_ERR_INVALID_STATE;
+  if (requestedSemis_.exchange(semitones, std::memory_order_relaxed) == semitones) return TC_OK;
+  const uint32_t gen = transposeGen_.fetch_add(1, std::memory_order_relaxed) + 1;
+  transposeProgress_.store(semitones == 0 ? 1.0f : 0.0f, std::memory_order_relaxed);
+  worker_.post([this, semitones, gen] {
+    if (gen != transposeGen_.load(std::memory_order_relaxed)) return;  // đã có yêu cầu mới hơn
+    if (requestedTrack_) requestedTrack_->cancelled.store(true, std::memory_order_relaxed);
+    requestedTrack_.reset();
+    if (!currentTrack_) return;
+    if (semitones == 0) {
+      player_.setTransposed(nullptr);
+      return;
+    }
+    auto tt = std::make_shared<TransposedTrack>(currentTrack_, semitones);
+    requestedTrack_ = tt;
+    player_.setTransposed(tt);
+    BeatRenderer::start(
+        worker_, tt, player_.positionFrames(), config_.sampleRate,
+        [this, gen](float p) {
+          if (gen == transposeGen_.load(std::memory_order_relaxed)) {
+            transposeProgress_.store(p, std::memory_order_relaxed);
+          }
+        },
+        [this, gen](int semis, double ms) {
+          if (gen != transposeGen_.load(std::memory_order_relaxed)) return;
+          transposeProgress_.store(1.0f, std::memory_order_relaxed);
+          events_.push(TC_EVENT_TRANSPOSE_READY, semis, ms);
+        });
+  });
   return TC_OK;
 }
 
@@ -329,6 +387,9 @@ void Engine::fillPlayback(tc_playback_state& s) const noexcept {
   s.playing = player_.isPlaying() ? 1 : 0;
   s.position_ms = static_cast<double>(player_.positionFrames()) * toMs;
   s.duration_ms = static_cast<double>(player_.durationFrames()) * toMs;
+  s.transpose = requestedSemis_.load(std::memory_order_relaxed);
+  s.transpose_progress = transposeProgress_.load(std::memory_order_relaxed);
+  s.audible_transpose = player_.audibleSemitones();
 }
 
 // ---------------------------------------------------------------------------
@@ -412,11 +473,16 @@ tc_result Engine::latencyResult(tc_latency_result& out) const {
 
 std::size_t Engine::pollEvents(tc_event* out, std::size_t max) {
   if (player_.consumeEnded()) events_.push(TC_EVENT_BEAT_ENDED);
+  // Key áp dụng đổi: theo timeline (audio thread tăng bộ đếm) hoặc beat bắt đầu nghe ở tone mới.
   const uint32_t seq = autoKeySeq_.load(std::memory_order_acquire);
-  if (seq != autoKeySeen_) {
+  const int audible = player_.audibleSemitones();
+  if (seq != autoKeySeen_ || audible != lastAudible_) {
     autoKeySeen_ = seq;
-    const int32_t k = autoKey_.load(std::memory_order_relaxed);
-    events_.push(TC_EVENT_KEY_CHANGED, k & 0xFF, static_cast<double>(k >> 8));
+    lastAudible_ = audible;
+    int32_t root = 0;
+    int32_t scale = 0;
+    appliedKey(root, scale);
+    events_.push(TC_EVENT_KEY_CHANGED, root, static_cast<double>(scale));
   }
   collectTimelineGarbage();
   checkLatencyCompletion();
@@ -527,6 +593,12 @@ void Engine::processChunk(const float* in, uint32_t inChannels, float* out, uint
 
   float* beat = beatBuf_.data();
   player_.render(beat, frames);
+  // Beat bắt đầu nghe ở tone mới → key chỉnh giọng theo (từ block sau).
+  const int audible = player_.audibleSemitones();
+  if (audible != pitchTranspose_) {
+    pitchTranspose_ = audible;
+    pitch_.setTranspose(audible);
+  }
 
   for (uint32_t i = 0; i < frames; ++i) {
     const float voice = mic[i] * monitorGain_.next() * monitorMix_.next();

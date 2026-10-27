@@ -31,7 +31,7 @@ extern "C" {
 /* Phiên bản API: (major << 16) | (minor << 8) | patch.
  * Tăng major khi phá vỡ ABI; tăng minor khi thêm hàm. */
 #define TC_API_VERSION_MAJOR 0
-#define TC_API_VERSION_MINOR 4
+#define TC_API_VERSION_MINOR 5
 #define TC_API_VERSION_PATCH 0
 #define TC_API_VERSION \
   ((TC_API_VERSION_MAJOR << 16) | (TC_API_VERSION_MINOR << 8) | TC_API_VERSION_PATCH)
@@ -128,8 +128,12 @@ typedef enum tc_event_type {
   TC_EVENT_LATENCY_DONE = 5,     /* code = tc_result; value = độ trễ (ms) nếu thành công */
   TC_EVENT_STREAM_RESTARTED = 6, /* code = tc_result của lần mở lại stream */
   TC_EVENT_MONITOR_BLOCKED = 7,  /* nghe lại giọng bị chặn vì đang dùng Bluetooth */
-  /* (từ v0.4) Engine tự đổi key chỉnh giọng theo timeline: code = chủ âm 0..11, value = tc_scale */
-  TC_EVENT_KEY_CHANGED = 8
+  /* (từ v0.4) Key chỉnh giọng đang áp dụng đổi — theo timeline, hoặc (từ v0.5) beat bắt đầu nghe ở
+   * tone mới. code = chủ âm 0..11 (đã cộng số nửa cung đổi tone), value = tc_scale. */
+  TC_EVENT_KEY_CHANGED = 8,
+  /* (từ v0.5) Đã render xong cả bài ở tone mới: code = số nửa cung, value = thời gian render (ms)
+   */
+  TC_EVENT_TRANSPOSE_READY = 9
 } tc_event_type;
 
 typedef struct tc_engine tc_engine;
@@ -173,6 +177,10 @@ typedef struct tc_playback_state {
   int32_t playing;
   double position_ms;
   double duration_ms;
+  /* (từ v0.5) Đổi tone beat. Struct của binding v0.4 (kết thúc ở duration_ms) vẫn được nhận. */
+  int32_t transpose;         /* số nửa cung đã yêu cầu (tc_set_transpose) */
+  int32_t audible_transpose; /* số nửa cung đang nghe (đổi sau ~0,1 s khi bản mới sẵn) */
+  float transpose_progress;  /* 0..1: phần bài đã render ở tone yêu cầu (1 khi transpose = 0) */
 } tc_playback_state;
 
 typedef struct tc_latency_result {
@@ -301,6 +309,18 @@ TC_EXPORT tc_result tc_pause(tc_engine* engine);
 TC_EXPORT tc_result tc_seek(tc_engine* engine, double position_ms);
 TC_EXPORT tc_result tc_get_playback_state(tc_engine* engine, tc_playback_state* out_state);
 
+/* ---- Đổi tone beat (từ v0.5, xem docs/adr/004-beat-transpose.md) ----
+ * semitones −6…+6, giữ nguyên tempo và vị trí. Render ở luồng nền bắt đầu từ vị trí đang phát:
+ * beat đang nghe tiếp tục tới khi bản mới sẵn tại vị trí phát (~0,1 s), rồi chuyển bằng crossfade
+ * 20 ms. 0 = beat gốc (chuyển ngay). Gọi liên tiếp → chỉ lần cuối được render.
+ * Tua tới vùng chưa render: beat im lặng, vị trí đứng yên tới khi vùng đó xong (~0,1 s).
+ * Khi bản mới bắt đầu được nghe, engine tự cộng số nửa cung vào key chỉnh giọng (key chọn tay và
+ * timeline vẫn là tone của beat GỐC) và phát TC_EVENT_KEY_CHANGED. Xong cả bài →
+ * TC_EVENT_TRANSPOSE_READY. Cần đã nạp beat (TC_ERR_INVALID_STATE nếu chưa). tc_load_beat → tone về
+ * 0. */
+TC_EXPORT tc_result tc_set_transpose(tc_engine* engine, int32_t semitones);
+TC_EXPORT tc_result tc_get_transpose(tc_engine* engine, int32_t* out_semitones);
+
 /* ---- Route ----
  * Android: lớp Kotlin báo loại thiết bị (NDK không đọc được). iOS: engine tự phát hiện. */
 TC_EXPORT tc_result tc_set_route_hint(tc_engine* engine, int32_t route);
@@ -328,7 +348,11 @@ TC_EXPORT tc_result tc_engine_process_offline(tc_engine* engine, const float* in
  * trễ thêm 10 ms (xem tc_metrics.algorithm_latency_frames); chuyển bật/tắt có crossfade 20 ms. */
 /* root: 0 = Đô (C) … 11 = Si (B); scale: tc_scale. */
 TC_EXPORT tc_result tc_set_key(tc_engine* engine, int32_t root, int32_t scale);
+/* Key của beat GỐC: chọn tay, hoặc đoạn timeline đang áp dụng. */
 TC_EXPORT tc_result tc_get_key(tc_engine* engine, int32_t* out_root, int32_t* out_scale);
+/* (từ v0.5) Key đang dùng để chỉnh giọng = tc_get_key + số nửa cung beat đang nghe. Hiển thị cái
+ * này. */
+TC_EXPORT tc_result tc_get_applied_key(tc_engine* engine, int32_t* out_root, int32_t* out_scale);
 /* preset: tc_correction_preset. Ghi đè các tham số RETUNE_MS…HYSTERESIS_CENTS. */
 TC_EXPORT tc_result tc_set_correction_preset(tc_engine* engine, int32_t preset);
 /* out_state->struct_size phải = sizeof(tc_pitch_state). Gọi từ luồng UI (~30 lần/giây). */
@@ -343,7 +367,8 @@ TC_EXPORT tc_result tc_get_tuning(tc_engine* engine, float* out_cents);
 /* Engine tự đổi key chỉnh giọng theo vị trí beat (cả khi tua). Các đoạn phải tăng dần theo
  * start_ms, không chồng nhau, tối đa 256 đoạn; khoảng trống giữa hai đoạn giữ key đoạn trước.
  * count = 0 → tắt. Gọi tc_set_key → tắt chế độ theo timeline (người dùng chọn tay).
- * Mỗi lần engine tự đổi key → sự kiện TC_EVENT_KEY_CHANGED; tc_get_key trả key đang áp dụng. */
+ * Mỗi lần engine tự đổi key → sự kiện TC_EVENT_KEY_CHANGED; tc_get_key trả key đoạn đang áp dụng
+ * (tone beat gốc), tc_get_applied_key cộng thêm tone đang nghe. */
 TC_EXPORT tc_result tc_set_key_timeline(tc_engine* engine, const tc_key_segment* segments,
                                         uint32_t count);
 
