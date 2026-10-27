@@ -2,7 +2,8 @@
 //
 //   beatlab render <file> -o out.wav --semitones N [--algo pv|pv-basic|signalsmith] [--start giây]
 //                  [--dur giây] [--fft 4096] [--hop 1024]
-//        → WAV 16-bit cùng tần số lấy mẫu với file vào; in 1 dòng JSON (thời gian render).
+//        → WAV 16-bit cùng tần số lấy mẫu với file vào; in 1 dòng JSON (thời gian render). Có
+//          limiter đỉnh như engine (--limiter off để tắt).
 //   beatlab eval [--algo pv,pv-basic,signalsmith] [--levels -6,-4,-2,2,4,6] [--fft 4096]
 //                [--hop 1024]
 //        → bảng markdown các chỉ số khách quan trên bộ tín hiệu tổng hợp
@@ -23,6 +24,7 @@
 
 #include "decode/decoder.h"
 #include "dr_wav.h"
+#include "stretch/peak_limiter.h"
 #include "stretch/pitch_shifter.h"
 #include "util/stretch_eval.h"
 #ifdef TC_HAVE_SIGNALSMITH
@@ -38,7 +40,7 @@ int usage() {
                "Cách dùng:\n"
                "  beatlab render <file> -o out.wav --semitones N [--algo pv|pv-basic|signalsmith]\n"
                "                 [--start giây] [--dur giây] [--fft 4096] [--hop 1024]\n"
-               "  (cả ba lệnh) --transients on|off\n"
+               "  (cả ba lệnh) --transients on|off  --anchor-up 0.5  --anchor-down 1\n"
                "  beatlab eval [--algo pv,signalsmith] [--levels -6,-4,-2,2,4,6]\n"
                "               [--fft 4096] [--hop 1024]\n"
                "  beatlab suite <thư mục> [--algo pv,signalsmith] [--levels -6,…]\n");
@@ -120,6 +122,7 @@ int cmdRender(int argc, char** argv) {
   double semitones = 0.0;
   double startSec = 0.0;
   double durSec = -1.0;
+  bool limiter = true;
   PitchShiftConfig cfg;
   for (int i = 3; i < argc; ++i) {
     const std::string a = argv[i];
@@ -134,10 +137,16 @@ int cmdRender(int argc, char** argv) {
       startSec = std::atof(argv[++i]);
     } else if (a == "--dur" && hasVal) {
       durSec = std::atof(argv[++i]);
+    } else if (a == "--limiter" && hasVal) {
+      limiter = std::strcmp(argv[++i], "off") != 0;
     } else if (a == "--fft" && hasVal) {
       cfg.fftSize = std::atoi(argv[++i]);
     } else if (a == "--hop" && hasVal) {
       cfg.synthesisHop = std::atoi(argv[++i]);
+    } else if (a == "--anchor-up" && hasVal) {
+      cfg.anchorUp = std::atof(argv[++i]);
+    } else if (a == "--anchor-down" && hasVal) {
+      cfg.anchorDown = std::atof(argv[++i]);
     } else if (a == "--transients" && hasVal) {
       cfg.transients = std::strcmp(argv[++i], "off") != 0;
     } else {
@@ -171,6 +180,9 @@ int cmdRender(int argc, char** argv) {
                  algo == "signalsmith" ? " (chưa build kèm Signalsmith)" : "");
     return 1;
   }
+  // Như engine (BeatRenderer): giới hạn đỉnh vượt 0 dBFS sau đổi pha — áp cho mọi thuật toán (so
+  // sánh công bằng). Mức 0 (bản gốc) giữ nguyên.
+  if (limiter && semitones != 0.0) limitPeaks(y, ch, dec.sampleRate);
   if (!writeWav(out, y, ch, dec.sampleRate)) {
     std::fprintf(stderr, "Không ghi được %s\n", out.c_str());
     return 1;
@@ -247,6 +259,10 @@ int cmdSuite(int argc, char** argv) {
       cfg.fftSize = std::atoi(argv[++i]);
     } else if (a == "--hop" && hasVal) {
       cfg.synthesisHop = std::atoi(argv[++i]);
+    } else if (a == "--anchor-up" && hasVal) {
+      cfg.anchorUp = std::atof(argv[++i]);
+    } else if (a == "--anchor-down" && hasVal) {
+      cfg.anchorDown = std::atof(argv[++i]);
     } else if (a == "--transients" && hasVal) {
       cfg.transients = std::strcmp(argv[++i], "off") != 0;
     } else {
@@ -289,6 +305,10 @@ int cmdEval(int argc, char** argv) {
       cfg.fftSize = std::atoi(argv[++i]);
     } else if (a == "--hop" && hasVal) {
       cfg.synthesisHop = std::atoi(argv[++i]);
+    } else if (a == "--anchor-up" && hasVal) {
+      cfg.anchorUp = std::atof(argv[++i]);
+    } else if (a == "--anchor-down" && hasVal) {
+      cfg.anchorDown = std::atof(argv[++i]);
     } else if (a == "--transients" && hasVal) {
       cfg.transients = std::strcmp(argv[++i], "off") != 0;
     } else {

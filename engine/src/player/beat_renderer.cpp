@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "dsp/kaiser.h"
+#include "stretch/peak_limiter.h"
 #include "stretch/pitch_shifter.h"
 
 namespace tonecore {
@@ -22,6 +23,8 @@ class RenderJob : public std::enable_shared_from_this<RenderJob> {
       : worker_(worker),
         tt_(std::move(track)),
         shifter_(2, tt_->semitones, configFor(sampleRate)),
+        limiter_(2, sampleRate),
+        raw_(2 * static_cast<std::size_t>(std::max(kBlock, BeatRenderer::kLeadInFrames))),
         block_(2 * static_cast<std::size_t>(kBlock)),
         lead_(2 * static_cast<std::size_t>(BeatRenderer::kLeadInFrames)),
         onProgress_(std::move(onProgress)),
@@ -55,13 +58,16 @@ class RenderJob : public std::enable_shared_from_this<RenderJob> {
     inPass_ = true;
     next_ = b;
     const Track& src = *tt_->source;
-    if (b == 0) {
-      shifter_.start(src.pcm.data(), src.frames, 0);
-      return;
-    }
-    const uint64_t begin = static_cast<uint64_t>(b) * kBlock - BeatRenderer::kLeadInFrames;
+    const uint64_t begin =
+        b == 0 ? 0 : static_cast<uint64_t>(b) * kBlock - BeatRenderer::kLeadInFrames;
     shifter_.start(src.pcm.data(), src.frames, begin);
-    shifter_.pull(lead_.data(), BeatRenderer::kLeadInFrames);
+    // Limiter trễ L frame: mồi L frame đầu → đầu ra sau đó khớp đúng vị trí từ `begin`.
+    limiter_.reset();
+    const auto lookahead = static_cast<uint32_t>(limiter_.lookahead());
+    shifter_.pull(raw_.data(), lookahead);
+    limiter_.process(raw_.data(), block_.data(), lookahead);
+    if (b == 0) return;
+    pullLimited(lead_.data(), BeatRenderer::kLeadInFrames);
     leadIns_.push_back({b, lead_});
   }
 
@@ -100,7 +106,7 @@ class RenderJob : public std::enable_shared_from_this<RenderJob> {
     }
     const uint64_t start = static_cast<uint64_t>(b) * kBlock;
     const auto n = static_cast<uint32_t>(std::min<uint64_t>(kBlock, tt_->frames - start));
-    shifter_.pull(block_.data(), n);
+    pullLimited(block_.data(), n);
     const bool meets = b + 1 < tt_->blocks && ready(b + 1);
     if (meets) blendInto(b + 1, n);
     int16_t* dst = tt_->pcm.get() + 2 * static_cast<std::size_t>(start);
@@ -112,6 +118,12 @@ class RenderJob : public std::enable_shared_from_this<RenderJob> {
     tt_->readyCount.fetch_add(1, std::memory_order_relaxed);
     next_ = b + 1;
     if (meets || next_ >= tt_->blocks) inPass_ = false;
+  }
+
+  // n frame tiếp theo (đã qua limiter) vào `out`.
+  void pullLimited(float* out, uint32_t n) {
+    shifter_.pull(raw_.data(), n);
+    limiter_.process(raw_.data(), out, n);
   }
 
   // Trộn đuôi khối vừa render (n frame) sang phần render trước của lượt bắt đầu ở `nextBlock`.
@@ -138,6 +150,8 @@ class RenderJob : public std::enable_shared_from_this<RenderJob> {
   Worker& worker_;
   std::shared_ptr<TransposedTrack> tt_;
   PitchShifter shifter_;
+  PeakLimiter limiter_;     // đỉnh sau đổi pha có thể vượt 0 dBFS → giới hạn ngay khi render
+  std::vector<float> raw_;  // đầu ra PitchShifter trước limiter
   std::vector<float> block_;
   std::vector<float> lead_;
   std::vector<LeadIn> leadIns_;

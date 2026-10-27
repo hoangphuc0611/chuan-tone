@@ -10,19 +10,22 @@
 namespace tonecore {
 
 // Dò onset (tiếng đánh) trên beat nằm sẵn trong RAM, chạy trước vị trí đang cần — dùng để giữ
-// transient khi đổi tone (PitchShifter, B3).
+// transient khi đổi tone (PitchShifter, bước 2b).
 //
-// Hàm dò: spectral flux trên log biên độ (Bello et al. 2005; Dixon 2006) của tín hiệu trung bình
-// các kênh, khung Hann ~21 ms, bước 1/4 khung (~5 ms):
-//     F(t) = (1/K) Σ_k max(0, log(1 + γ|X_t[k]|) − log(1 + γ|X_{t−1}[k]|)),   k từ 30 Hz.
-// Onset = đỉnh cục bộ của F trong ±30 ms và F > 1,5·trung vị(±100 ms) + δ. Thời điểm tinh chỉnh
-// trong miền thời gian: điểm mà năng lượng 2 ms sau / năng lượng 10 ms trước (của sai phân bậc 1 —
-// nhấn cao tần) lớn nhất, trong cửa sổ quanh khung có đỉnh.
+// Hàm dò (phân giải 1 ms, để bắt cả tiếng đánh sát nhau và tiếng nằm trên đuôi tiếng trước — bản
+// spectral flux khung 21 ms trước đây bỏ sót chúng trên beat thật, làm các tiếng đó bị "neo" sai
+// nhịp; xem docs/stretch-results.md, B4):
+//   d(t) = m(t) − m(t−1)  (m = trung bình các kênh; sai phân nhấn cao tần — tiếng đánh nằm ở đó)
+//   E_b  = năng lượng trung bình của d trong khối 1 ms thứ b
+//   R_b  = 10·log10(trung bình E_b, E_{b+1}) − 10·log10(trung bình E_{b−10…b−3})  (dB)
+// Onset = R_b ≥ 8 dB, là đỉnh của R trong ±5 ms, mức E ≥ −30 dB so với đỉnh gần đây (bỏ nhiễu nền
+// lúc gần im lặng), cách onset trước ≥ 10 ms. Thời điểm tinh chỉnh tới từng mẫu: điểm có năng lượng
+// 1 ms sau / 5 ms trước lớn nhất trong ±3 ms.
 //
 // Với mỗi onset còn tính mức "trội" g_k ∈ [0, 1] từng bin (lưới bin của FFT `binsFftSize`): công
-// suất 2048 mẫu ngay sau onset so với 2048 mẫu ngay trước (cách onset 3 ms), tăng ≤ 3 dB → 0, ≥ 9
-// dB → 1. Bin trội = năng lượng của tiếng đánh chiếm phần lớn; bin không trội = nền (hợp âm, pad)
-// vẫn ngân.
+// suất ~21 ms ngay sau onset so với ~21 ms ngay trước (cách onset 3 ms), tăng ≤ 3 dB → 0, ≥ 9 dB →
+// 1. Bin trội = năng lượng của tiếng đánh chiếm phần lớn; bin không trội = nền (hợp âm, pad) vẫn
+// ngân.
 //
 // Dò lười: ensure(pos) chạy dò tới khi mọi onset < pos đã được quyết định. Cấp phát trong
 // constructor; start() / ensure() không cấp phát.
@@ -48,27 +51,19 @@ class TransientDetector {
   void dropBefore(double before) noexcept;
 
  private:
-  void computeFlux() noexcept;
-  void decide(int64_t frame) noexcept;
-  double refine(int64_t frame) const noexcept;
+  void computeBlock() noexcept;
+  void decide(int64_t block) noexcept;
+  double refine(int64_t block) const noexcept;
   void classify(Onset& o) noexcept;
   float sample(int64_t t) const noexcept;  // trung bình các kênh, 0 ngoài bài
+  float rise(int64_t block) const noexcept;
 
   int channels_;
   double rate_;
-  int frame_;  // độ dài khung dò (luỹ thừa 2)
-  int hop_;
-  int bins_;  // số bin dùng để tính flux
-  int kMin_;
-  int median_;  // nửa cửa sổ trung vị (khung)
-  int peak_;    // nửa cửa sổ đỉnh cục bộ (khung)
-  RealFft fft_;
-  std::vector<float> window_;
-  std::vector<float> buf_;
-  std::vector<std::complex<float>> spec_;
-  std::vector<float> prevLog_;
-  std::vector<float> flux_;  // vòng tròn theo chỉ số khung
-  std::vector<float> scratch_;
+  int block_;                  // mẫu / khối (~1 ms)
+  std::vector<float> energy_;  // E_b, vòng tròn theo chỉ số khối
+  float peakTrack_ = 0.0f;     // đỉnh E gần đây (tắt dần ~1 s)
+  float peakDecay_ = 1.0f;
 
   // Phân loại bin trội.
   int clsSize_;
@@ -84,9 +79,9 @@ class TransientDetector {
   std::size_t count_ = 0;
 
   InputView in_;
-  int64_t firstFrame_ = 0;   // khung dò đầu tiên của lần start() này
-  int64_t nextFrame_ = 0;    // khung sẽ tính flux tiếp
-  int64_t decidedUpTo_ = 0;  // các khung < giá trị này đã quyết định có / không có onset
+  int64_t firstBlock_ = 0;   // khối đầu tiên của lần start() này
+  int64_t nextBlock_ = 0;    // khối sẽ tính năng lượng tiếp
+  int64_t decidedUpTo_ = 0;  // các khối < giá trị này đã quyết định có / không có onset
 };
 
 }  // namespace tonecore

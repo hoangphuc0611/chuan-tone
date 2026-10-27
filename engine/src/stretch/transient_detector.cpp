@@ -9,33 +9,26 @@ namespace tonecore {
 
 namespace {
 
-constexpr float kLogGamma = 1000.0f;  // độ nén log biên độ
-constexpr float kThresholdRatio = 1.5f;
-constexpr float kThresholdDelta = 0.02f;
-constexpr double kMinGapSec = 0.03;  // hai onset cách nhau ít nhất 30 ms
-constexpr double kPrerollSec = 0.2;  // dò từ trước điểm bắt đầu 200 ms (đủ ngữ cảnh trung vị)
-constexpr double kGuardSec = 0.003;  // cửa sổ "trước onset" kết thúc trước onset 3 ms
+constexpr double kBlockSec = 0.001;  // khối năng lượng 1 ms
+constexpr int kBaseFrom = 10;        // nền = trung bình khối b−10 … b−3
+constexpr int kBaseTo = 3;
+constexpr int kPeakHalf = 5;            // đỉnh của R trong ±5 khối
+constexpr float kRiseDb = 8.0f;         // tăng tối thiểu so với nền ngay trước
+constexpr float kLevelGate = 1e-3f;     // E ≥ −30 dB so với đỉnh gần đây
+constexpr double kPeakTau = 1.0;        // đỉnh gần đây tắt dần τ 1 s
+constexpr double kMinGapSec = 0.010;    // hai onset cách nhau ít nhất 10 ms
+constexpr double kPrerollSec = 0.05;    // dò từ trước điểm bắt đầu 50 ms (đủ nền + đỉnh gần đây)
+constexpr double kGuardSec = 0.003;     // cửa sổ "trước onset" kết thúc trước onset 3 ms
+constexpr double kClassifySec = 0.021;  // cửa sổ phổ trước / sau onset để tính mức trội
 constexpr float kRiseLowDb = 3.0f;
 constexpr float kRiseHighDb = 9.0f;
 constexpr std::size_t kMaxOnsets = 32;
-// Onset phải mang đủ năng lượng MỚI: Σ k·max(0, sau − trước) / Σ k·sau (nhấn cao tần theo k) ≥
-// ngưỡng. Loại các đỉnh flux giả trong đuôi một tiếng đánh (vd. thân kick quét 150 → 50 Hz làm năng
-// lượng chuyển dần xuống bin thấp hơn: flux nhô lên nhưng không có năng lượng mới ở cao tần).
-constexpr float kMinNewEnergy = 0.7f;
+constexpr std::size_t kEnergyRing = 64;  // > kBaseFrom + 2·kPeakHalf + vài khối
 
 int nextPow2(double v) {
   int n = 1;
   while (n < v) n <<= 1;
   return n;
-}
-
-std::vector<float> hann(int n) {
-  std::vector<float> w(static_cast<std::size_t>(n));
-  for (int i = 0; i < n; ++i) {
-    w[static_cast<std::size_t>(i)] = static_cast<float>(
-        0.5 - 0.5 * std::cos(2.0 * dsp::kPi * static_cast<double>(i) / static_cast<double>(n)));
-  }
-  return w;
 }
 
 // Cửa sổ cho phổ "sau onset": dốc lên nửa Hann chỉ `rise` mẫu (tiếng đánh nằm ngay đầu cửa sổ —
@@ -62,26 +55,16 @@ std::vector<float> tukeyFromOnset(int n, int rise) {
 TransientDetector::TransientDetector(int channels, double sampleRate, int binsFftSize)
     : channels_(std::max(1, channels)),
       rate_(sampleRate),
-      frame_(nextPow2(0.021 * sampleRate)),
-      hop_(frame_ / 4),
-      bins_(frame_ / 2 + 1),
-      kMin_(static_cast<int>(std::ceil(30.0 * frame_ / sampleRate))),
-      median_(std::max(1, static_cast<int>(std::lround(0.1 * sampleRate / (frame_ / 4))))),
-      peak_(std::max(1, static_cast<int>(std::lround(0.03 * sampleRate / (frame_ / 4))))),
-      fft_(static_cast<std::size_t>(frame_)),
-      window_(hann(frame_)),
-      buf_(static_cast<std::size_t>(frame_)),
-      spec_(static_cast<std::size_t>(frame_ / 2 + 1)),
-      prevLog_(static_cast<std::size_t>(frame_ / 2 + 1)),
-      clsSize_(std::min(binsFftSize, nextPow2(2048.0 * sampleRate / 48000.0))),
+      block_(std::max(1, static_cast<int>(std::lround(kBlockSec * sampleRate)))),
+      energy_(kEnergyRing, 0.0f),
+      peakDecay_(static_cast<float>(std::exp(-kBlockSec / kPeakTau))),
+      clsSize_(std::min(binsFftSize, nextPow2(kClassifySec * sampleRate))),
       clsFft_(static_cast<std::size_t>(binsFftSize)),
       clsWindow_(tukeyFromOnset(clsSize_, static_cast<int>(0.001 * sampleRate))),
       clsBuf_(static_cast<std::size_t>(binsFftSize)),
       clsSpec_(static_cast<std::size_t>(binsFftSize / 2 + 1)),
       prePow_(static_cast<std::size_t>(binsFftSize / 2 + 1)),
       postPow_(static_cast<std::size_t>(binsFftSize / 2 + 1)) {
-  flux_.resize(static_cast<std::size_t>(nextPow2(2.0 * (median_ + peak_) + 8.0)), 0.0f);
-  scratch_.resize(static_cast<std::size_t>(2 * median_ + 1));
   onsets_.resize(kMaxOnsets);
   for (auto& o : onsets_) o.g.assign(static_cast<std::size_t>(binsFftSize / 2 + 1), 0.0f);
 }
@@ -97,57 +80,62 @@ void TransientDetector::start(const InputView& in, int64_t from) noexcept {
   in_ = in;
   count_ = 0;
   head_ = 0;
+  peakTrack_ = 0.0f;
   const auto first = static_cast<int64_t>(
-      std::floor((static_cast<double>(from) - kPrerollSec * rate_) / static_cast<double>(hop_)));
-  // Khung first − 1 chỉ để có log phổ "trước" cho flux của khung first.
-  nextFrame_ = first - 1;
-  computeFlux();
-  firstFrame_ = first;
-  nextFrame_ = first;
-  decidedUpTo_ = first + peak_;
+      std::floor((static_cast<double>(from) - kPrerollSec * rate_) / static_cast<double>(block_)));
+  firstBlock_ = first;
+  nextBlock_ = first;
+  decidedUpTo_ = first + kBaseFrom;  // khối đầu chưa đủ nền
 }
 
-void TransientDetector::computeFlux() noexcept {
-  const int64_t t = nextFrame_++;
-  const int64_t base = t * hop_;
-  for (int i = 0; i < frame_; ++i) {
-    buf_[static_cast<std::size_t>(i)] = sample(base + i) * window_[static_cast<std::size_t>(i)];
+// Năng lượng trung bình của sai phân bậc 1 trong khối nextBlock_.
+void TransientDetector::computeBlock() noexcept {
+  const int64_t b = nextBlock_++;
+  const int64_t t0 = b * block_;
+  double e = 0.0;
+  float prev = sample(t0 - 1);
+  for (int i = 0; i < block_; ++i) {
+    const float x = sample(t0 + i);
+    const auto d = static_cast<double>(x - prev);
+    e += d * d;
+    prev = x;
   }
-  fft_.forward(buf_.data(), spec_.data());
-  float sum = 0.0f;
-  for (int k = 0; k < bins_; ++k) {
-    const auto kk = static_cast<std::size_t>(k);
-    const float l = std::log1p(kLogGamma * std::abs(spec_[kk]));
-    if (k >= kMin_) sum += std::max(0.0f, l - prevLog_[kk]);
-    prevLog_[kk] = l;
-  }
-  flux_[static_cast<std::size_t>(t) & (flux_.size() - 1)] = sum / static_cast<float>(bins_ - kMin_);
+  energy_[static_cast<std::size_t>(b) & (kEnergyRing - 1)] = static_cast<float>(e / block_);
+}
+
+// R_b (dB): năng lượng 2 khối từ b so với nền b−10 … b−3.
+float TransientDetector::rise(int64_t b) const noexcept {
+  const auto at = [&](int64_t k) {
+    return energy_[static_cast<std::size_t>(k) & (kEnergyRing - 1)];
+  };
+  float base = 0.0f;
+  for (int64_t k = b - kBaseFrom; k <= b - kBaseTo; ++k) base += at(k);
+  base /= static_cast<float>(kBaseFrom - kBaseTo + 1);
+  const float now = 0.5f * (at(b) + at(b + 1));
+  constexpr float kFloor = 1e-14f;
+  return 10.0f * std::log10((now + kFloor) / (base + kFloor));
 }
 
 void TransientDetector::ensure(int64_t pos) noexcept {
-  // Onset của khung t nằm trong [t·hop − hop, t·hop + frame] → quyết định đủ khung có đầu < pos.
-  const int64_t target = pos / hop_ + 2;
+  // Onset của khối b nằm trong khối b ± 3 ms → quyết định đủ khối có đầu < pos.
+  const int64_t target = pos / block_ + 4;
   while (decidedUpTo_ <= target) {
-    while (nextFrame_ <= decidedUpTo_ + median_) computeFlux();
+    while (nextBlock_ <= decidedUpTo_ + kPeakHalf + 1) computeBlock();
     decide(decidedUpTo_++);
   }
 }
 
-void TransientDetector::decide(int64_t t) noexcept {
-  const auto mask = flux_.size() - 1;
-  const auto at = [&](int64_t f) { return flux_[static_cast<std::size_t>(f) & mask]; };
-  const float v = at(t);
-  for (int i = 1; i <= peak_; ++i) {
-    if (t - i >= firstFrame_ && at(t - i) >= v) return;
-    if (at(t + i) > v) return;
+void TransientDetector::decide(int64_t b) noexcept {
+  const float e = energy_[static_cast<std::size_t>(b) & (kEnergyRing - 1)];
+  peakTrack_ = std::max(e, peakTrack_ * peakDecay_);
+  if (e < kLevelGate * peakTrack_) return;
+  const float r = rise(b);
+  if (r < kRiseDb) return;
+  for (int i = 1; i <= kPeakHalf; ++i) {
+    if (b - i - kBaseFrom >= firstBlock_ && rise(b - i) >= r) return;
+    if (rise(b + i) > r) return;
   }
-  std::size_t n = 0;
-  for (int64_t f = std::max(firstFrame_, t - median_); f <= t + median_; ++f) scratch_[n++] = at(f);
-  const auto mid = scratch_.begin() + static_cast<std::ptrdiff_t>(n / 2);
-  std::nth_element(scratch_.begin(), mid, scratch_.begin() + static_cast<std::ptrdiff_t>(n));
-  if (v <= kThresholdRatio * *mid + kThresholdDelta) return;
-
-  const double time = refine(t);
+  const double time = refine(b);
   if (count_ > 0 && time - onset(count_ - 1).time < kMinGapSec * rate_) return;
   if (count_ == onsets_.size()) {  // đầy: bỏ onset cũ nhất
     head_ = (head_ + 1) % onsets_.size();
@@ -156,18 +144,16 @@ void TransientDetector::decide(int64_t t) noexcept {
   Onset& o = onsets_[(head_ + count_) % onsets_.size()];
   o.time = time;
   classify(o);
-  if (o.strength < kMinNewEnergy) return;
   ++count_;
 }
 
-// Thời điểm onset trong miền thời gian quanh khung t: điểm n có E(sau 2 ms) / E(trước 10 ms) lớn
-// nhất, E = năng lượng sai phân bậc 1 (nhấn cao tần, bỏ thành phần trầm ngân sẵn).
-double TransientDetector::refine(int64_t t) const noexcept {
-  const int64_t lo = t * hop_ - hop_;
-  const int64_t hi = t * hop_ + frame_;
-  const auto after = static_cast<int64_t>(0.002 * rate_);
-  const auto before = static_cast<int64_t>(0.010 * rate_);
-  // Cửa sổ trượt: "trước" = [n − before, n), "sau" = [n, n + after).
+// Thời điểm onset trong ±3 ms quanh khối b: điểm n có E(1 ms sau) / E(5 ms trước) lớn nhất
+// (E = năng lượng sai phân bậc 1).
+double TransientDetector::refine(int64_t b) const noexcept {
+  const int64_t lo = b * block_ - 3 * block_;
+  const int64_t hi = b * block_ + 3 * block_;
+  const auto after = static_cast<int64_t>(block_);
+  const auto before = static_cast<int64_t>(5 * block_);
   const auto energy = [&](int64_t n) {
     const auto d = static_cast<double>(sample(n) - sample(n - 1));
     return d * d;
@@ -178,7 +164,7 @@ double TransientDetector::refine(int64_t t) const noexcept {
   for (int64_t n = lo; n < lo + after; ++n) eAfter += energy(n);
   const double floor = 1e-12 * static_cast<double>(before);
   double best = -1.0;
-  int64_t bestN = t * hop_;
+  int64_t bestN = b * block_;
   for (int64_t n = lo; n <= hi; ++n) {
     const double score = eAfter / (eBefore + floor);
     if (score > best) {
@@ -191,7 +177,6 @@ double TransientDetector::refine(int64_t t) const noexcept {
   return static_cast<double>(bestN);
 }
 
-// Mức trội từng bin: công suất ngay sau onset so với ngay trước (đệm 0 lên lưới bin của PV).
 void TransientDetector::classify(Onset& o) noexcept {
   const auto bins = clsSpec_.size();
   // reversed = true: cửa sổ lật ngược (cho đoạn trước onset, dốc nhanh ở cuối).

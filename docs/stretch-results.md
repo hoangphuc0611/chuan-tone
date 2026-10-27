@@ -1,5 +1,8 @@
 # Kết quả đổi tone beat (M4)
 
+> Tình trạng 2026-10-27: sau nghe A/B lần 1 — đã sửa méo (limiter) và bộ dò onset; nâng tone đang chờ
+> nghe lại (xem "B4").
+
 Chỉ tiêu M4 (CLAUDE.md mục 9): **không méo, không nhòe trống khi nghe A/B** — nghiệm thu bằng tai
 (trang nghe mù `tools/stretch/ab.py` + iPhone, xem `docs/m4-plan.md` điểm 3). Các số khách quan
 dưới đây đo trên bộ tín hiệu tổng hợp có đáp án (`engine/tests/util/stretch_eval.*`), dùng để chọn
@@ -55,6 +58,63 @@ thuật toán / tham số và chặn hồi quy (`PitchShifter.*` trong ctest, `B
 | signalsmith +2 | 2.08 | 5.67 | -19.4 | -37.2 | -39.7 / -35.9 | 0.95 | -27.7 | 3.25 | 0.002 | -0.11 | -0.37 | 128 |
 | signalsmith +4 | 4.24 | 1.37 | -50.1 | -18.9 | -37.7 / -35.0 | 2.12 | -22.1 | 1.96 | 0.003 | -0.13 | -0.59 | 127 |
 | signalsmith +6 | 1.41 | 6.73 | -20.9 | -36.1 | -35.3 / -32.9 | 2.11 | -25.4 | 2.81 | 0.003 | -0.18 | -0.66 | 127 |
+
+## B4 — sau lần nghe A/B đầu tiên (2026-10-27)
+
+**Nghe A/B mù** (`tools/stretch/ab.py`, 8 beat dev × ±2/±4/±6, ToneCore B3 so với Signalsmith; chủ dự án
+chấm 14 / 48 mục):
+
+| Chiều | ToneCore B3 | Signalsmith |
+|---|---|---|
+| Hạ tone (−6, −4, −2) | trống nhòe: chủ yếu "không"; méo: "không" / "hơi" | nhòe "rõ" ở 3 / 6 đoạn |
+| Nâng tone (+4, +6) | nhòe "rõ" 2 đoạn (+6), méo "rõ" 2 đoạn (Đế Vương +4, Hoa Nở +6) | được chọn hơn 3 / 4 đoạn ở +6 |
+
+**Nguyên nhân 1 — méo = cắt đỉnh.** Đổi pha làm đỉnh vượt 0 dBFS khi beat đã master sát 0 dBFS (15 s,
++4: Đế Vương 1 462 mẫu > 1, đỉnh 1,29; Trống Cơm 8 625 mẫu, đỉnh 1,57). Tầng ra kẹp ±1 → méo, cả trên
+iPhone. Sửa: **limiter đỉnh nhìn trước** (`stretch/peak_limiter.*`: trần 0,98, nhìn trước 2 ms, release
+60 ms, một hệ số cho cả hai kênh, dưới trần đi thẳng) ngay trong `BeatRenderer` và `beatlab render`
+→ 0 mẫu bị cắt ở mọi mức trên 7 beat.
+
+**Nguyên nhân 2 — nhòe / đánh đôi = "neo" cả khung kéo lệch các tiếng sát nhau.** B3 đặt nội dung
+±43 ms quanh mỗi onset theo kiểu phát sample (thời gian ×1/β tính từ onset) → tiếng đánh phụ nằm
+trong khoảng đó (flam, ghost note, tiếng chính đến sau một tiếng nhẹ) lệch (1/β − 1)·Δ. Ví dụ đo
+được: Bạc Phận −6, tiếng chính +22 ms sau một tiếng nhẹ bị đẩy tới +30 ms. Bộ tín hiệu tổng hợp (trống
+đứng riêng) không bắt được → thêm phép đo trên beat thật (`tools/stretch/realeval.py`): **onset ma**
+(tiếng đánh có ở bản ra mà gốc không có trong ±8 ms, bộ dò độc lập với engine) và **rò trước onset**
+(năng lượng cao tần 5–30 ms trước / 0–20 ms sau, so với gốc).
+
+Đã làm:
+- **Bộ dò onset mới** (`TransientDetector`): bao biên năng lượng cao tần bước 1 ms, onset khi tăng
+  ≥ 8 dB so với 7 ms ngay trước, đỉnh ±5 ms, cách nhau ≥ 10 ms. Bản spectral flux khung 21 ms trước đây
+  bỏ sót tiếng đánh nằm trên đuôi tiếng trước (vd. tiếng chính ở Bạc Phận 1,031 s). Trên tín hiệu
+  tổng hợp vẫn đúng tuyệt đối (16 / 16, 32 / 32, không onset giả).
+- **Thử tách trống** (Driedger, Müller & Ewert 2014; HPSS cuốn chiếu, phần bộ gõ qua OLA 10,7 ms):
+  không dùng. Mặt nạ mềm để 14% năng lượng hợp âm lọt sang OLA (tạp phổ −22 dB); mặt nạ có hệ số tách
+  κ = 2 thì sạch phần cao độ nhưng thân kick / snare (phổ hẹp) vẫn sang phần hoà âm (25–30%) và mặt nạ
+  trên khung 43 ms trải tiếng đánh ra → hai nhánh không triệt tiêu → rò +5 dB. Đã gỡ khỏi engine.
+- **Thử neo một phần** khi nâng tone (α = 0,5 độ dời): onset ma 18 → 10 nhưng dồn tiếng rò vào 0,5–8 ms
+  ngay trước tiếng đánh (flam, −10…0 dB so với đỉnh — cả hai phép đo cũ đều mù vùng < 5 ms; test
+  `KickHasNoPreEchoAtAnyGridOffset` bắt được). Không dùng; giữ neo trọn.
+
+Kết quả hiện tại (`realeval.py`, 7 beat dev × 15 s, có limiter cả hai bên; không tính Chiếc Khăn Gió
+Ấm — ballad nhiều onset nhẹ, bộ dò đo nhiễu với mọi bản):
+
+| Mức | Onset ma: ToneCore / Signalsmith / B2 | Rò trước onset so với gốc (dB): ToneCore / Signalsmith / B2 |
+|---|---|---|
+| −6 | 28 / 7 / 5 | **+0,2** / +2,7 / +7,1 |
+| −4 | 30 / 16 / 6 | **−0,3** / +1,6 / +5,4 |
+| −2 | 33 / 18 / 2 | **−0,1** / +0,8 / +4,1 |
+| +2 | 13 / 11 / 5 | **+0,8** / +1,0 / +4,3 |
+| +4 | 14 / 7 / 4 | **+1,2** / +1,7 / +5,1 |
+| +6 | 18 / 8 / 2 | **+2,0** / +2,7 / +5,8 |
+
+Đọc bảng:
+- Tiếng rò trước onset: ToneCore sắc nhất ở mọi mức.
+- Onset ma: ToneCore nhiều hơn Signalsmith. Khi hạ tone, phần lớn là cấu trúc trong một tiếng trống
+  (nhát kép, phản xạ sớm) giãn ×1/β như phát chậm sample — đã nghe là ổn (tốt hơn Signalsmith). Ở −2
+  nhiều onset ma nằm đúng 10–17 ms sau onset thật (Signalsmith cũng có): bộ dò đo nhận đỉnh ở chỗ khác
+  của cùng một tiếng → phép đo này chỉ dùng để so sánh tương đối. Khi nâng tone ToneCore vẫn kém
+  Signalsmith → **nghe lại** (trang `testdata/beat-ab-2/`, 8 beat × +4 / +6, cả hai có limiter).
 
 ## B3 — giữ transient
 

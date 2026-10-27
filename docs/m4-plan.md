@@ -30,7 +30,12 @@
   ở mọi mức (trừ chỉ số dội ở +6: −18,9 so với −25,4 dB, vẫn đạt chỉ tiêu −12). Beat thật: năng lượng trước onset cách bản gốc 0–2 dB (Signalsmith 3–7 dB). Sửa 2 lỗi
   phân loại bin (cửa sổ xoá tiếng click, sàn quá cao). Bài 4 phút 2,8–3,0 s trên M1. Không cần B4.
   Chi tiết: docs/stretch-results.md.
-- [ ] ~~B4~~ (không cần: B3 đạt mọi chỉ tiêu khách quan; xem lại nếu nghe A/B ở B7 chưa đạt)
+- [~] **B4** (2026-10-27, mở lại sau nghe A/B lần 1 — hạ tone tốt hơn Signalsmith, nâng tone nhòe /
+  méo ở vài đoạn): (1) méo = cắt đỉnh sau đổi pha → limiter đỉnh nhìn trước trong render (0 mẫu bị cắt);
+  (2) nhòe = neo cả khung kéo lệch các tiếng sát nhau + bộ dò bỏ sót → bộ dò onset mới (năng lượng cao
+  tần bước 1 ms); phép đo trên beat thật `tools/stretch/realeval.py`. Đã thử và bỏ: tách trống HPSS +
+  OLA, neo một phần khi nâng tone. Nâng tone vẫn nhiều "onset ma" hơn Signalsmith → chờ nghe lại
+  (`testdata/beat-ab-2/`, 16 mục). Chi tiết: docs/stretch-results.md.
 - [x] **B5** (2026-10-27): engine đổi tone beat — `TransposedTrack` (khối 4096 frame, cờ atomic,
   int16 dư 6 dB), `BeatRenderer` (render nền từ vị trí đang phát, từng bước 8 khối, ưu tiên chỗ vừa
   tua, nối lượt bằng crossfade), `BeatPlayer` viết lại (chờ khối, crossfade 20 ms, fade ra trước khối

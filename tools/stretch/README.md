@@ -25,7 +25,18 @@ beatlab render beat.m4a -o out.wav --semitones 3 [--algo signalsmith] [--start 4
 beatlab render beat.m4a -o out.wav --semitones 3 --transients off   # tắt giữ transient để nghe so
 ```
 
-`render` in một dòng JSON (`duration_sec`, `song_sec`, `render_sec`, `realtime_x`).
+`render` in một dòng JSON (`duration_sec`, `song_sec`, `render_sec`, `realtime_x`). Có limiter đỉnh như
+engine cho mọi thuật toán (`--limiter off` để tắt).
+
+## Đo trên beat thật (không cần tai)
+
+```sh
+python3 tools/stretch/realeval.py --list testdata/realeval-list.txt --algos pv,signalsmith [--per-beat]
+```
+
+Onset ma (tiếng đánh có ở bản ra mà gốc không có — trống đánh đôi / lệch nhịp), tiếng rò trước onset
+so với gốc, số mẫu bị cắt. Bộ dò onset của phép đo độc lập với engine. Bản render lưu ở
+`testdata/realeval/` (`--fresh` để render lại).
 
 ## Nghe A/B mù
 

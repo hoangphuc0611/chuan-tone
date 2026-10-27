@@ -21,6 +21,11 @@ struct PitchShiftConfig {
   // cùng một vị trí ở mọi khung chứa onset.
   bool transients = true;
   double sampleRate = 48000.0;  // chỉ dùng cho các hằng số thời gian của bộ dò onset
+  // Phần độ dời được căn ở bước 2b (1 = neo trọn) — để thử nghiệm bằng beatlab. Đã thử nâng tone
+  // 0,5 (2026-10-27): bớt "onset ma" nhưng dồn tiếng rò vào 0,5–8 ms ngay trước tiếng đánh (flam,
+  // tới −10…0 dB so với đỉnh) → giữ 1.
+  double anchorDown = 1.0;  // β < 1 (hạ tone)
+  double anchorUp = 1.0;    // β > 1 (nâng tone)
 };
 
 // Đổi cao độ beat n nửa cung, giữ nguyên độ dài và vị trí từng mẫu.
@@ -86,6 +91,7 @@ class PitchShifter {
   void propagateBasic(float hopA) noexcept;
   void applyTransients(int64_t analysis) noexcept;
   void synthesize(int64_t synthStart) noexcept;
+  void zeroRingUpTo(int64_t end) noexcept;
   void interpolate(double pos, float* out) noexcept;
 
   int channels_;
@@ -93,6 +99,7 @@ class PitchShifter {
   bool bypass_;
   bool phaseLock_;
   bool transients_;
+  double anchorStrength_;  // anchorDown / anchorUp theo chiều đổi tone
   int n_;
   int hop_;
   int bins_;

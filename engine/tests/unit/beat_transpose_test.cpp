@@ -225,3 +225,33 @@ TEST(BeatPlayer, FadesOutBeforeMissingBlock) {
   EXPECT_LE(p.positionFrames(), static_cast<uint64_t>(kB));
   EXPECT_GE(p.positionFrames(), static_cast<uint64_t>(kB) - 300);
 }
+
+// Beat master sát 0 dBFS: bản render nền (qua limiter) không có mẫu nào vượt 0 dBFS — trước B4,
+// đổi pha làm đỉnh lên tới +4 dB và tầng ra kẹp thành méo.
+TEST(BeatRenderer, LimitsOversAfterPhaseChange) {
+  // Tổng hoạ âm cùng pha, đỉnh 0,99 — đổi pha làm đỉnh tăng.
+  auto src = std::make_shared<Track>();
+  src->frames = 3 * kRate;
+  src->pcm.resize(2 * src->frames);
+  for (uint64_t i = 0; i < src->frames; ++i) {
+    double s = 0.0;
+    for (int h = 1; h <= 6; ++h)
+      s += std::cos(2 * kPi * 110.0 * h * static_cast<double>(i) / kRate) / h;
+    const auto v = static_cast<int16_t>(std::lround(0.99 * 32767.0 * s / 2.45));
+    src->pcm[2 * i] = v;
+    src->pcm[2 * i + 1] = v;
+  }
+  auto tt = std::make_shared<TransposedTrack>(src, 5);
+  {
+    Worker w;
+    BeatRenderer::start(w, tt, 0, kRate, nullptr, nullptr);
+    w.waitIdle();
+  }
+  ASSERT_EQ(tt->readyCount.load(), tt->blocks);
+  float peak = 0.0f;
+  for (uint64_t i = 0; i < 2 * tt->frames; ++i) {
+    peak = std::max(peak, std::abs(static_cast<float>(tt->pcm[i]) / 16384.0f));
+  }
+  EXPECT_LE(peak, 0.99f);
+  EXPECT_GT(peak, 0.9f);  // vẫn to như gốc (chỉ cắt đỉnh, không hạ cả bài)
+}

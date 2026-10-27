@@ -40,6 +40,7 @@ PitchShifter::PitchShifter(int channels, double semitones, const PitchShiftConfi
       bypass_(semitones == 0.0),
       phaseLock_(cfg.phaseLock),
       transients_(cfg.phaseLock && cfg.transients),
+      anchorStrength_(semitones < 0.0 ? cfg.anchorDown : cfg.anchorUp),
       n_(cfg.fftSize),
       hop_(cfg.synthesisHop),
       bins_(cfg.fftSize / 2 + 1),
@@ -265,7 +266,7 @@ void PitchShifter::applyTransients(int64_t analysis) noexcept {
     const double d = o.time - static_cast<double>(analysis);
     if (d <= 0.0) continue;
     const float w = window_[static_cast<std::size_t>(d)];
-    const double ds = (d - static_cast<double>(n_) / 2.0) * (1.0 - beta_);
+    const double ds = anchorStrength_ * (d - static_cast<double>(n_) / 2.0) * (1.0 - beta_);
     const std::complex<double> step =
         std::polar(1.0, 2.0 * dsp::kPi / static_cast<double>(n_) * ds);
     act[na++] = {o.g.data(), w * w, ds, step, step};  // cur bắt đầu ở bin 1
@@ -299,6 +300,18 @@ void PitchShifter::applyTransients(int64_t analysis) noexcept {
   }
 }
 
+// Xoá các ô vòng đệm sắp được cộng lần đầu (chúng đang giữ dữ liệu cũ đã đọc xong).
+void PitchShifter::zeroRingUpTo(int64_t end) noexcept {
+  for (int64_t s = zeroedUpTo_; s < end; ++s) {
+    const auto idx = static_cast<std::size_t>(static_cast<uint64_t>(s) & ringMask_);
+    for (auto& r : ring_) {
+      r[idx] = 0.0f;
+      if (idx < static_cast<std::size_t>(taps_)) r[idx + ringCap_] = 0.0f;
+    }
+  }
+  zeroedUpTo_ = std::max(zeroedUpTo_, end);
+}
+
 // IFFT, cửa sổ, cộng chồng từng kênh vào vòng đệm tại vị trí giãn `synthStart`.
 void PitchShifter::synthesize(int64_t synthStart) noexcept {
   for (std::size_t c = 0; c < static_cast<std::size_t>(channels_); ++c) {
@@ -323,16 +336,7 @@ void PitchShifter::computeFrame() noexcept {
   const auto analysis = static_cast<int64_t>(std::llround(center - n_ / 2));
   const auto hopA = static_cast<float>(analysis - prevAnalysis_);
 
-  // Xoá các ô vòng đệm sắp được cộng lần đầu (chúng đang giữ dữ liệu cũ đã đọc xong).
-  const int64_t writeEnd = synthStart + n_;
-  for (int64_t s = zeroedUpTo_; s < writeEnd; ++s) {
-    const auto idx = static_cast<std::size_t>(static_cast<uint64_t>(s) & ringMask_);
-    for (auto& r : ring_) {
-      r[idx] = 0.0f;
-      if (idx < static_cast<std::size_t>(taps_)) r[idx + ringCap_] = 0.0f;
-    }
-  }
-  zeroedUpTo_ = std::max(zeroedUpTo_, writeEnd);
+  zeroRingUpTo(synthStart + n_);
 
   analyze(analysis);
   if (phaseLock_) {

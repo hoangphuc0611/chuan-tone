@@ -50,7 +50,7 @@ Mọi thuật toán trong ToneCore được viết từ các nguồn công khai 
 - J. P. Bello, L. Daudet, S. Abdallah, C. Duxbury, M. Davies, M. Sandler, *A Tutorial on Onset Detection in Music Signals*, IEEE TSAP 2005 — spectral flux, ngưỡng trung vị (`stretch/transient_detector.cpp`).
 - S. Dixon, *Onset Detection Revisited*, DAFx 2006 — flux trên log biên độ, chọn đỉnh cục bộ (`stretch/transient_detector.cpp`).
 - Z. Průša, N. Holighaus, *Phase vocoder done right* (PGHI), EUSIPCO 2017 (ứng viên B4).
-- J. Driedger, M. Müller, S. Ewert, *Improving Time-Scale Modification of Music Signals Using Harmonic-Percussive Separation*, IEEE Signal Processing Letters 2014 (ứng viên B4).
+- J. Driedger, M. Müller, S. Ewert, *Improving Time-Scale Modification of Music Signals Using Harmonic-Percussive Separation*, IEEE Signal Processing Letters 2014 — đã thử ở B4 (HPSS cuốn chiếu + OLA cho phần bộ gõ), không dùng (xem `docs/stretch-results.md`).
 - F. J. Harris, *On the Use of Windows for Harmonic Analysis with the Discrete Fourier Transform*, Proc. IEEE 1978 — cửa sổ Blackman–Harris trong chỉ số đo phổ (`tests/util/stretch_eval.cpp`).
 
 ## Dò tone, BPM, loudness (M3)
