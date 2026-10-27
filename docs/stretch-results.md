@@ -116,6 +116,20 @@ Kết quả hiện tại (`realeval.py`, 7 beat dev × 15 s, có limiter cả ha
   của cùng một tiếng → phép đo này chỉ dùng để so sánh tương đối. Khi nâng tone ToneCore vẫn kém
   Signalsmith → **nghe lại** (trang `testdata/beat-ab-2/`, 8 beat × +4 / +6, cả hai có limiter).
 
+**Nghe lại lần 2** (2026-10-27, 16 / 16 mục, A/B mù, cả hai có limiter):
+
+| Mức | Nhòe trống: không / hơi / rõ — ToneCore · Signalsmith | Méo, rè, phơ: không / hơi / rõ — ToneCore · Signalsmith | Chọn hơn: ToneCore / Signalsmith / như nhau |
+|---|---|---|---|
+| +4 | 6 / 2 / 0 · 6 / 2 / 0 | 4 / 4 / 0 · 6 / 2 / 0 | 0 / 2 / 6 |
+| +6 | 6 / 1 / 1 · 7 / 1 / 0 | 5 / 3 / 0 · 7 / 1 / 0 | 0 / 2 / 6 |
+
+- Mức "rõ" giảm từ 4 / 14 mục (lần 1) xuống 1 / 16 (Trống Cơm +6 nhòe rõ — ngoài khoảng nghiệm thu ±4).
+- +4: không mục nào "rõ"; nhòe ngang Signalsmith; "hơi méo" nhiều hơn (Bạc Phận, Hoa Nở, Duyên Phận,
+  Trống Cơm; Signalsmith hơi méo ở Bạc Phận, Hoa Nở).
+- "Hơi méo" không do limiter: tỉ lệ mẫu vượt 0,98 trước limiter ngang nhau giữa hai thuật toán (Trống
+  Cơm 0,66% / 0,54%, các beat khác ≤ 0,17%). Nhiều khả năng là tiếng "phơ" của phase vocoder ở phần có
+  cao độ khi giãn ×β > 1.
+
 ## B3 — giữ transient
 
 **Vì sao trống nhòe.** Tiếng đánh ở thời điểm gốc t0 nằm trong mọi khung phân tích j có
