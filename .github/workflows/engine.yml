@@ -44,6 +44,29 @@ jobs:
         working-directory: engine
         run: ctest --preset ${{ matrix.preset }}
 
+  ios-sim:
+    # Toàn bộ unit test engine build bằng SDK iOS + Xcode 26 (như bản IPA) và chạy trong iOS Simulator.
+    name: test (iOS Simulator, Xcode 26)
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install ninja
+      - name: Build test cho iOS Simulator
+        run: |
+          cmake -S engine -B engine/build/iossim -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphonesimulator -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 -DTC_IOS_SIM_TESTS=ON
+          cmake --build engine/build/iossim --target tonecore_tests
+      - name: Chạy test trong iOS Simulator
+        run: |
+          set -euo pipefail
+          UDID=$(xcrun simctl list devices available -j | jq -r '[.devices[][] | select(.name | startswith("iPhone"))][0].udid')
+          echo "Simulator: $UDID"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl spawn "$UDID" "$PWD/engine/build/iossim/tests/tonecore_tests" --gtest_brief=1
+
   bench:
     runs-on: ubuntu-24.04
     env:

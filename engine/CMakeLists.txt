@@ -6,6 +6,8 @@ project(ToneCore VERSION 0.5.0 LANGUAGES C CXX)
 option(TC_BUILD_TESTS "Build unit test (GoogleTest)" ON)
 option(TC_BUILD_BENCH "Build benchmark (Google Benchmark)" OFF)
 option(TC_BUILD_TOOLS "Build công cụ dòng lệnh (pitchlab, keylab, beatlab) cho máy dev" ON)
+# CI: build unit test cho iOS Simulator (cùng SDK / trình biên dịch với app) — không ship.
+option(TC_IOS_SIM_TESTS "Build unit test cho iOS Simulator (CI)" OFF)
 option(TC_BUILD_FRAMEWORK "Build tonecore dạng Apple framework (iOS)" OFF)
 set(TC_SANITIZER "" CACHE STRING "Sanitizer cho bản host: address, undefined, thread hoặc rỗng")
 
@@ -16,7 +18,9 @@ if(NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   set(TC_BUILD_TOOLS OFF)
 endif()
 if(ANDROID OR IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS")
-  set(TC_BUILD_TESTS OFF)
+  if(NOT TC_IOS_SIM_TESTS)
+    set(TC_BUILD_TESTS OFF)
+  endif()
   set(TC_BUILD_BENCH OFF)
   set(TC_BUILD_TOOLS OFF)
 endif()
@@ -86,6 +90,11 @@ elseif(IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS")
   set_source_files_properties(src/io/ios/remoteio_backend.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
   target_link_libraries(tonecore_core PUBLIC
     "-framework AudioToolbox" "-framework AVFAudio" "-framework CoreFoundation" "-framework Foundation")
+  if(TC_IOS_SIM_TESTS)
+    # Chỉ bản test trên Simulator: test bộ giải mã so với dr_libs.
+    target_sources(tonecore_core PRIVATE src/decode/decoder_drlibs.cpp)
+    target_include_directories(tonecore_core SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/dr_libs)
+  endif()
 elseif(APPLE)
   # macOS host: giải mã bằng ExtAudioFile (cùng mã với iOS → kiểm được trên máy dev),
   # dr_libs để test so sánh; chưa có backend âm thanh thật.

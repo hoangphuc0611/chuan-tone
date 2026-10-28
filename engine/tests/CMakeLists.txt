@@ -48,4 +48,6 @@ target_compile_options(tonecore_tests PRIVATE $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-
 tc_apply_sanitizer(tonecore_tests)
 
 include(GoogleTest)
-gtest_discover_tests(tonecore_tests DISCOVERY_TIMEOUT 30)
+if(NOT CMAKE_CROSSCOMPILING)  # iOS Simulator: chạy thẳng file test bằng `xcrun simctl spawn`
+  gtest_discover_tests(tonecore_tests DISCOVERY_TIMEOUT 30)
+endif()
