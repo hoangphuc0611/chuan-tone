@@ -56,7 +56,7 @@ jobs:
         run: |
           cmake -S engine -B engine/build/iossim -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphonesimulator -DCMAKE_OSX_ARCHITECTURES=arm64 \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 -DTC_IOS_SIM_TESTS=ON
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 -DCMAKE_MACOSX_BUNDLE=OFF -DTC_IOS_SIM_TESTS=ON
           cmake --build engine/build/iossim --target tonecore_tests
       - name: Chạy test trong iOS Simulator
         run: |
@@ -65,7 +65,10 @@ jobs:
           echo "Simulator: $UDID"
           xcrun simctl boot "$UDID"
           xcrun simctl bootstatus "$UDID" -b
-          xcrun simctl spawn "$UDID" "$PWD/engine/build/iossim/tests/tonecore_tests" --gtest_brief=1
+          BIN=$(find "$PWD/engine/build/iossim" -name tonecore_tests -type f -perm -111 | head -1)
+          echo "File test: $BIN"
+          xcrun vtool -show-build "$BIN" | grep -E "platform|minos"
+          xcrun simctl spawn "$UDID" "$BIN" --gtest_brief=1
 
   bench:
     runs-on: ubuntu-24.04
