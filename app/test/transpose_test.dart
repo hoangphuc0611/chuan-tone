@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:chuantone/data/song_prefs.dart';
 import 'package:chuantone/engine/labels.dart';
+import 'package:chuantone/engine/playback_watch.dart';
 import 'package:chuantone/engine/transpose_timing.dart';
 import 'package:chuantone/widgets/transpose_control.dart';
 import 'package:flutter/material.dart';
@@ -156,6 +157,54 @@ void main() {
       expect(transposeTimingLabel(t), 'nghe sau 30 ms (−3) · cả bài 3.1 s');
       t.reset();
       expect(transposeTimingLabel(t), 'chưa đổi');
+    });
+  });
+
+  group('chẩn đoán vị trí sau khi đổi tone', () {
+    const ms = Duration(milliseconds: 1);
+
+    test('phát đều: ×1.00, không nhảy lùi, không khựng', () {
+      final w = PlaybackWatch()..restart(Duration.zero);
+      for (var i = 0; i <= 300; i++) {
+        w.observe(
+          at: ms * (33 * i),
+          position: ms * (60000 + 33 * i),
+          playing: true,
+        );
+      }
+      expect(w.rate, closeTo(1.0, 1e-9));
+      expect(w.jumpsBack, 0);
+      expect(w.stalls, 0);
+      expect(
+        playbackWatchLabel(w, ms * 9900),
+        'vị trí ×1.00 · nhảy lùi 0 · khựng 0 (đang đo)',
+      );
+      expect(
+        playbackWatchLabel(w, ms * 16000),
+        'vị trí ×1.00 · nhảy lùi 0 · khựng 0',
+      );
+    });
+
+    test('lặp đoạn và đứng chờ đều bị đếm; tạm dừng thì không tính', () {
+      final w = PlaybackWatch()..restart(Duration.zero);
+      var pos = 60000;
+      for (var i = 0; i <= 200; i++) {
+        if (i == 60) pos -= 3000; // nhảy lùi 3 s
+        if (i < 100 || i >= 110) pos += 33; // 10 nhịp (330 ms) đứng yên
+        w.observe(
+          at: ms * (33 * i),
+          position: ms * pos,
+          playing: i < 150 || i > 170,
+        );
+      }
+      expect(w.jumpsBack, 1);
+      expect(w.maxJumpBack, ms * 2967);
+      expect(w.stalls, 1);
+      expect(w.stalled, ms * 330);
+      expect(
+        playbackWatchLabel(w, ms * 20000),
+        'vị trí ×0.94 · nhảy lùi 1 (xa nhất 3.0 s) · khựng 1 (330 ms)',
+      );
     });
   });
 }

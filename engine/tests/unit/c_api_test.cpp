@@ -10,6 +10,10 @@
 #include <string>
 #include <vector>
 
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+
 namespace {
 
 // Đỉnh của kênh `ch` trong đoạn frame [from, to) của buffer stereo interleaved.
@@ -72,6 +76,9 @@ TEST(CApi, CreateRejectsBadArguments) {
 
 // Bản host không có thiết bị âm thanh: tạo được engine nhưng start() báo không hỗ trợ.
 TEST(CApi, PlatformBackendUnavailableOnHost) {
+#if TARGET_OS_IPHONE
+  GTEST_SKIP() << "iOS (Simulator trong CI) có RemoteIO thật";
+#endif
   tc_engine_config c;
   tc_engine_config_init(&c);
   c.backend = TC_BACKEND_PLATFORM;

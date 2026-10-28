@@ -9,6 +9,7 @@ import '../data/analysis_cache.dart';
 import '../data/song_prefs.dart';
 import '../engine/audio_service.dart';
 import '../engine/labels.dart';
+import '../engine/playback_watch.dart';
 import '../engine/transpose_timing.dart';
 import '../widgets/pitch_meter.dart';
 import '../widgets/transpose_control.dart';
@@ -48,6 +49,7 @@ class _TestRoomPageState extends State<TestRoomPage> {
   // Số đo trên máy thật (M4 B7): bấm tone → nghe, render cả bài, thời gian phân tích, RAM.
   final _clock = Stopwatch()..start();
   final _timing = TransposeTiming();
+  final _watch = PlaybackWatch();
   Duration? _analysisTime;
   int _rssMb = 0;
   int _maxRssMb = 0;
@@ -81,11 +83,11 @@ class _TestRoomPageState extends State<TestRoomPage> {
       if (eng == null || !mounted) return;
       setState(() {
         _pitch = eng.pitchState;
-        if (_timing.pending) {
+        final now = _clock.elapsed;
+        if (_timing.pending || !_watch.done(now)) {
           final pb = eng.playback;
-          if (_timing.observe(pb.audibleTranspose, _clock.elapsed)) {
-            _playback = pb;
-          }
+          _watch.observe(at: now, position: pb.position, playing: pb.playing);
+          if (_timing.observe(pb.audibleTranspose, now)) _playback = pb;
         }
       });
     });
@@ -133,6 +135,7 @@ class _TestRoomPageState extends State<TestRoomPage> {
     final e = _service.engine;
     if (e == null || !_service.setTranspose(semitones)) return;
     _timing.requested(semitones, _clock.elapsed);
+    _watch.restart(_clock.elapsed);
     setState(() => _playback = e.playback);
     final name = _beatFile;
     final size = _beatSize;
@@ -427,6 +430,7 @@ class _TestRoomPageState extends State<TestRoomPage> {
           _MetricsCard(
             metrics: m,
             timing: _timing,
+            watch: playbackWatchLabel(_watch, _clock.elapsed),
             analysisTime: _analysisTime,
             rssMb: _rssMb,
             maxRssMb: _maxRssMb,
@@ -608,6 +612,7 @@ class _MetricsCard extends StatelessWidget {
   const _MetricsCard({
     required this.metrics,
     required this.timing,
+    required this.watch,
     required this.analysisTime,
     required this.rssMb,
     required this.maxRssMb,
@@ -615,6 +620,7 @@ class _MetricsCard extends StatelessWidget {
 
   final EngineMetrics metrics;
   final TransposeTiming timing;
+  final String watch;
   final Duration? analysisTime;
   final int rssMb;
   final int maxRssMb;
@@ -638,6 +644,7 @@ class _MetricsCard extends StatelessWidget {
       ('Trễ xử lý', '${m.algorithmLatencyMs.toStringAsFixed(1)} ms'),
       ('Xrun (rè)', '${m.xruns}'),
       ('Đổi tone beat', transposeTimingLabel(timing)),
+      ('Sau khi đổi tone', watch),
       (
         'Phân tích bài',
         analysisTime == null
