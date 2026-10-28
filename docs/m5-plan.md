@@ -40,6 +40,28 @@
     đổi ≤ 0,7 dB; giọng không có "s" thì đi thẳng từng mẫu.
   - CPU trên M1: gate + EQ + compressor + de-esser ≈ 0,2–0,3% một nhân.
   - 8 test mới; không cấp phát.
+- [x] **B3** (2026-10-28):
+  - `fx/delay.*` — dòng trễ phân số (Lagrange bậc 3), thời gian theo BPM × phần nốt, LPF / HPF
+    trong vòng hồi tiếp, hồi tiếp ≤ 50%, chỉ xuất phần vọng.
+  - `fx/reverb.*` — FDN 8 dòng (độ dài nguyên tố), Hadamard trực giao, 4 all-pass khuếch tán
+    (g 0,5), pre-delay, lọc hấp thụ một cực đặt RT60 thấp và RT60 tại 4 kHz, hai đầu ra trực giao,
+    chuẩn hoá năng lượng (mix = tỉ lệ vang / khô trong băng giọng). Room / Hall / Plate.
+  - Tiện ích đo: tương quan, độ nhô phổ (Welch chuẩn hoá từng đoạn); `fxlab --delay / --reverb`,
+    `fxlab ir`.
+
+  Sửa trong lúc đo:
+  - Damping đặt ở Nyquist gần như không tác dụng ở 4–8 kHz → đặt tại 4 kHz.
+  - Chuẩn hoá năng lượng thiếu bước hấp thụ ở lần đọc đầu.
+  - All-pass g 0,6–0,75 tự tô màu → g 0,5.
+  - Dòng FDN dài hơn (tổng 0,3–0,6 s).
+
+  Số đo:
+  - Delay: vọng đúng vị trí ±1 mẫu; hồi tiếp đúng ±0,5 dB.
+  - Reverb: RT60 đúng ±15% (5 cấu hình); tương quan L–R của đuôi ≤ 0,08.
+  - Phổ đuôi nhô ≤ 7,3 dB ở các RT60 preset dùng.
+  - Mức vang trong băng giọng −1,0…−1,7 dB khi mix = 1, mọi kiểu / RT60.
+  - CPU trên M1: delay 0,04%, reverb 0,08%; cả chuỗi 6 khối ≈ 0,3% một nhân.
+  - 10 test mới; không cấp phát (kể cả đổi kiểu phòng).
 
 ---
 

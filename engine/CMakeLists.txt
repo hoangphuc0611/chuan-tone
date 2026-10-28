@@ -77,6 +77,8 @@ add_library(tonecore_core STATIC
   src/fx/noise_gate.cpp
   src/fx/compressor.cpp
   src/fx/de_esser.cpp
+  src/fx/delay.cpp
+  src/fx/reverb.cpp
 )
 
 # Mã theo nền tảng: backend âm thanh + bộ giải mã file.

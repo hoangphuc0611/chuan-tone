@@ -8,8 +8,10 @@
 
 #include "fx/compressor.h"
 #include "fx/de_esser.h"
+#include "fx/delay.h"
 #include "fx/equalizer.h"
 #include "fx/noise_gate.h"
+#include "fx/reverb.h"
 
 namespace {
 
@@ -114,5 +116,36 @@ void BM_DeEsser(benchmark::State& state) {
   report(state, kBlock);
 }
 BENCHMARK(BM_DeEsser);
+
+void BM_Delay(benchmark::State& state) {
+  tonecore::Delay d(kFs);
+  tonecore::DelayParams p;
+  p.division = tonecore::NoteDivision::DottedEighth;
+  p.bpm = 92.0f;  // trễ lẻ mẫu → nội suy Lagrange
+  d.setParams(p);
+  auto x = voiceLike(kBlock);
+  std::vector<float> wet(kBlock);
+  for (auto _ : state) {
+    d.process(x.data(), wet.data(), kBlock);
+    benchmark::DoNotOptimize(wet.data());
+  }
+  report(state, kBlock);
+}
+BENCHMARK(BM_Delay);
+
+// Reverb FDN 8 dòng (Hall), mono vào → stereo ra.
+void BM_Reverb(benchmark::State& state) {
+  tonecore::Reverb rv(kFs);
+  rv.setParams(tonecore::ReverbParams{});
+  auto x = voiceLike(kBlock);
+  std::vector<float> l(kBlock), r(kBlock);
+  for (auto _ : state) {
+    rv.process(x.data(), l.data(), r.data(), kBlock);
+    benchmark::DoNotOptimize(l.data());
+    benchmark::DoNotOptimize(r.data());
+  }
+  report(state, kBlock);
+}
+BENCHMARK(BM_Reverb);
 
 }  // namespace

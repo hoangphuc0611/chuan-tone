@@ -88,7 +88,10 @@ Mọi thuật toán trong ToneCore được viết từ các nguồn công khai 
 | M. R. Schroeder, *New method of measuring reverberation time*, JASA 37, 1965 | Đo RT60 bằng tích phân ngược (EDC), khớp T30 | `tests/util/fx_eval.cpp` |
 | D. Giannoulis, M. Massberg, J. Reiss, *Digital Dynamic Range Compressor Design – A Tutorial and Analysis*, JAES 2012 | Compressor: đường nén knee mềm, làm mượt tách nhánh trong miền dB; de-esser dùng cùng cách làm mượt | `fx/compressor.cpp`, `fx/de_esser.cpp` |
 | U. Zölzer (ed.), *DAFX*, 2nd ed. — ch. 4 (de-esser, EQ động) | De-esser dạng shelf cao động có sidechain băng 5–9 kHz | `fx/de_esser.cpp` |
-| J.-M. Jot, A. Chaigne, *Digital delay networks for designing artificial reverberators*, AES 1991 | Reverb FDN (B3) | — |
+| J.-M. Jot, A. Chaigne, *Digital delay networks for designing artificial reverberators*, AES 1991 | Reverb FDN 8 dòng: ma trận hồi tiếp trực giao, lọc hấp thụ mỗi dòng theo RT60 | `fx/reverb.cpp` |
+| M. R. Schroeder, *Natural sounding artificial reverberation*, JAES 10, 1962 | All-pass khuếch tán ở đầu vào reverb | `fx/reverb.cpp` |
+| J. O. Smith, *Physical Audio Signal Processing* (online book, CCRMA) — Lagrange interpolation, FDN | Dòng trễ phân số (nội suy Lagrange bậc 3) cho delay | `fx/delay.cpp` |
+| U. Zölzer (ed.), *DAFX*, 2nd ed. — ch. 2 (delay, echo có lọc trong vòng hồi tiếp) | Delay theo nhịp | `fx/delay.cpp` |
 
 ## Fingerprint
 

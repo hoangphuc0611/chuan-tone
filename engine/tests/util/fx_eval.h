@@ -31,6 +31,16 @@ double rt60(const std::vector<float>& ir, double sampleRate, double bandLow = 0.
 std::vector<double> staticCurveDb(const MonoProcess& process, const std::vector<double>& levelsDb,
                                   double freq, double sampleRate, double settleSec = 0.5);
 
+// Hệ số tương quan Pearson của a và b trên [from, to).
+double correlation(const std::vector<float>& a, const std::vector<float>& b, std::size_t from,
+                   std::size_t to);
+
+// Độ "nhô" của phổ (dB) — dò tiếng vang "kim loại" (vài mode ngân trội): phổ công suất trung bình
+// Welch (đoạn 4096, Hann, chồng 50%, mỗi đoạn chuẩn hoá theo năng lượng của nó) của x[from, to) so
+// với trung bình trượt ±1/6 quãng tám quanh mỗi bin; trả mức nhô lớn nhất trong [loHz, hiHz].
+double spectralPeakinessDb(const std::vector<float>& x, double sampleRate, std::size_t from,
+                           std::size_t to, double loHz, double hiHz);
+
 // Năng lượng trên `cutoffHz` so với tổng (dB) — đo tiếng "lụp bụp" (zipper) khi đầu vào chỉ có
 // thành phần thấp hơn cutoff. Lọc thông cao bậc 4 (hai SVF Butterworth).
 double energyAboveDb(const std::vector<float>& x, double cutoffHz, double sampleRate);

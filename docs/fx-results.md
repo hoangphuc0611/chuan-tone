@@ -1,7 +1,7 @@
 # Kết quả bộ FX giọng (M5)
 
-> Tình trạng 2026-10-28: xong B1 (EQ, gate, tiện ích đo, `fxlab`), B2 (compressor, de-esser). Kế
-> hoạch: `docs/m5-plan.md`.
+> Tình trạng 2026-10-28: xong B1 (EQ, gate, tiện ích đo, `fxlab`), B2 (compressor, de-esser), B3
+> (delay, reverb). Kế hoạch: `docs/m5-plan.md`.
 
 Chỉ tiêu M5 (CLAUDE.md mục 9): **demo đổi preset khi đang hát** — không click, không hụt tiếng.
 
@@ -120,3 +120,66 @@ Cả bốn khối ≈ 0,2–0,3% một nhân trên M1.
 - Lệnh: `fxlab render vocadito_1.wav --gate -50 --hpf 80 --bell 300,-2,1 --bell 3000,2,1 --comp
   -30,3,6,5,80,4 --deess -35`.
 - Kết quả: độ to −32,7 → −30,3 LUFS; nén tối đa −3,2 dB; de-ess tối đa −6 dB.
+
+## B3 — delay theo nhịp và reverb FDN
+
+**Delay** (`Delay.*`):
+
+| Phép thử | Chỉ tiêu | Kết quả |
+|---|---|---|
+| Vọng đầu, 92 BPM, 1/4 · 1/8 · 1/8 chấm · 1/16 (trễ lẻ mẫu) | ±1 mẫu | ✅ |
+| Nội suy Lagrange bậc 3: đáp ứng ở 200 Hz / 1 kHz / 4 kHz | ±0,25 dB | ✅ (thông thấp nhẹ ở rất cao tần) |
+| Mỗi lần vọng nhỏ đi đúng hồi tiếp 0,4 | ±0,5 dB | ✅ |
+| Có LPF 4 kHz trong vòng: phần > 4 kHz của mỗi lần vọng | giảm dần | ✅ |
+| Hồi tiếp đặt 0,9 → chặn 0,5 (chống rú); tắt → không vọng | — | ✅ |
+
+**Reverb** (`Reverb.*`). Đo bằng `fxlab ir`, damping 0,5 → RT60 ở 4 kHz = ½ RT60:
+
+| Kiểu, RT60 đặt | RT60 đo 500 Hz–2 kHz | 4–8 kHz | Tương quan L–R đuôi | Nhô phổ 200 Hz–8 kHz |
+|---|---|---|---|---|
+| Hall 2,2 s | 2,08 / 1,88 s | 1,04 s | 0,077 | 3,9 / 4,3 dB |
+| Room 1,0 s | ✅ ±15% | — | 0,062 | 6,4 / 6,4 dB |
+| Plate 1,8 s (damping 0,3) | ✅ ±15% | — | 0,080 | 3,4 / 4,5 dB |
+
+- RT60 (500 Hz–2 kHz, Schroeder T30) đúng ±15% ở Room 0,6 / 1,2, Hall 2,2, Plate 1,4 / 1,8 s, cả
+  hai kênh.
+- Damping 0,6: RT60 4–8 kHz < 0,8 × RT60 500 Hz–2 kHz.
+- Năng lượng từng đoạn 50 ms sau 150 ms không tăng (ổn định).
+
+**Mức vang:**
+- Trong băng giọng (300 Hz–2 kHz), khi mix = 1: −1,0 … −1,7 dB ở mọi kiểu / RT60. Vậy "mix 22%" là
+  vang nhỏ hơn khô ~13 dB như bảng preset.
+- Cả dải thì thấp hơn ~7 dB vì vang tắt nhanh ở cao tần — đúng ý damping.
+
+**Đã sửa trong lúc đo:**
+
+| Vấn đề | Đo được | Sửa |
+|---|---|---|
+| Damping đặt RT60 cao tại Nyquist | vùng 4–8 kHz gần như không giảm (RT60 1,59 s so với 1,57 s ở 500 Hz–2 kHz) | Đặt tại 4 kHz, cực b giải từ phương trình bậc 2 |
+| Chuẩn hoá năng lượng dùng 1/(1 − c²) | mức vang lệch theo RT60 tới ~10 dB (Hall 0,6 s: c ≈ 0,33) | Mẫu bơm vào đã nhân c ở lần đọc đầu: dùng c²/(1 − c²) |
+| All-pass khuếch tán g 0,6–0,75 | phổ đuôi nhô thêm 1–5 dB (Room 1,0 s: 7,4 → 10,4 dB khi g 0,7) | g = 0,5 |
+| Dòng FDN ngắn (Plate 9–27 ms) | mật độ mode thấp | Room 23–61, Hall 41–113, Plate 29–73 ms |
+
+Độ nhô phổ (200 Hz–8 kHz, L / R) theo g, ở các RT60 preset:
+
+| g | Room 0,6 | Room 1,0 | Hall 2,2 | Plate 1,4 |
+|---|---|---|---|---|
+| 0,6–0,7 (cũ) | 9,8 / 9,0 | 7,4 / 6,5 | 5,2 / 5,6 | 6,2 / 8,0 |
+| **0,5** | 7,9 / 7,8 | 6,3 / 5,6 | 3,4 / 4,9 | 5,9 / 7,3 |
+| 0,4 | 6,7 / 6,2 | 5,5 / 5,1 | 3,1 / 4,6 | 5,7 / 7,0 |
+
+- Chọn 0,5 (không xuống 0,4) để giữ tiếng dội sớm đủ dày; nghe kiểm ở B6.
+- RT 0,6 s: phần 2–8 kHz nhô hơn vì cao tần tắt trước khi mạng kịp trộn. Preset Rap chỉ dùng 8% vang.
+
+**CPU** (Mac M1, Release, mono 48 kHz, khối 128 mẫu):
+
+| Khối | × thời gian thực | % một nhân |
+|---|---|---|
+| Delay 1/8 chấm (nội suy) | 2 532× | 0,04% |
+| Reverb Hall (mono → stereo) | 1 270× | 0,08% |
+| **Cả chuỗi:** gate + EQ + compressor + de-esser + delay + reverb | — | **≈ 0,3%** |
+
+**Thử trên giọng thật** (vocadito_1, chuỗi kiểu Bolero):
+- Thông số: gate −50; HPF 80; bell 300 Hz −2 / 3 kHz +2; comp −30 dB 3:1 makeup 4; de-ess; delay
+  1/4 nốt ở 76 BPM (hồi tiếp 25%, ướt 25%); Hall 2,2 s 22%.
+- Kết quả: độ to −32,7 → −30,2 LUFS (phần lớn do makeup; vọng + vang thêm ~0,1 LU); đỉnh −16,8 dBFS.

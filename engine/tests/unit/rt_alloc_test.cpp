@@ -16,8 +16,10 @@
 
 #include "fx/compressor.h"
 #include "fx/de_esser.h"
+#include "fx/delay.h"
 #include "fx/equalizer.h"
 #include "fx/noise_gate.h"
+#include "fx/reverb.h"
 #include "test_util.h"
 #include "tonecore/tonecore.h"
 #include "util/synth_voice.h"
@@ -235,6 +237,9 @@ TEST(RealTime, FxBlocksDoNotAllocate) {
   tonecore::NoiseGate gate(48000.0);
   tonecore::Compressor comp(48000.0);
   tonecore::DeEsser deess(48000.0);
+  tonecore::Delay delay(48000.0);
+  tonecore::Reverb reverb(48000.0);
+  std::vector<float> wet(1024), l(1024), r(1024);
   std::vector<float> x(1024);
   for (std::size_t i = 0; i < x.size(); ++i) x[i] = 0.1f * static_cast<float>(i % 37) / 37.0f;
   g_allocs.store(0);
@@ -259,6 +264,16 @@ TEST(RealTime, FxBlocksDoNotAllocate) {
     eq.process(x.data(), 333);
     comp.process(x.data(), 333);
     deess.process(x.data(), 333);
+    tonecore::DelayParams dl;
+    dl.bpm = 80.0f + static_cast<float>(round % 40);
+    dl.division = static_cast<tonecore::NoteDivision>(round % 6);
+    delay.setParams(dl);
+    tonecore::ReverbParams rp;
+    rp.type = static_cast<tonecore::ReverbType>(round % 3);  // đổi kiểu: không cấp phát lại
+    rp.decaySec = 0.6f + 0.01f * static_cast<float>(round);
+    reverb.setParams(rp);
+    delay.process(x.data(), wet.data(), 333);
+    reverb.process(x.data(), l.data(), r.data(), 333);
   }
   g_counting = false;
   EXPECT_EQ(g_allocs.load(), 0);
