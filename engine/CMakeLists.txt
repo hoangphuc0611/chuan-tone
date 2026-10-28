@@ -72,7 +72,7 @@ add_library(tonecore_core STATIC
   src/key/song_analyzer.cpp
   src/stretch/pitch_shifter.cpp
   src/stretch/transient_detector.cpp
-  src/stretch/peak_limiter.cpp
+  src/fx/peak_limiter.cpp
   src/fx/equalizer.cpp
   src/fx/noise_gate.cpp
   src/fx/compressor.cpp

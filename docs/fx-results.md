@@ -1,7 +1,7 @@
 # Kết quả bộ FX giọng (M5)
 
 > Tình trạng 2026-10-28: xong B1 (EQ, gate, tiện ích đo, `fxlab`), B2 (compressor, de-esser), B3
-> (delay, reverb). Kế hoạch: `docs/m5-plan.md`.
+> (delay, reverb), B4 (limiter đầu ra). Kế hoạch: `docs/m5-plan.md`.
 
 Chỉ tiêu M5 (CLAUDE.md mục 9): **demo đổi preset khi đang hát** — không click, không hụt tiếng.
 
@@ -183,3 +183,24 @@ Cả bốn khối ≈ 0,2–0,3% một nhân trên M1.
 - Thông số: gate −50; HPF 80; bell 300 Hz −2 / 3 kHz +2; comp −30 dB 3:1 makeup 4; de-ess; delay
   1/4 nốt ở 76 BPM (hồi tiếp 25%, ướt 25%); Hall 2,2 s 22%.
 - Kết quả: độ to −32,7 → −30,2 LUFS (phần lớn do makeup; vọng + vang thêm ~0,1 LU); đỉnh −16,8 dBFS.
+
+## B4 — limiter đầu ra
+
+Engine trộn giọng nghe lại + beat → × master gain → `PeakLimiter` (nhìn trước 1 ms = 48 frame ở
+48 kHz, trần 0,98 ≈ −0,18 dBFS, release 60 ms, một hệ số cho cả hai kênh) → thiết bị. Thay chỗ kẹp
+±1 trước đây.
+
+| Phép thử | Kết quả |
+|---|---|
+| Beat sin 0,95 + giọng 0,9 nghe lại + master ×2 (tổng ~3,8) | đỉnh ra ≤ 0,98 × 1,01, không mẫu nào ≥ 1, đỉnh > 0,9 (vẫn to) |
+| Giọng ×4 (3,6) chỉ có giọng | ≤ 0,99, > 0,95 |
+| Dưới trần | đúng từng mẫu, trễ đúng 48 frame |
+| Hàng đợi đơn điệu so với quét cả cửa sổ | khớp từng mẫu (20 000 frame ngẫu nhiên, khối lẻ) |
+| CPU (Mac M1, stereo, khối 128) | 0,96 µs / khối = 2 790× thời gian thực (0,04% một nhân); cách quét cũ 5,4 µs |
+
+Độ trễ:
+- Toàn bộ đầu ra (giọng nghe lại và beat) trễ thêm 1 ms; `algorithm_latency_frames` = 48, hoặc
+  48 + 480 khi bật chỉnh giọng.
+- Phép đo độ trễ khứ hồi (MLS) đi đường riêng, không qua limiter. Vậy trễ nghe lại thật = số đo +
+  `algorithm_latency_frames`.
+- Ước tính iPhone loa ngoài: 12,6 + 1 = 13,6 ms, vẫn ≤ 15 ms (ADR-002). Đo lại ở B8.

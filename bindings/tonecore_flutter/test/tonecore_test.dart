@@ -106,11 +106,12 @@ void main() {
     expect(engine.key, const MusicKey(9, MusicScale.naturalMinor));
     engine.applyCorrectionPreset(CorrectionPreset.robot);
     expect(engine.getParam(TcNode.pitch, TcParam.retuneMs), 0.0);
-    expect(engine.metrics.algorithmLatencyFrames, 0);
+    // Limiter đầu ra nhìn trước 1 ms (M5) luôn có; chỉnh giọng thêm 10 ms.
+    expect(engine.metrics.algorithmLatencyFrames, 48);
     engine.pitchCorrectionEnabled = true;
     expect(engine.pitchCorrectionEnabled, isTrue);
-    expect(engine.metrics.algorithmLatencyFrames, 480);
-    expect(engine.metrics.algorithmLatencyMs, closeTo(10.0, 1e-9));
+    expect(engine.metrics.algorithmLatencyFrames, 480 + 48);
+    expect(engine.metrics.algorithmLatencyMs, closeTo(11.0, 1e-9));
 
     // La4 cao 30 cent, sóng có hoà âm (giống giọng hơn sin thuần).
     final f = 440.0 * math.pow(2, 30 / 1200);

@@ -23,7 +23,7 @@
 #include <vector>
 
 #include "decode/decoder.h"
-#include "stretch/peak_limiter.h"
+#include "fx/peak_limiter.h"
 #include "stretch/pitch_shifter.h"
 #include "util/stretch_eval.h"
 #include "util/wav_out.h"

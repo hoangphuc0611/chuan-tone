@@ -148,10 +148,11 @@ TEST(CApiPitch, KeyPresetParamsAndState) {
   tc_metrics m{};
   m.struct_size = sizeof(m);
   ASSERT_EQ(tc_get_metrics(e, &m), TC_OK);
-  EXPECT_EQ(m.algorithm_latency_frames, 0);
+  constexpr int32_t kLimiter = 48;  // limiter đầu ra nhìn trước 1 ms (M5)
+  EXPECT_EQ(m.algorithm_latency_frames, kLimiter);
   ASSERT_EQ(tc_set_param(e, TC_NODE_PITCH, TC_PARAM_ENABLED, 1.0f), TC_OK);
   ASSERT_EQ(tc_get_metrics(e, &m), TC_OK);
-  EXPECT_EQ(m.algorithm_latency_frames, 480);
+  EXPECT_EQ(m.algorithm_latency_frames, 480 + kLimiter);
 
   // Cho giọng tổng hợp qua engine rồi đọc trạng thái cao độ.
   const auto s = test::synthVoice(test::offset(440.0, 30.0), 0.5);

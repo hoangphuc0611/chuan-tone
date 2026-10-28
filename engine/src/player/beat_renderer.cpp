@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "dsp/kaiser.h"
-#include "stretch/peak_limiter.h"
+#include "fx/peak_limiter.h"
 #include "stretch/pitch_shifter.h"
 
 namespace tonecore {

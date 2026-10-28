@@ -13,6 +13,10 @@ namespace tonecore {
 namespace {
 constexpr double kGainSmoothingSec = 0.02;
 constexpr double kMonitorFadeSec = 0.01;
+// Limiter đầu ra (docs/m5-plan.md điểm 3): giọng nghe lại trễ thêm đúng 1 ms.
+constexpr float kLimiterCeiling = 0.98f;
+constexpr double kLimiterLookaheadMs = 1.0;
+constexpr double kLimiterReleaseMs = 60.0;
 }  // namespace
 
 Engine::Engine(const EngineConfig& config)
@@ -20,9 +24,12 @@ Engine::Engine(const EngineConfig& config)
       player_(config.sampleRate),
       pitch_(config.sampleRate, config.maxBlockFrames),
       probe_(config.sampleRate),
+      limiter_(2, config.sampleRate, kLimiterCeiling, kLimiterLookaheadMs, kLimiterReleaseMs),
       micBuf_(config.maxBlockFrames, 0.0f),
       beatBuf_(2 * static_cast<std::size_t>(config.maxBlockFrames), 0.0f),
-      stimBuf_(config.maxBlockFrames, 0.0f) {
+      stimBuf_(config.maxBlockFrames, 0.0f),
+      mixBuf_(2 * static_cast<std::size_t>(config.maxBlockFrames), 0.0f),
+      outBuf_(2 * static_cast<std::size_t>(config.maxBlockFrames), 0.0f) {
   masterGain_.prepare(config_.sampleRate, kGainSmoothingSec);
   monitorGain_.prepare(config_.sampleRate, kGainSmoothingSec);
   beatGain_.prepare(config_.sampleRate, kGainSmoothingSec);
@@ -584,7 +591,13 @@ void Engine::processChunk(const float* in, uint32_t inChannels, float* out, uint
     for (uint32_t i = 0; i < frames; ++i) {
       for (uint32_t c = 0; c < outChannels; ++c) out[i * outChannels + c] = stim[i];
     }
+    probeWasActive_ = true;
     return;
+  }
+  if (probeWasActive_) {
+    // Đo xong: trong limiter còn 1 ms âm thanh từ trước lúc đo → bỏ.
+    limiter_.reset();
+    probeWasActive_ = false;
   }
 
   // Giọng: lọc thông cao, dò cao độ, tự chỉnh giọng (tại chỗ) — key theo timeline nếu có.
@@ -600,19 +613,24 @@ void Engine::processChunk(const float* in, uint32_t inChannels, float* out, uint
     pitch_.setTranspose(audible);
   }
 
+  float* mix = mixBuf_.data();
   for (uint32_t i = 0; i < frames; ++i) {
     const float voice = mic[i] * monitorGain_.next() * monitorMix_.next();
     const float bg = beatGain_.next();
     const float mg = masterGain_.next();
-    // Kẹp ±1 chống vỡ tiếng; limiter thật sẽ thay thế ở M5.
-    const float l = std::clamp((beat[2 * i] * bg + voice) * mg, -1.0f, 1.0f);
-    const float r = std::clamp((beat[2 * i + 1] * bg + voice) * mg, -1.0f, 1.0f);
+    mix[2 * i] = (beat[2 * i] * bg + voice) * mg;
+    mix[2 * i + 1] = (beat[2 * i + 1] * bg + voice) * mg;
+  }
+  // Limiter: đỉnh vượt trần (giọng to + beat to + gain) được hạ mượt thay vì kẹp méo.
+  float* lim = outBuf_.data();
+  limiter_.process(mix, lim, frames);
+  for (uint32_t i = 0; i < frames; ++i) {
     float* o = out + static_cast<std::size_t>(i) * outChannels;
     if (outChannels == 1) {
-      o[0] = 0.5f * (l + r);
+      o[0] = 0.5f * (lim[2 * i] + lim[2 * i + 1]);
     } else {
-      o[0] = l;
-      o[1] = r;
+      o[0] = lim[2 * i];
+      o[1] = lim[2 * i + 1];
       for (uint32_t c = 2; c < outChannels; ++c) o[c] = 0.0f;
     }
   }
@@ -632,7 +650,7 @@ void Engine::fillMetrics(tc_metrics& m) const noexcept {
   m.input_channels = static_cast<int32_t>(inputChannelsSeen_.load(std::memory_order_relaxed));
   m.cpu_load_peak =
       std::max(cpuPeak_.load(std::memory_order_relaxed), cpuLoad_.load(std::memory_order_relaxed));
-  m.algorithm_latency_frames = pitch_.algorithmLatency();
+  m.algorithm_latency_frames = pitch_.algorithmLatency() + limiter_.lookahead();
   if (backend_) {
     const BackendInfo info = backend_->info();
     m.xruns = backend_->xruns();

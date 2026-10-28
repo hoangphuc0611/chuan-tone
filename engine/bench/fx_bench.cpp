@@ -11,6 +11,7 @@
 #include "fx/delay.h"
 #include "fx/equalizer.h"
 #include "fx/noise_gate.h"
+#include "fx/peak_limiter.h"
 #include "fx/reverb.h"
 
 namespace {
@@ -147,5 +148,19 @@ void BM_Reverb(benchmark::State& state) {
   report(state, kBlock);
 }
 BENCHMARK(BM_Reverb);
+
+// Limiter đầu ra của engine: stereo, nhìn trước 1 ms, tín hiệu thường xuyên vượt trần.
+void BM_OutputLimiter(benchmark::State& state) {
+  tonecore::PeakLimiter lim(2, kFs, 0.98f, 1.0, 60.0);
+  std::vector<float> in(2 * kBlock), out(2 * kBlock);
+  const auto v = voiceLike(kBlock);
+  for (uint32_t i = 0; i < kBlock; ++i) in[2 * i] = in[2 * i + 1] = 5.0f * v[i];
+  for (auto _ : state) {
+    lim.process(in.data(), out.data(), kBlock);
+    benchmark::DoNotOptimize(out.data());
+  }
+  report(state, kBlock);
+}
+BENCHMARK(BM_OutputLimiter);
 
 }  // namespace

@@ -17,7 +17,8 @@ namespace tonecore {
 // mũ τ = 60 ms. Đỉnh ngắn và thưa nên gần như không nghe ra. Một hệ số chung cho mọi kênh (giữ ảnh
 // stereo). Dưới trần thì đi thẳng (hệ số 1, đúng từng mẫu). Kẹp ±1 cuối cùng để chắc chắn.
 //
-// Trễ L mẫu: push() nhận khối mới, pop ra khối đã giới hạn chậm L mẫu (prime() lúc bắt đầu).
+// Trễ L mẫu: process() nhận khối mới, trả khối đã giới hạn chậm L mẫu. Dùng cho beat đổi tone (M4,
+// nhìn trước 2 ms) và limiter đầu ra của engine (M5, 1 ms).
 class PeakLimiter {
  public:
   PeakLimiter(int channels, double sampleRate, float ceiling = 0.98f, double lookaheadMs = 2.0,
@@ -37,8 +38,14 @@ class PeakLimiter {
   float release_;
   float gain_ = 1.0f;
   std::vector<float> delay_;  // (lookahead + 1) frame gần nhất, vòng tròn
-  std::vector<float> need_;   // r(n) tương ứng
   uint32_t head_ = 0;
+  // Cực tiểu cửa sổ trượt của r(n) trên L + 1 mẫu gần nhất: hàng đợi đơn điệu (giá trị tăng dần từ
+  // đầu tới cuối) — mỗi mẫu vào / ra hàng đợi đúng một lần → O(1) trung bình thay vì quét L + 1.
+  std::vector<float> minVal_;
+  std::vector<uint64_t> minIdx_;
+  uint32_t minHead_ = 0;  // phần tử đầu (nhỏ nhất)
+  uint32_t minSize_ = 0;
+  uint64_t count_ = 0;  // số mẫu đã vào
 };
 
 // Tiện ích offline: giới hạn cả tín hiệu tại chỗ (không trễ).

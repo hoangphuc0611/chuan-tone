@@ -99,12 +99,14 @@ TEST(EngineM1, MonitorMixesVoiceWithGain) {
   EXPECT_NEAR(peakOf(out, 1), 0.2f, 0.003f);
 }
 
-TEST(EngineM1, OutputIsClippedToUnity) {
+// Giọng quá to (×4 → 3,6): limiter đầu ra (M5) hạ xuống ngay dưới trần 0,98 thay vì kẹp ±1 (méo).
+TEST(EngineM1, OutputIsLimitedBelowFullScale) {
   Fixture f;
   tc_set_param(f.e, TC_NODE_MONITOR, TC_PARAM_ENABLED, 1.0f);
   tc_set_param(f.e, TC_NODE_MONITOR, TC_PARAM_GAIN, 4.0f);
   const auto out = f.run(40, 0.9f);
-  EXPECT_EQ(peakOf(out, 0), 1.0f);
+  EXPECT_LE(peakOf(out, 0), 0.98f * 1.01f);
+  EXPECT_GT(peakOf(out, 0), 0.95f);  // vẫn to (chỉ hạ đỉnh)
 }
 
 TEST(EngineM1, BluetoothRouteBlocksMonitorAndNotifies) {

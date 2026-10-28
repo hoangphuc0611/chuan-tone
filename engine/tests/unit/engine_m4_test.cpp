@@ -184,14 +184,18 @@ TEST(EngineTranspose, KeepsSongPositionAndReturnsToOriginalExactly) {
     pcm[i] = static_cast<int16_t>(std::lround(sig.stereo[i] * 32767.0f));
   }
   f.loadPcm(pcm);
+  // Đầu ra trễ đúng độ trễ thuật toán (limiter đầu ra 1 ms, M5) so với vị trí phát.
+  tc_metrics m{};
+  m.struct_size = sizeof(m);
+  ASSERT_EQ(tc_get_metrics(f.e, &m), TC_OK);
+  const auto lag = static_cast<std::size_t>(m.algorithm_latency_frames);
   const auto expectOriginal = [&](const char* when) {
     const uint64_t at = f.positionFrames();
     f.run(1.0);
-    const uint64_t from = at;
     float worst = 0.0f;
-    for (std::size_t i = 0; i < f.out.size(); ++i) {
-      worst =
-          std::max(worst, std::abs(f.out[i] - static_cast<float>(pcm[2 * from + i]) / 32768.0f));
+    for (std::size_t i = 2 * lag; i < f.out.size(); ++i) {
+      worst = std::max(
+          worst, std::abs(f.out[i] - static_cast<float>(pcm[2 * at + i - 2 * lag]) / 32768.0f));
     }
     EXPECT_LT(worst, 1e-6f) << when;
   };
@@ -206,7 +210,10 @@ TEST(EngineTranspose, KeepsSongPositionAndReturnsToOriginalExactly) {
     f.run(0.05);  // xong crossfade 20 ms
     const uint64_t at = f.positionFrames();
     f.run(3.0);
-    EXPECT_EQ(tonecore::test::misplacedNotes(sig, f.out, semis, at), std::vector<int>{}) << semis;
+    // Bỏ `lag` frame đầu (còn của trước limiter): mẫu ra i ứng với frame at + i − lag.
+    const std::vector<float> aligned(f.out.begin() + static_cast<std::ptrdiff_t>(2 * lag),
+                                     f.out.end());
+    EXPECT_EQ(tonecore::test::misplacedNotes(sig, aligned, semis, at), std::vector<int>{}) << semis;
   }
 
   ASSERT_EQ(tc_set_transpose(f.e, 0), TC_OK);

@@ -1,9 +1,10 @@
 // Limiter đỉnh cho beat đã đổi tone (M4 B4): đỉnh vượt 0 dBFS sau đổi pha → không còn mẫu bị cắt.
 
-#include "stretch/peak_limiter.h"
+#include "fx/peak_limiter.h"
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <vector>
 
@@ -56,4 +57,44 @@ TEST(PeakLimiter, CatchesShortOversAndRecovers) {
   }
   // 0,5 s sau đỉnh: đã hồi về gần như đi thẳng (release τ 60 ms).
   for (std::size_t i = 48000 - 4800; i < 48000; ++i) EXPECT_NEAR(y[2 * i], x[2 * i], 1e-3f) << i;
+}
+
+// Cực tiểu cửa sổ trượt bằng hàng đợi đơn điệu (O(1)) cho ra đúng từng mẫu như quét lại cả cửa sổ
+// mỗi mẫu (cách làm ban đầu), trên tín hiệu ngẫu nhiên thường xuyên vượt trần, chia khối lẻ.
+TEST(PeakLimiter, MatchesBruteForceWindowMinimum) {
+  constexpr int kCh = 2;
+  constexpr double kFs = 48000.0;
+  const std::size_t frames = 20000;
+  std::vector<float> x(kCh * frames);
+  uint32_t state = 5;
+  for (float& v : x) {
+    state = state * 1664525u + 1013904223u;
+    v = 1.6f * (static_cast<float>(state >> 8) / 8388608.0f - 1.0f);
+  }
+  PeakLimiter fast(kCh, kFs, 0.98f, 1.0, 60.0);
+  std::vector<float> y(x.size());
+  for (std::size_t i = 0; i < frames;) {
+    const auto n = static_cast<uint32_t>(std::min<std::size_t>(37 + i % 200, frames - i));
+    fast.process(x.data() + kCh * i, y.data() + kCh * i, n);
+    i += n;
+  }
+  // Tham chiếu: như PeakLimiter, nhưng min quét lại L + 1 giá trị gần nhất mỗi mẫu.
+  const int L = fast.lookahead();
+  const auto attack = static_cast<float>(1.0 - std::pow(0.01, 1.0 / L));
+  const auto release = static_cast<float>(1.0 - std::exp(-1.0 / (60.0 * 0.001 * kFs)));
+  std::vector<float> need(frames);
+  float gain = 1.0f;
+  for (std::size_t n = 0; n < frames; ++n) {
+    const float peak = std::max(std::fabs(x[kCh * n]), std::fabs(x[kCh * n + 1]));
+    need[n] = peak > 0.98f ? 0.98f / peak : 1.0f;
+    float target = 1.0f;
+    for (std::size_t k = n >= static_cast<std::size_t>(L) ? n - L : 0; k <= n; ++k) {
+      target = std::min(target, need[k]);
+    }
+    gain += (target - gain) * (target < gain ? attack : release);
+    for (int c = 0; c < kCh; ++c) {
+      const float in = n >= static_cast<std::size_t>(L) ? x[kCh * (n - L) + c] : 0.0f;
+      ASSERT_EQ(y[kCh * n + c], std::clamp(in * gain, -1.0f, 1.0f)) << n;
+    }
+  }
 }

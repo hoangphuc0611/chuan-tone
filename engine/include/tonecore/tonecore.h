@@ -168,7 +168,8 @@ typedef struct tc_metrics {
   int32_t input_channels;            /* số kênh micro thực tế */
   /* ---- từ v0.3 ---- */
   float cpu_load_peak;              /* 0..1 – tải cao nhất trong 1 giây gần nhất */
-  int32_t algorithm_latency_frames; /* độ trễ thêm do xử lý (480 khi bật chỉnh giọng ở 48 kHz) */
+  int32_t algorithm_latency_frames; /* độ trễ thêm do xử lý: 48 (limiter đầu ra 1 ms, từ M5) + 480
+                                       khi bật chỉnh giọng, ở 48 kHz */
 } tc_metrics;
 
 typedef struct tc_playback_state {

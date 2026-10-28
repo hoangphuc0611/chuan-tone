@@ -11,6 +11,7 @@
 #include "core/smoothed_param.h"
 #include "core/spsc_ring.h"
 #include "core/worker.h"
+#include "fx/peak_limiter.h"
 #include "io/audio_backend.h"
 #include "latency/latency_probe.h"
 #include "pitch/voice_pitch_node.h"
@@ -32,8 +33,8 @@ struct EngineConfig {
 //
 // Chuỗi xử lý (mỗi block, trong audio thread):
 //   mic (kênh 0) → VoicePitchNode (HPF, dò cao độ, tự chỉnh giọng) ─× monitorGain × monitorMix ─┐
-//   beat (stereo) ─× beatGain ────────────────┼─ cộng → × masterGain → kẹp ±1 → loa/tai nghe
-//   (khi đang đo độ trễ: chỉ phát tín hiệu MLS, tắt mọi nguồn khác)
+//   beat (stereo) ─× beatGain ────────────────┼─ cộng → × masterGain → limiter (nhìn trước 1 ms) →
+//   ra (khi đang đo độ trễ: chỉ phát tín hiệu MLS, tắt mọi nguồn khác)
 //
 // monitorMix chuyển dần 0↔1 (10 ms) khi bật/tắt nghe lại hoặc khi route đổi sang Bluetooth.
 //
@@ -160,6 +161,10 @@ class Engine : public BackendHost {
   BeatPlayer player_;
   VoicePitchNode pitch_;
   LatencyProbe probe_;
+  // Limiter đầu ra (từ M5): nhìn trước 1 ms, trần 0,98 (−0,18 dBFS), hai kênh chung một hệ số;
+  // dưới trần đi thẳng (chỉ trễ 1 ms). Thay chỗ kẹp ±1.
+  PeakLimiter limiter_;
+  bool probeWasActive_ = false;  // audio thread: vừa đo độ trễ xong → xoá limiter (bỏ âm cũ)
   std::unique_ptr<AudioBackend> backend_;
   EventQueue events_;
 
@@ -167,6 +172,8 @@ class Engine : public BackendHost {
   std::vector<float> micBuf_;
   std::vector<float> beatBuf_;
   std::vector<float> stimBuf_;
+  std::vector<float> mixBuf_;  // stereo interleaved trước limiter
+  std::vector<float> outBuf_;  // stereo interleaved sau limiter
 
   // Đo độ trễ (luồng điều khiển + luồng nền)
   mutable std::mutex latencyMutex_;

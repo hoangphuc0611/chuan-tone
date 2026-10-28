@@ -62,6 +62,20 @@
   - Mức vang trong băng giọng −1,0…−1,7 dB khi mix = 1, mọi kiểu / RT60.
   - CPU trên M1: delay 0,04%, reverb 0,08%; cả chuỗi 6 khối ≈ 0,3% một nhân.
   - 10 test mới; không cấp phát (kể cả đổi kiểu phòng).
+- [x] **B4** (2026-10-28): limiter đầu ra của engine thay chỗ kẹp ±1.
+  - Trộn giọng + beat (sau master gain) → `PeakLimiter` nhìn trước 1 ms, trần 0,98, release 60 ms,
+    hai kênh chung hệ số → ra thiết bị (mono thì trộn sau limiter).
+  - `PeakLimiter` chuyển `stretch/` → `fx/` (dùng chung với render beat M4).
+  - Cực tiểu cửa sổ trượt đổi sang hàng đợi đơn điệu: nhanh gấp 5,7 lần, khớp từng mẫu cách quét
+    cũ (test).
+  - Sau khi đo độ trễ thì xoá limiter (không lọt 1 ms âm thanh cũ).
+  - `tc_metrics.algorithm_latency_frames` = 48 (limiter) + 480 khi bật chỉnh giọng.
+
+  Số đo:
+  - Beat sát 0 dBFS + giọng ×4 + master ×2: đầu ra ≤ 0,98 (+1%), không mẫu nào chạm ±1, vẫn to.
+  - Dưới trần: đúng từng mẫu, chỉ trễ 48 frame (test đổi tone M4 so từng mẫu sau khi bù trễ).
+  - CPU: 0,04% một nhân (M1).
+  - Giọng nghe lại trễ thêm 1 ms: iPhone loa ngoài ước 12,6 → 13,6 ms (đo lại ở B8).
 
 ---
 
