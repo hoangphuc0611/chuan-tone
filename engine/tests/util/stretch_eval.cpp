@@ -403,4 +403,84 @@ StretchMetrics measureReference(const StretchSignal& sig) {
   return measure(sig, sig.stereo, 0.0, true);
 }
 
+MelodySignal melodySignal(double seconds, double rate, uint32_t seed) {
+  MelodySignal m;
+  m.rate = rate;
+  const auto frames = static_cast<uint64_t>(seconds * rate);
+  const auto noteLen = static_cast<uint64_t>(kMelodyNoteSec * rate);
+  m.stereo.resize(2 * frames);
+  uint32_t state = seed;
+  const auto rnd = [&] {  // LCG: tất định trên mọi nền tảng
+    state = state * 1664525u + 1013904223u;
+    return static_cast<double>(state >> 8) / 16777216.0;
+  };
+  double fL = 0.0;
+  double fR = 0.0;
+  double phL = 0.0;
+  double phR = 0.0;
+  double hit = 0.0;
+  const double hitDecay = std::exp(-1.0 / (0.03 * rate));  // tiếng gõ tắt dần τ = 30 ms
+  for (uint64_t i = 0; i < frames; ++i) {
+    if (i % noteLen == 0) {
+      fL = 220.0 * std::pow(4.0, rnd());
+      fR = 220.0 * std::pow(4.0, rnd());
+      m.noteL.push_back(fL);
+      m.noteR.push_back(fR);
+    }
+    if (rnd() < 2.5 / rate) hit = 0.25;  // ~2,5 tiếng mỗi giây, không theo lưới
+    phL += 2.0 * kPi * fL / rate;
+    phR += 2.0 * kPi * fR / rate;
+    const double noise = hit * (2.0 * rnd() - 1.0);
+    hit *= hitDecay;
+    m.stereo[2 * i] = static_cast<float>(0.2 * std::sin(phL) + noise);
+    m.stereo[2 * i + 1] = static_cast<float>(0.2 * std::sin(phR) + noise);
+  }
+  return m;
+}
+
+std::vector<int> misplacedNotes(const MelodySignal& sig, const std::vector<float>& out,
+                                double semitones, uint64_t outStart) {
+  // Tần số trội: 4096 mẫu Hann ở giữa nốt (bỏ 60 ms đầu: chỗ đổi nốt + đuôi crossfade), FFT 16384
+  // (đệm 0) + nội suy parabol trên log biên độ → sai số ≪ 1%.
+  constexpr std::size_t kWin = 4096;
+  constexpr std::size_t kFft = 16384;
+  RealFft fft(kFft);
+  std::vector<float> buf(kFft);
+  std::vector<std::complex<float>> spec(fft.bins());
+  const auto noteLen = static_cast<uint64_t>(kMelodyNoteSec * sig.rate);
+  const auto skip = static_cast<uint64_t>(0.06 * sig.rate);
+  const uint64_t outFrames = out.size() / 2;
+  const double ratio = std::pow(2.0, semitones / 12.0);
+  std::vector<int> bad;
+  for (std::size_t k = 0; k < sig.noteL.size(); ++k) {
+    const uint64_t from = k * noteLen + skip;
+    if (from < outStart || from + kWin > outStart + outFrames || from + kWin > (k + 1) * noteLen) {
+      continue;
+    }
+    bool ok = true;
+    for (std::size_t ch = 0; ch < 2 && ok; ++ch) {
+      std::fill(buf.begin(), buf.end(), 0.0f);
+      for (std::size_t i = 0; i < kWin; ++i) {
+        const double w = 0.5 - 0.5 * std::cos(2.0 * kPi * (static_cast<double>(i) + 0.5) / kWin);
+        buf[i] = static_cast<float>(w) * out[2 * (from - outStart + i) + ch];
+      }
+      fft.forward(buf.data(), spec.data());
+      std::size_t peak = 1;
+      for (std::size_t b = 2; b + 1 < spec.size(); ++b) {
+        if (std::norm(spec[b]) > std::norm(spec[peak])) peak = b;
+      }
+      const double a = std::log(std::abs(spec[peak - 1]) + 1e-12);
+      const double b = std::log(std::abs(spec[peak]) + 1e-12);
+      const double c = std::log(std::abs(spec[peak + 1]) + 1e-12);
+      const double den = a - 2.0 * b + c;
+      const double offset = den != 0.0 ? 0.5 * (a - c) / den : 0.0;
+      const double hz = (static_cast<double>(peak) + offset) * sig.rate / kFft;
+      const double want = (ch == 0 ? sig.noteL[k] : sig.noteR[k]) * ratio;
+      ok = std::abs(hz / want - 1.0) <= 0.015;
+    }
+    if (!ok) bad.push_back(static_cast<int>(k));
+  }
+  return bad;
+}
+
 }  // namespace tonecore::test

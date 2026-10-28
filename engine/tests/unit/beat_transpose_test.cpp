@@ -3,6 +3,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <vector>
@@ -10,6 +11,7 @@
 #include "core/worker.h"
 #include "player/beat_player.h"
 #include "player/beat_renderer.h"
+#include "util/stretch_eval.h"
 
 using namespace tonecore;
 
@@ -42,6 +44,16 @@ void publish(TransposedTrack& tt, uint32_t b, float value) {
     tt.pcm[2 * i + 1] = v;
   }
   tt.ready[b].store(1, std::memory_order_release);
+}
+
+std::shared_ptr<Track> trackFrom(const std::vector<float>& stereo) {
+  auto t = std::make_shared<Track>();
+  t->frames = stereo.size() / 2;
+  t->pcm.resize(stereo.size());
+  for (std::size_t i = 0; i < stereo.size(); ++i) {
+    t->pcm[i] = static_cast<int16_t>(std::lround(std::clamp(stereo[i], -1.0f, 1.0f) * 32767.0f));
+  }
+  return t;
 }
 
 std::vector<float> renderFrames(BeatPlayer& p, uint32_t frames) {
@@ -173,6 +185,28 @@ TEST(BeatRenderer, RendersWholeTrackAndJoinsSmoothly) {
   // Sin 330 Hz × 2^(4/12), biên độ 0,25: bước lớn nhất ≈ 2π·416/48000·0,25 ≈ 0,0136.
   EXPECT_LT(maxJump, 0.016f);
   EXPECT_LT(joinJump, 0.016f);
+}
+
+// Nội dung bản render nền ở ĐÚNG CHỖ của bài ở mọi nốt: lượt đầu (từ giữa bài), lượt hai (từ đầu
+// bài tới chỗ lượt đầu bắt đầu) và chỗ nối. Test trên chỉ đo độ mượt — bản lặp / lệch đoạn mà mượt
+// vẫn qua.
+TEST(BeatRenderer, EveryNoteInRightPlace) {
+  const auto sig = test::melodySignal(8.0, kRate);
+  auto src = trackFrom(sig.stereo);
+  for (const int semis : {-5, 3}) {
+    auto tt = std::make_shared<TransposedTrack>(src, semis);
+    {
+      Worker w;
+      BeatRenderer::start(w, tt, 41ull * kB + 999, kRate, nullptr, nullptr);
+      w.waitIdle();
+    }
+    ASSERT_EQ(tt->readyCount.load(), tt->blocks);
+    std::vector<float> out(2 * static_cast<std::size_t>(tt->frames));
+    for (std::size_t i = 0; i < out.size(); ++i) {
+      out[i] = static_cast<float>(tt->pcm[i]) / (TransposedTrack::kStoreGain * 32767.0f);
+    }
+    EXPECT_EQ(test::misplacedNotes(sig, out, semis), std::vector<int>{}) << semis;
+  }
 }
 
 // Huỷ trước khi bắt đầu → không render khối nào; tua (wantFrame) → khối đó có ngay ở bước đầu.

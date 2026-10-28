@@ -20,6 +20,9 @@ jobs:
           - { os: ubuntu-24.04, preset: host-ubsan }
           - { os: ubuntu-24.04, preset: host-tsan }
           - { os: macos-15, preset: host }
+          # Cùng Xcode 26 với job ios-ipa (bản cài lên iPhone): bắt lỗi chỉ lộ ra với trình biên dịch đó.
+          - { os: macos-26, preset: host }
+          - { os: macos-26, preset: host-asan }
     env:
       CC: clang
       CXX: clang++

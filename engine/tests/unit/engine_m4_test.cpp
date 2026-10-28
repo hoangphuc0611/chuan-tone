@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
@@ -10,6 +11,7 @@
 
 #include "test_util.h"
 #include "tonecore/tonecore.h"
+#include "util/stretch_eval.h"
 #include "util/synth_voice.h"
 
 namespace {
@@ -32,11 +34,14 @@ struct Fixture {
 
   // Beat sin `hz` (biên độ 0,25), `seconds` giây; chờ nạp xong.
   void loadSine(double hz, double seconds) {
+    loadPcm(
+        tonecore::test::sineInt16(hz, 48000, static_cast<std::size_t>(kRate * seconds), 2, 0.25));
+  }
+
+  // Beat stereo 48 kHz từ PCM int16 interleaved; chờ nạp xong.
+  void loadPcm(const std::vector<int16_t>& pcm) {
     const std::string path = tonecore::test::tempPath("m4_beat.wav");
-    ASSERT_TRUE(tonecore::test::writeWav16(
-        path,
-        tonecore::test::sineInt16(hz, 48000, static_cast<std::size_t>(kRate * seconds), 2, 0.25),
-        48000, 2));
+    ASSERT_TRUE(tonecore::test::writeWav16(path, pcm, 48000, 2));
     events.clear();
     ASSERT_EQ(tc_load_beat(e, path.c_str()), TC_OK);
     ASSERT_TRUE(waitFor([&] {
@@ -80,6 +85,10 @@ struct Fixture {
   // trăm lần, chạy song song thì đầu phát vượt luồng render).
   bool waitRendered() {
     return waitFor([&] { return playback().transpose_progress >= 1.0f; });
+  }
+
+  uint64_t positionFrames() {
+    return static_cast<uint64_t>(std::llround(playback().position_ms * kRate / 1000.0));
   }
 
   // Chạy audio từng block (luồng nền render song song) tới khi beat nghe ở tone `semis`.
@@ -162,6 +171,48 @@ TEST(EngineTranspose, ShiftsBeatPitchSmoothly) {
   f.run(0.3);
   EXPECT_NEAR(frequencyOf(f.out), 440.0, 0.05);
   EXPECT_EQ(tc_set_transpose(f.e, 7), TC_ERR_INVALID_ARG);
+}
+
+// Đổi tone giữa bài khi đang phát: beat đi tiếp ĐÚNG CHỖ của bài ở tone mới (không lặp / lệch
+// đoạn), về Gốc thì trùng từng mẫu với beat gốc (lỗi nghe trên iPhone 2026-10-28: "lặp lại nhiều
+// giây, về gốc cũng bị").
+TEST(EngineTranspose, KeepsSongPositionAndReturnsToOriginalExactly) {
+  Fixture f;
+  const auto sig = tonecore::test::melodySignal(12.0, kRate);
+  std::vector<int16_t> pcm(sig.stereo.size());
+  for (std::size_t i = 0; i < pcm.size(); ++i) {
+    pcm[i] = static_cast<int16_t>(std::lround(sig.stereo[i] * 32767.0f));
+  }
+  f.loadPcm(pcm);
+  const auto expectOriginal = [&](const char* when) {
+    const uint64_t at = f.positionFrames();
+    f.run(1.0);
+    const uint64_t from = at;
+    float worst = 0.0f;
+    for (std::size_t i = 0; i < f.out.size(); ++i) {
+      worst =
+          std::max(worst, std::abs(f.out[i] - static_cast<float>(pcm[2 * from + i]) / 32768.0f));
+    }
+    EXPECT_LT(worst, 1e-6f) << when;
+  };
+  ASSERT_EQ(tc_play(f.e), TC_OK);
+  f.run(0.5);
+  expectOriginal("trước khi đổi tone");
+
+  for (const int semis : {3, -4}) {
+    ASSERT_EQ(tc_set_transpose(f.e, semis), TC_OK);
+    ASSERT_TRUE(f.waitRendered());
+    ASSERT_TRUE(f.runUntilAudible(semis));
+    f.run(0.05);  // xong crossfade 20 ms
+    const uint64_t at = f.positionFrames();
+    f.run(3.0);
+    EXPECT_EQ(tonecore::test::misplacedNotes(sig, f.out, semis, at), std::vector<int>{}) << semis;
+  }
+
+  ASSERT_EQ(tc_set_transpose(f.e, 0), TC_OK);
+  ASSERT_TRUE(f.runUntilAudible(0));
+  f.run(0.05);
+  expectOriginal("về Gốc");
 }
 
 // Key chỉnh giọng: tc_get_key giữ tone beat gốc, tc_get_applied_key cộng số nửa cung đang nghe,

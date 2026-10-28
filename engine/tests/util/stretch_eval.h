@@ -54,4 +54,23 @@ StretchMetrics measureStretch(const StretchSignal& sig, const std::vector<float>
 // Riêng các chỉ số của một tín hiệu khi chưa đổi tone (mốc "gốc" để đọc số tuyệt đối).
 StretchMetrics measureReference(const StretchSignal& sig);
 
+// "Bài" không lặp để kiểm nội dung bản đổi tone có ở ĐÚNG CHỖ không (lỗi lặp / lệch đoạn mà vẫn
+// mượt thì các chỉ số trên không thấy): mỗi kMelodyNoteSec một nốt mới — tần số giả ngẫu nhiên
+// 220–880 Hz, hai kênh khác nhau — cộng tiếng gõ thưa ở thời điểm không đều.
+constexpr double kMelodyNoteSec = 0.25;
+struct MelodySignal {
+  double rate = 48000.0;
+  std::vector<float> stereo;  // interleaved L, R
+  std::vector<double> noteL;  // Hz, nốt k nằm ở [k, k + 1)·kMelodyNoteSec
+  std::vector<double> noteR;
+  uint64_t frames() const { return stereo.size() / 2; }
+};
+MelodySignal melodySignal(double seconds, double rate = 48000.0, uint32_t seed = 1);
+
+// Các nốt (chỉ số k) sai chỗ trong `out` (interleaved stereo; mẫu i của `out` ứng với frame
+// outStart + i của bản gốc): tần số trội của một kênh lệch > 1,5% so với nốt k · 2^(n/12). Chỉ xét
+// nốt nằm trọn trong `out`.
+std::vector<int> misplacedNotes(const MelodySignal& sig, const std::vector<float>& out,
+                                double semitones, uint64_t outStart = 0);
+
 }  // namespace tonecore::test
