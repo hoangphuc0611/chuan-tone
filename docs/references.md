@@ -86,7 +86,8 @@ Mọi thuật toán trong ToneCore được viết từ các nguồn công khai 
 | A. Simper, *Linear Trap Integrated SVF* (Cytomic technical paper, 2013) | Cách viết gọn a1/a2/a3 và hệ số trộn m0/m1/m2 (đã tự suy lại từ nguyên mẫu RBJ, ghi trong `fx/svf.h`) | `fx/svf.h` |
 | U. Zölzer (ed.), *DAFX: Digital Audio Effects*, 2nd ed., Wiley 2011 — ch. 4 (dynamics: noise gate) | Gate: bao biên đỉnh, ngưỡng có trễ, giữ, attack / release | `fx/noise_gate.cpp` |
 | M. R. Schroeder, *New method of measuring reverberation time*, JASA 37, 1965 | Đo RT60 bằng tích phân ngược (EDC), khớp T30 | `tests/util/fx_eval.cpp` |
-| D. Giannoulis, M. Massberg, J. Reiss, *Digital Dynamic Range Compressor Design – A Tutorial and Analysis*, JAES 2012 | Compressor, de-esser (B2) | — |
+| D. Giannoulis, M. Massberg, J. Reiss, *Digital Dynamic Range Compressor Design – A Tutorial and Analysis*, JAES 2012 | Compressor: đường nén knee mềm, làm mượt tách nhánh trong miền dB; de-esser dùng cùng cách làm mượt | `fx/compressor.cpp`, `fx/de_esser.cpp` |
+| U. Zölzer (ed.), *DAFX*, 2nd ed. — ch. 4 (de-esser, EQ động) | De-esser dạng shelf cao động có sidechain băng 5–9 kHz | `fx/de_esser.cpp` |
 | J.-M. Jot, A. Chaigne, *Digital delay networks for designing artificial reverberators*, AES 1991 | Reverb FDN (B3) | — |
 
 ## Fingerprint

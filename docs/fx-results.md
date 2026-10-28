@@ -1,6 +1,7 @@
 # Kết quả bộ FX giọng (M5)
 
-> Tình trạng 2026-10-28: xong B1 (EQ, gate, tiện ích đo, `fxlab`). Kế hoạch: `docs/m5-plan.md`.
+> Tình trạng 2026-10-28: xong B1 (EQ, gate, tiện ích đo, `fxlab`), B2 (compressor, de-esser). Kế
+> hoạch: `docs/m5-plan.md`.
 
 Chỉ tiêu M5 (CLAUDE.md mục 9): **demo đổi preset khi đang hát** — không click, không hụt tiếng.
 
@@ -62,3 +63,60 @@ trình biên dịch không phải đọc lại hệ số / trạng thái sau m�
 **Công cụ:** `fxlab render <file> -o out.wav [--gate dB] [--hpf Hz] [--lpf Hz] [--bell f,dB,Q] …`
 (in độ to LUFS vào / ra) và `fxlab response …` (bảng đáp ứng đo / RBJ). Giọng nghe thử:
 vocadito (CC BY 4.0) trong `testdata/Audio/`.
+
+## B2 — compressor và de-esser
+
+**Compressor** (`Compressor.*`): đường tĩnh đo bằng sin 1 kHz (−60…0 dB, bước 1 dB) so với công
+thức knee, 4 cấu hình (T −18…−30 dB, R 2…6, knee 0…10 dB, có makeup):
+
+| Phép thử | Chỉ tiêu | Kết quả |
+|---|---|---|
+| Đường tĩnh ↔ công thức | ±0,5 dB | ✅ lệch lớn nhất 0,021 dB |
+| Attack 20 ms / release 200 ms (bậc ±30 dB, giảm 15 dB) | ±20% | ✅ |
+| Dưới ngưỡng | đi thẳng | ✅ đúng từng mẫu |
+| Đổi ngưỡng / makeup mỗi 100 ms khi đang phát | không click | ✅ trên 12 kHz < −60 dB |
+
+**De-esser.** Ngưỡng dò −30 dB, 4:1, tối đa −6 dB.
+- Giọng không có "s": đi thẳng từng mẫu.
+- Nguyên âm + tiếng "s" tổng hợp (băng 5,5–8,5 kHz, vượt ngưỡng ~12 dB), trong đợt "s":
+
+| Băng | Thay đổi |
+|---|---|
+| Trên 5 kHz | **−5,8 dB** |
+| Dưới 2 kHz | +0,02 dB |
+
+- Giữa hai đợt (đã nhả): đúng như vào.
+
+**Chọn shelf.** Đáp ứng khi giảm hết 6 dB (`fx/svf.h`, 48 kHz):
+
+| Shelf | 2 kHz | 3 kHz | 3,5 kHz | 4 kHz | 5 kHz | 6,7 kHz | 9 kHz | 12 kHz |
+|---|---|---|---|---|---|---|---|---|
+| 4,5 kHz, Q 0,71 | −0,2 | −1,0 | −1,6 | −2,3 | −3,6 | −5,1 | −5,7 | −5,9 |
+| 5 kHz, Q 0,71 | −0,1 | −0,7 | −1,1 | −1,7 | −3,0 | −4,7 | −5,6 | −5,9 |
+| **5 kHz, Q 1 (mặc định)** | +0,4 | +0,4 | −0,0 | −0,7 | −3,0 | −5,8 | −6,4 | −6,3 |
+| 5,5 kHz, Q 1 | +0,3 | +0,4 | +0,3 | −0,1 | −1,9 | −5,1 | −6,4 | −6,3 |
+
+Chọn 5 kHz Q 1: băng "s" (6,7–9 kHz) giảm gần đủ 6 dB, vùng rõ chữ 3–4 kHz gần như không đổi
+(rủi ro 4 — làm "ngọng"). Test `DeEsser.DefaultShelfSparesPresenceBand` giữ lựa chọn này.
+
+**Đã thử và bỏ: tách băng bù trừ** y = x − (1 − g)·thông_cao₅ₖ(x), như kế hoạch ban đầu.
+- Gần tần số cắt, phần cao lệch pha (~67° ở 6,7 kHz) nên phép trừ không triệt được.
+- Đo: băng "s" chỉ giảm 1,2 dB khi g = −6 dB.
+
+**CPU** (`tonecore_bench`, Mac M1, Release, mono 48 kHz, khối 128 mẫu). Lần đo này máy nhanh hơn
+lần ở B1 ~40% (dao động nhiệt / xung nhịp):
+
+| Khối | × thời gian thực | % một nhân |
+|---|---|---|
+| EQ 7 tầng | 1 428× | 0,07% |
+| EQ đang trượt | 805× | 0,12% |
+| Gate | 2 977× | 0,03% |
+| Compressor (đang nén) | 2 171× | 0,05% |
+| De-esser (đang giảm, tính lại shelf mỗi 16 mẫu) | 2 626× | 0,04% |
+
+Cả bốn khối ≈ 0,2–0,3% một nhân trên M1.
+
+**Thử trên giọng thật**:
+- Lệnh: `fxlab render vocadito_1.wav --gate -50 --hpf 80 --bell 300,-2,1 --bell 3000,2,1 --comp
+  -30,3,6,5,80,4 --deess -35`.
+- Kết quả: độ to −32,7 → −30,3 LUFS; nén tối đa −3,2 dB; de-ess tối đa −6 dB.

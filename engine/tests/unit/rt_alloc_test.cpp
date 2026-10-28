@@ -14,6 +14,8 @@
 #include <thread>
 #include <vector>
 
+#include "fx/compressor.h"
+#include "fx/de_esser.h"
 #include "fx/equalizer.h"
 #include "fx/noise_gate.h"
 #include "test_util.h"
@@ -231,6 +233,8 @@ TEST(RealTime, FxBlocksDoNotAllocate) {
 #else
   tonecore::Equalizer eq(48000.0);
   tonecore::NoiseGate gate(48000.0);
+  tonecore::Compressor comp(48000.0);
+  tonecore::DeEsser deess(48000.0);
   std::vector<float> x(1024);
   for (std::size_t i = 0; i < x.size(); ++i) x[i] = 0.1f * static_cast<float>(i % 37) / 37.0f;
   g_allocs.store(0);
@@ -245,8 +249,16 @@ TEST(RealTime, FxBlocksDoNotAllocate) {
     tonecore::GateParams g;
     g.thresholdDb = -50.0f + static_cast<float>(round % 10);
     gate.setParams(g);
+    tonecore::CompressorParams cp;
+    cp.thresholdDb = -30.0f + static_cast<float>(round % 20);
+    comp.setParams(cp);
+    tonecore::DeEsserParams dp;
+    dp.thresholdDb = -60.0f + static_cast<float>(round % 30);  // có lúc giảm → tính lại shelf
+    deess.setParams(dp);
     gate.process(x.data(), 333);
     eq.process(x.data(), 333);
+    comp.process(x.data(), 333);
+    deess.process(x.data(), 333);
   }
   g_counting = false;
   EXPECT_EQ(g_allocs.load(), 0);

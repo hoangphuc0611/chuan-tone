@@ -26,6 +26,20 @@
   - 15 test mới; không cấp phát; ASan / UBSan / TSan sạch.
 
   Chi tiết: `docs/fx-results.md`.
+- [x] **B2** (2026-10-28):
+  - `fx/compressor.*` — feed-forward, RMS 10 ms, knee mềm, làm mượt tách nhánh trong miền dB,
+    makeup trượt (Giannoulis 2012).
+  - `fx/de_esser.*` — dò băng 5–9 kHz → **shelf cao động** 5 kHz Q 1, tối đa −6 dB.
+    - Cách tách băng bù trừ ban đầu chỉ giảm ~1 dB (lệch pha gần tần số cắt) → đổi.
+  - SVF thêm kiểu thông dải; `fxlab --comp / --deess` và `fxlab curve`.
+
+  Số đo:
+  - Compressor: đường tĩnh lệch công thức ≤ 0,021 dB; attack / release đúng τ ±20%; dưới ngưỡng
+    và đổi thông số khi đang chạy: đi thẳng, không click.
+  - De-esser trong đợt "s": trên 5 kHz −5,8 dB; dưới 2 kHz ≤ 0,03 dB; khi giảm hết, 3–4 kHz chỉ
+    đổi ≤ 0,7 dB; giọng không có "s" thì đi thẳng từng mẫu.
+  - CPU trên M1: gate + EQ + compressor + de-esser ≈ 0,2–0,3% một nhân.
+  - 8 test mới; không cấp phát.
 
 ---
 
@@ -123,7 +137,7 @@
 | Gate | Bao biên đỉnh trên tín hiệu đã HPF; mở ở ngưỡng, đóng ở ngưỡng − 6 dB (chống "nháy"); attack 1 ms, hold 80 ms, release 150 ms; khi đóng chỉ giảm −30 dB chứ không tắt hẳn (giữ phụ âm cuối nhẹ của tiếng Việt) | 0 | Zölzer, *DAFX* ch. 4 |
 | EQ | HPF/LPF + 5 băng (bell / low shelf / high shelf) bằng **SVF dạng TPT** — đáp ứng như RBJ nhưng ổn định khi thông số trượt (không "zipper", không nổ) | 0 | Zavalishin, *The Art of VA Filter Design*; Simper (SVF tuyến tính) |
 | Compressor | Feed-forward; bao biên RMS ~10 ms trong miền dB; knee mềm; attack/release làm mượt trong miền log; makeup gain | 0 | Giannoulis, Massberg & Reiss, JAES 2012 |
-| De-esser | Tách băng bù trừ: x_cao = SVF thông cao 5 kHz, x_thấp = x − x_cao (cộng lại đúng tuyệt đối). Bao biên băng 5–9 kHz điều khiển mức giảm, **chỉ áp lên x_cao**, tối đa −8 dB (không làm "ngọng" s/x/ch) | 0 | Zölzer, *DAFX*; Giannoulis 2012 |
+| De-esser | **Shelf cao động** (sửa ở B2): bao biên băng 5–9 kHz điều khiển độ lợi của một SVF high shelf 5 kHz, Q 1 (0 dB = đi thẳng từng mẫu), tối đa −6 dB. *Kế hoạch ban đầu tách băng bù trừ y = x − (1 − g)·thông_cao(x): đo chỉ giảm ~1 dB vì phần cao lệch pha gần tần số cắt → bỏ* | 0 | Zölzer, *DAFX*; Giannoulis 2012 |
 | Delay | Dòng trễ phân số (nội suy Lagrange bậc 3); thời gian = 60/BPM × phần nốt (1/4, 1/8, 1/8 chấm); LPF + HPF trong vòng hồi tiếp (vọng sau tối dần); mono | 0 | Zölzer, *DAFX* ch. 2 |
 | Reverb | **FDN 8 dòng**, ma trận Hadamard (trực giao); độ dài dòng là các số nguyên tố cùng nhau; lọc hấp thụ mỗi dòng theo RT60 thấp/cao (Jot); 4 bộ khuếch tán all-pass ở đầu vào (mật độ vọng cao, không "lộp độp"); pre-delay; 2 tổ hợp ra trực giao → stereo rộng. Room / Hall / Plate = bộ tham số | 0 | Jot & Chaigne 1991; Schroeder 1962; Smith, *Physical Audio Signal Processing* |
 | Limiter | `PeakLimiter` (M4): nhìn trước 1 ms, release 60 ms, hai kênh chung hệ số | **1 ms** | — |

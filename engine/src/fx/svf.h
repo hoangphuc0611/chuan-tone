@@ -13,7 +13,8 @@ enum class SvfType : int32_t {
   HighPass = 2,
   Bell = 3,
   LowShelf = 4,
-  HighShelf = 5
+  HighShelf = 5,
+  BandPass = 6  // đỉnh 0 dB tại f0: k·BP
 };
 
 // Hệ số của bộ lọc biến trạng thái (SVF) dạng TPT — xem lớp Svf.
@@ -58,6 +59,10 @@ struct SvfCoeffs {
       case SvfType::HighPass:
         m1 = -c.k;
         m2 = -1.0;
+        break;
+      case SvfType::BandPass:
+        m0 = 0.0;
+        m1 = c.k;
         break;
       case SvfType::Bell:
         c.k = 1.0 / (qq * a);

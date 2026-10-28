@@ -6,6 +6,8 @@
 #include <cmath>
 #include <vector>
 
+#include "fx/compressor.h"
+#include "fx/de_esser.h"
 #include "fx/equalizer.h"
 #include "fx/noise_gate.h"
 
@@ -82,5 +84,35 @@ void BM_NoiseGate(benchmark::State& state) {
   report(state, kBlock);
 }
 BENCHMARK(BM_NoiseGate);
+
+void BM_Compressor(benchmark::State& state) {
+  tonecore::Compressor comp(kFs);
+  comp.setParams({-30.0f, 4.0f, 6.0f, 5.0f, 80.0f, 3.0f, 10.0f});  // luôn đang nén
+  auto x = voiceLike(kBlock);
+  for (auto _ : state) {
+    comp.process(x.data(), kBlock);
+    benchmark::DoNotOptimize(x.data());
+  }
+  report(state, kBlock);
+}
+BENCHMARK(BM_Compressor);
+
+// De-esser đang giảm (ngưỡng thấp → shelf tính lại mỗi 16 mẫu: trường hợp tốn nhất).
+void BM_DeEsser(benchmark::State& state) {
+  tonecore::DeEsser de(kFs);
+  tonecore::DeEsserParams p;
+  p.thresholdDb = -90.0f;
+  de.setParams(p);
+  auto x = voiceLike(kBlock);
+  int round = 0;
+  for (auto _ : state) {
+    p.thresholdDb = (round++ % 2 == 0) ? -90.0f : -80.0f;
+    de.setParams(p);
+    de.process(x.data(), kBlock);
+    benchmark::DoNotOptimize(x.data());
+  }
+  report(state, kBlock);
+}
+BENCHMARK(BM_DeEsser);
 
 }  // namespace

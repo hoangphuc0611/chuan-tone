@@ -36,6 +36,8 @@ BiquadCoeffs rbj(const Case& c, double fs) {
       return BiquadCoeffs::lowShelf(fs, c.f0, c.q, c.db);
     case SvfType::HighShelf:
       return BiquadCoeffs::highShelf(fs, c.f0, c.q, c.db);
+    case SvfType::BandPass:
+      return BiquadCoeffs::bandpass(fs, c.f0, c.q);
     default:
       return BiquadCoeffs{};
   }
@@ -49,6 +51,7 @@ const std::vector<Case>& cases() {
       {SvfType::Bell, 5000.0, 4.0, 12.0},         {SvfType::Bell, 120.0, 0.3, -12.0},
       {SvfType::LowShelf, 200.0, 0.7071, 6.0},    {SvfType::LowShelf, 500.0, 1.0, -9.0},
       {SvfType::HighShelf, 12000.0, 0.7071, 2.0}, {SvfType::HighShelf, 4000.0, 0.5, -6.0},
+      {SvfType::BandPass, 6700.0, 1.7, 0.0},      {SvfType::BandPass, 1000.0, 0.7, 0.0},
   };
   return c;
 }

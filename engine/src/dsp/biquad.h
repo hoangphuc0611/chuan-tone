@@ -40,6 +40,19 @@ struct BiquadCoeffs {
     return c;
   }
 
+  // Thông dải, đỉnh 0 dB tại f0 (cookbook "BPF constant 0 dB peak gain").
+  static BiquadCoeffs bandpass(double sampleRate, double f0, double q) {
+    const double w0 = 2.0 * 3.14159265358979323846 * f0 / sampleRate;
+    const double alpha = std::sin(w0) / (2.0 * q);
+    const double a0 = 1.0 + alpha;
+    BiquadCoeffs c;
+    c.b0 = alpha / a0;
+    c.b1 = 0.0;
+    c.b2 = -alpha / a0;
+    c.a1 = -2.0 * std::cos(w0) / a0;
+    c.a2 = (1.0 - alpha) / a0;
+    return c;
+  }
   // Peaking EQ (bell): A = 10^(dB/40), α = sin(ω0)/(2Q) — cookbook như trên.
   static BiquadCoeffs peaking(double sampleRate, double f0, double q, double gainDb) {
     const double a = std::pow(10.0, gainDb / 40.0);

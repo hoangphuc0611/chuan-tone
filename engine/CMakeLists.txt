@@ -75,6 +75,8 @@ add_library(tonecore_core STATIC
   src/stretch/peak_limiter.cpp
   src/fx/equalizer.cpp
   src/fx/noise_gate.cpp
+  src/fx/compressor.cpp
+  src/fx/de_esser.cpp
 )
 
 # Mã theo nền tảng: backend âm thanh + bộ giải mã file.
