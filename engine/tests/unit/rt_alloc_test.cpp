@@ -14,6 +14,8 @@
 #include <thread>
 #include <vector>
 
+#include "fx/equalizer.h"
+#include "fx/noise_gate.h"
 #include "test_util.h"
 #include "tonecore/tonecore.h"
 #include "util/synth_voice.h"
@@ -219,5 +221,34 @@ TEST(RealTime, TransposeDoesNotAllocate) {
   EXPECT_EQ(g_allocs.load(), 0);
   tc_engine_destroy(e);
   std::remove(path.c_str());
+#endif
+}
+
+// Khối FX giọng (M5): xử lý và đặt thông số (kể cả đang trượt) không cấp phát.
+TEST(RealTime, FxBlocksDoNotAllocate) {
+#ifdef TC_SANITIZED
+  GTEST_SKIP() << "Sanitizer tự thay operator new – chạy ở bản build thường.";
+#else
+  tonecore::Equalizer eq(48000.0);
+  tonecore::NoiseGate gate(48000.0);
+  std::vector<float> x(1024);
+  for (std::size_t i = 0; i < x.size(); ++i) x[i] = 0.1f * static_cast<float>(i % 37) / 37.0f;
+  g_allocs.store(0);
+  g_counting = true;
+  for (int round = 0; round < 200; ++round) {
+    tonecore::EqParams p;
+    p.highPassHz = 80.0f;
+    p.lowPassHz = round % 2 == 0 ? 9000.0f : 0.0f;
+    p.bands[0] = {tonecore::SvfType::Bell, 300.0f + static_cast<float>(round), -2.0f, 1.0f};
+    p.bands[1] = {tonecore::SvfType::HighShelf, 12000.0f, static_cast<float>(round % 5), 0.7f};
+    eq.setParams(p);
+    tonecore::GateParams g;
+    g.thresholdDb = -50.0f + static_cast<float>(round % 10);
+    gate.setParams(g);
+    gate.process(x.data(), 333);
+    eq.process(x.data(), 333);
+  }
+  g_counting = false;
+  EXPECT_EQ(g_allocs.load(), 0);
 #endif
 }

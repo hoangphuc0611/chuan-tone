@@ -40,6 +40,43 @@ struct BiquadCoeffs {
     return c;
   }
 
+  // Peaking EQ (bell): A = 10^(dB/40), α = sin(ω0)/(2Q) — cookbook như trên.
+  static BiquadCoeffs peaking(double sampleRate, double f0, double q, double gainDb) {
+    const double a = std::pow(10.0, gainDb / 40.0);
+    const double w0 = 2.0 * 3.14159265358979323846 * f0 / sampleRate;
+    const double cosw = std::cos(w0);
+    const double alpha = std::sin(w0) / (2.0 * q);
+    const double a0 = 1.0 + alpha / a;
+    BiquadCoeffs c;
+    c.b0 = (1.0 + alpha * a) / a0;
+    c.b1 = -2.0 * cosw / a0;
+    c.b2 = (1.0 - alpha * a) / a0;
+    c.a1 = -2.0 * cosw / a0;
+    c.a2 = (1.0 - alpha / a) / a0;
+    return c;
+  }
+  // Low shelf / high shelf, dạng theo Q: α = sin(ω0)/(2Q) (Q = 1/√2 → dốc nhất không vồng).
+  static BiquadCoeffs lowShelf(double sampleRate, double f0, double q, double gainDb) {
+    return shelf(sampleRate, f0, q, gainDb, false);
+  }
+  static BiquadCoeffs highShelf(double sampleRate, double f0, double q, double gainDb) {
+    return shelf(sampleRate, f0, q, gainDb, true);
+  }
+  static BiquadCoeffs shelf(double sampleRate, double f0, double q, double gainDb, bool high) {
+    const double a = std::pow(10.0, gainDb / 40.0);
+    const double w0 = 2.0 * 3.14159265358979323846 * f0 / sampleRate;
+    const double cosw = std::cos(w0);
+    const double beta = 2.0 * std::sqrt(a) * std::sin(w0) / (2.0 * q);  // 2·√A·α
+    const double s = high ? -1.0 : 1.0;  // high shelf: các số hạng (A − 1)·cos đổi dấu (cookbook)
+    const double a0 = (a + 1.0) + s * (a - 1.0) * cosw + beta;
+    BiquadCoeffs c;
+    c.b0 = a * ((a + 1.0) - s * (a - 1.0) * cosw + beta) / a0;
+    c.b1 = s * 2.0 * a * ((a - 1.0) - s * (a + 1.0) * cosw) / a0;
+    c.b2 = a * ((a + 1.0) - s * (a - 1.0) * cosw - beta) / a0;
+    c.a1 = -s * 2.0 * ((a - 1.0) + s * (a + 1.0) * cosw) / a0;
+    c.a2 = ((a + 1.0) + s * (a - 1.0) * cosw - beta) / a0;
+    return c;
+  }
   // Đáp ứng biên độ |H(e^jω)| tại tần số f (Hz) — dùng cho test/hiển thị.
   double magnitudeAt(double f, double sampleRate) const {
     const double w = 2.0 * 3.14159265358979323846 * f / sampleRate;

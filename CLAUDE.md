@@ -251,6 +251,7 @@ Kế hoạch kỹ thuật (cây thư mục, thư viện, thuật toán, rủi ro
 - **Upload tách vocal**: máy người dùng giải mã bằng codec OS rồi nén FLAC (libFLAC, BSD-3) — chốt lại ở M6.
 - **M3** (2026-10-22, `docs/m3-plan.md`): bài chuyển tone chấm theo thời lượng trên timeline; lệch quãng 5 chỉ tính chiều lên (chuẩn MIREX/mir_eval); BPM Acc2 ≥ 90%, Acc1 ≥ 75%; có demo iPhone ở Phòng thử; phân tích là handle riêng `tc_analyzer_*` kiểu kéo (ADR-003 viết ở B7). Chỉ chỉnh tham số trên tập dev.
 - **M4** (2026-10-26, `docs/m4-plan.md`): đổi tone beat bằng render ở luồng nền từ vị trí đang phát (audio thread chỉ đọc PCM + crossfade); mốc so sánh Signalsmith Stretch (MIT) chỉ trong công cụ, như hộp đen; nghiệm thu bằng trang nghe A/B mù (8 beat dev, ±2/±4/±6) + nghe trên iPhone — đạt khi ±1…±4 không nhòe/méo; `tc_set_key` và timeline là tone của beat gốc, engine tự cộng số nửa cung; chưa cache bản render ra đĩa, app nhớ mức tone theo bài.
+- **M5** (2026-10-28, `docs/m5-plan.md`): đổi preset bằng hai chuỗi FX song song (phần khô crossfade 15 ms, đuôi delay/reverb cũ ngân nốt tới −80 dB / tối đa 4 s); thông số lẻ làm mượt trên chuỗi đang chạy (đổi độ dài dòng trễ thì đi đường đổi preset); limiter đầu ra nhìn trước 1 ms (+1 ms trễ nghe lại); preset qua C API là struct `tc_fx_preset` (không JSON trong engine); chọn preset đặt cả mức chỉnh giọng (Rap mặc định tắt), thêm preset "Khô"; gợi ý preset theo tên bài + BPM ngay ở M5; nghe bằng giọng vocadito (CC BY 4.0) trên Mac + demo iPhone với tai nghe có dây.
 
 ## 12. QUY ƯỚC CODE
 

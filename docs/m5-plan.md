@@ -1,4 +1,4 @@
-# M5 — Bộ FX đầy đủ + 6 preset thể loại + đổi preset không click (kế hoạch, chờ duyệt)
+# M5 — Bộ FX đầy đủ + 6 preset thể loại + đổi preset không click (kế hoạch, đã duyệt 2026-10-28)
 
 > Soạn 2026-10-28. Dựa trên CLAUDE.md mục 3.2, 3.7, 6, 7, 9; `docs/plan.md` mục 3.2, 3.7, rủi ro 4;
 > ADR-002 (độ trễ).
@@ -8,11 +8,28 @@
 
 ## Tiến độ
 
-_(chưa bắt đầu)_
+- [x] **B1** (2026-10-28): thư mục `engine/src/fx/`:
+  - `svf.h` — SVF dạng TPT, 5 loại;
+  - `equalizer.*` — thông cao + 5 băng + thông thấp, thông số trượt τ 20 ms, tính lại hệ số mỗi 16 mẫu;
+  - `noise_gate.*` — ngưỡng có trễ 6 dB, giữ 80 ms, chỉ giảm −30 dB.
+
+  Kèm theo:
+  - RBJ peaking / shelf trong `dsp/biquad.h` làm mốc so sánh;
+  - tiện ích đo `tests/util/fx_eval.*` (đáp ứng tần số, RT60 Schroeder, đường nén tĩnh, năng lượng
+    cao tần);
+  - `fxlab render | response`; ghi WAV dùng chung `tests/util/wav_out.*`.
+
+  Số đo:
+  - SVF khớp RBJ: ≤ 0,01 dB theo công thức, ≤ 0,1 dB đo trên đáp ứng xung, ở 44,1 và 48 kHz.
+  - Làm mượt khử "lụp bụp" khi thông số nhảy mạnh: −70,7 dB, so với −35,8 dB khi không làm mượt.
+  - CPU trên M1 (bản Release): EQ đủ 7 tầng 0,12% một nhân, gate 0,05%.
+  - 15 test mới; không cấp phát; ASan / UBSan / TSan sạch.
+
+  Chi tiết: `docs/fx-results.md`.
 
 ---
 
-## Các điểm cần quyết
+## Các điểm cần quyết (2026-10-28: duyệt theo đề nghị)
 
 1. **Cách đổi preset: hai chuỗi FX chạy song song, đuôi vang của preset cũ tự tắt dần.**
    Preset mới được dựng ở luồng điều khiển (có cấp phát), rồi đẩy sang audio thread qua hàng đợi

@@ -79,10 +79,15 @@ Mọi thuật toán trong ToneCore được viết từ các nguồn công khai 
 
 ## Hiệu ứng (M5)
 
-- R. Bristow-Johnson, *Cookbook formulae for audio EQ biquad filter coefficients* (Audio EQ Cookbook).
-- V. Zavalishin, *The Art of VA Filter Design*, 2018 — SVF/TPT.
-- D. Giannoulis, M. Massberg, J. Reiss, *Digital Dynamic Range Compressor Design – A Tutorial and Analysis*, JAES 2012.
-- J.-M. Jot, A. Chaigne, *Digital delay networks for designing artificial reverberators*, AES 1991 — FDN.
+| Nguồn | Dùng cho | File |
+|---|---|---|
+| R. Bristow-Johnson, *Cookbook formulae for audio EQ biquad filter coefficients* (W3C Audio EQ Cookbook) | Nguyên mẫu analog + công thức chuẩn của bell / low shelf / high shelf / thông cao / thông thấp (mốc so sánh trong test) | `dsp/biquad.h`, `fx/svf.h` |
+| V. Zavalishin, *The Art of VA Filter Design*, rev. 2.1, 2018 — ch. 3–4 (tích phân hình thang, giải vòng phản hồi không trễ, SVF) | SVF dạng TPT cho EQ | `fx/svf.h`, `fx/equalizer.cpp` |
+| A. Simper, *Linear Trap Integrated SVF* (Cytomic technical paper, 2013) | Cách viết gọn a1/a2/a3 và hệ số trộn m0/m1/m2 (đã tự suy lại từ nguyên mẫu RBJ, ghi trong `fx/svf.h`) | `fx/svf.h` |
+| U. Zölzer (ed.), *DAFX: Digital Audio Effects*, 2nd ed., Wiley 2011 — ch. 4 (dynamics: noise gate) | Gate: bao biên đỉnh, ngưỡng có trễ, giữ, attack / release | `fx/noise_gate.cpp` |
+| M. R. Schroeder, *New method of measuring reverberation time*, JASA 37, 1965 | Đo RT60 bằng tích phân ngược (EDC), khớp T30 | `tests/util/fx_eval.cpp` |
+| D. Giannoulis, M. Massberg, J. Reiss, *Digital Dynamic Range Compressor Design – A Tutorial and Analysis*, JAES 2012 | Compressor, de-esser (B2) | — |
+| J.-M. Jot, A. Chaigne, *Digital delay networks for designing artificial reverberators*, AES 1991 | Reverb FDN (B3) | — |
 
 ## Fingerprint
 

@@ -73,6 +73,8 @@ add_library(tonecore_core STATIC
   src/stretch/pitch_shifter.cpp
   src/stretch/transient_detector.cpp
   src/stretch/peak_limiter.cpp
+  src/fx/equalizer.cpp
+  src/fx/noise_gate.cpp
 )
 
 # Mã theo nền tảng: backend âm thanh + bộ giải mã file.

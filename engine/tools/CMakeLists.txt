@@ -20,6 +20,12 @@ if(TARGET tonecore_testutil)
   target_compile_options(beatlab PRIVATE $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wno-double-promotion>)
   tc_apply_sanitizer(beatlab)
 
+  add_executable(fxlab fxlab.cpp)
+  target_link_libraries(fxlab PRIVATE tonecore_testutil)
+  tc_set_warnings(fxlab)
+  target_compile_options(fxlab PRIVATE $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wno-double-promotion>)
+  tc_apply_sanitizer(fxlab)
+
   # Mốc so sánh Signalsmith Stretch (MIT) — chỉ trong beatlab, không vào libtonecore. Tải bằng
   # tools/stretch/fetch_signalsmith.sh (vào testdata/ref/, không commit).
   set(TC_SIGNALSMITH_DIR "${PROJECT_SOURCE_DIR}/../testdata/ref" CACHE PATH

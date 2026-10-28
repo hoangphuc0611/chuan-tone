@@ -23,10 +23,10 @@
 #include <vector>
 
 #include "decode/decoder.h"
-#include "dr_wav.h"
 #include "stretch/peak_limiter.h"
 #include "stretch/pitch_shifter.h"
 #include "util/stretch_eval.h"
+#include "util/wav_out.h"
 #ifdef TC_HAVE_SIGNALSMITH
 #include "signalsmith_ref.h"
 #endif
@@ -87,27 +87,6 @@ std::vector<std::string> splitList(const std::string& s) {
     a = b + 1;
   }
   return out;
-}
-
-bool writeWav(const std::string& path, const std::vector<float>& interleaved, int channels,
-              uint32_t rate) {
-  drwav_data_format fmt{};
-  fmt.container = drwav_container_riff;
-  fmt.format = DR_WAVE_FORMAT_PCM;
-  fmt.channels = static_cast<drwav_uint32>(channels);
-  fmt.sampleRate = rate;
-  fmt.bitsPerSample = 16;
-  drwav wav;
-  if (!drwav_init_file_write(&wav, path.c_str(), &fmt, nullptr)) return false;
-  std::vector<int16_t> pcm(interleaved.size());
-  for (std::size_t i = 0; i < pcm.size(); ++i) {
-    const float v = std::fmax(-1.0f, std::fmin(1.0f, interleaved[i]));
-    pcm[i] = static_cast<int16_t>(std::lrint(v * 32767.0f));
-  }
-  const auto frames = static_cast<drwav_uint64>(pcm.size() / static_cast<std::size_t>(channels));
-  const drwav_uint64 written = drwav_write_pcm_frames(&wav, frames, pcm.data());
-  drwav_uninit(&wav);
-  return written == frames;
 }
 
 double seconds(std::chrono::steady_clock::time_point a, std::chrono::steady_clock::time_point b) {
@@ -183,7 +162,7 @@ int cmdRender(int argc, char** argv) {
   // Như engine (BeatRenderer): giới hạn đỉnh vượt 0 dBFS sau đổi pha — áp cho mọi thuật toán (so
   // sánh công bằng). Mức 0 (bản gốc) giữ nguyên.
   if (limiter && semitones != 0.0) limitPeaks(y, ch, dec.sampleRate);
-  if (!writeWav(out, y, ch, dec.sampleRate)) {
+  if (!test::writeWav(out, y, ch, dec.sampleRate)) {
     std::fprintf(stderr, "Không ghi được %s\n", out.c_str());
     return 1;
   }
@@ -271,7 +250,7 @@ int cmdSuite(int argc, char** argv) {
   }
   for (const auto& sig : test::stretchSuite(48000.0)) {
     const auto rate = static_cast<uint32_t>(sig.rate);
-    if (!writeWav(dir + "/" + sig.name + "_goc.wav", sig.stereo, 2, rate)) {
+    if (!test::writeWav(dir + "/" + sig.name + "_goc.wav", sig.stereo, 2, rate)) {
       std::fprintf(stderr, "Không ghi được vào %s\n", dir.c_str());
       return 1;
     }
@@ -281,7 +260,7 @@ int cmdSuite(int argc, char** argv) {
         if (y.empty()) continue;
         char name[128];
         std::snprintf(name, sizeof name, "/%s_%s_%+g.wav", sig.name.c_str(), algo.c_str(), n);
-        writeWav(dir + name, y, 2, rate);
+        test::writeWav(dir + name, y, 2, rate);
       }
     }
   }

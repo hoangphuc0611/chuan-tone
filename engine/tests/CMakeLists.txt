@@ -40,6 +40,9 @@ add_executable(tonecore_tests
   unit/beat_transpose_test.cpp
   unit/engine_m4_test.cpp
   unit/peak_limiter_test.cpp
+  unit/fx_eval_test.cpp
+  unit/fx_eq_test.cpp
+  unit/fx_gate_test.cpp
 )
 target_link_libraries(tonecore_tests PRIVATE tonecore_testutil GTest::gtest_main)
 tc_set_warnings(tonecore_tests)
