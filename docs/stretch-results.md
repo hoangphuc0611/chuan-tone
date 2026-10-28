@@ -1,7 +1,6 @@
 # Kết quả đổi tone beat (M4)
 
-> Tình trạng 2026-10-27: đã nghe A/B mù 2 lần (xem "B4") — chủ dự án chốt chất lượng hiện tại; còn
-> nghe và đo trên iPhone (B7).
+> Tình trạng 2026-10-28: M4 xong — nghe A/B mù 2 lần (xem "B4") + nghe trên iPhone (xem "B7").
 
 Chỉ tiêu M4 (CLAUDE.md mục 9): **không méo, không nhòe trống khi nghe A/B** — nghiệm thu bằng tai
 (trang nghe mù `tools/stretch/ab.py` + iPhone, xem `docs/m4-plan.md` điểm 3). Các số khách quan
@@ -58,6 +57,29 @@ thuật toán / tham số và chặn hồi quy (`PitchShifter.*` trong ctest, `B
 | signalsmith +2 | 2.08 | 5.67 | -19.4 | -37.2 | -39.7 / -35.9 | 0.95 | -27.7 | 3.25 | 0.002 | -0.11 | -0.37 | 128 |
 | signalsmith +4 | 4.24 | 1.37 | -50.1 | -18.9 | -37.7 / -35.0 | 2.12 | -22.1 | 1.96 | 0.003 | -0.13 | -0.59 | 127 |
 | signalsmith +6 | 1.41 | 6.73 | -20.9 | -36.1 | -35.3 / -32.9 | 2.11 | -25.4 | 2.81 | 0.003 | -0.18 | -0.66 | 127 |
+
+## B7 — trên iPhone (2026-10-28)
+
+Số đo (AirPods, RemoteIO 48 kHz): nghe tone mới sau 26–34 ms; render cả bài 2,7–3,1 s; phân tích bài
+1,0–1,2 s; RAM cả app 167–185 MB (đỉnh 269–291 MB); xrun 0; vị trí phát sau khi đổi tone ×1.00,
+không nhảy lùi, không khựng.
+
+Lần nghe đầu báo "lặp lại nhiều giây, về Gốc cũng bị" ở +2, sau làm rõ là "như có tiếng vang: mỗi
+tiếng trống, mỗi chữ nghe hai lần". Đã kiểm, không tái hiện được:
+- Engine qua C API, phát theo thời gian thực, khối 256–4096, đổi tone liên tiếp, phân tích song song,
+  dọn bộ nhớ như app, ASan / UBSan, MallocPreScribble: luôn đúng chỗ trong bài (so từng 0,5 s với
+  bản render chuẩn: độ lệch 0), về Gốc trùng từng mẫu. Toàn bộ test trong iOS Simulator (Xcode 26).
+- Ở 48 kHz (tần số của máy; các phép đo trước ở 44,1 kHz): onset ma nâng tone 12 / 15 / 19 (+2 / +4 /
+  +6; Signalsmith 8 / 6 / 6), phần lớn là sai số của bộ đo (bao biên bản ra khớp bản gốc); số tiếng
+  đánh đôi 8–20 ms ngang Signalsmith (5 / 5 / 5). Đường engine (int16, render nền, limiter cuốn
+  chiếu) cho số đo như beatlab.
+- Tiếng dội cố định (tự tương quan bao biên 1 ms, 15–300 ms, bản ra − bản gốc): ≤ +0,017 — ngang
+  Signalsmith, không có tiếng dội.
+- Thử **splice** (chỉ dời nguyên khối đoạn 2 ms trước … 16–80 ms sau onset, phần còn lại qua phase
+  vocoder): rò trước onset trên tín hiệu tổng hợp tới −42 dB khi đoạn ngắn (B3 −77 dB), cần ≥ 45 ms
+  mới bằng B3; trên beat thật onset ma tăng lên 26–32 → bỏ.
+- Trang nghe `testdata/beat-ab-3/` (8 mục: đúng âm thanh engine 48 kHz như máy tính ra, +2 / +4) —
+  chủ dự án: "ổn".
 
 ## B4 — sau lần nghe A/B đầu tiên (2026-10-27)
 

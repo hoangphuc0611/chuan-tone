@@ -60,8 +60,9 @@
   cuối bài 0,05 → 0,718. Chọn cấu hình thật trên dev nhạc Việt.
 - [~] **B9** (2026-10-26): bộ test 50 bài chấm một lần với mặc định của engine — **MIREX 0,864 ≥ 0,85,
   đạt chỉ tiêu M3** (bolero 0,91 · ballad 0,92 · nhạc trẻ 0,58 · dân ca / remix 1,00). Chủ dự án xác
-  nhận các bài máy báo chuyển tone thật sự đổi tone → giữ tham số timeline. Còn mở: đo thời gian /
-  RAM phân tích trên iPhone; chỉ tiêu BPM trên nhạc Việt (chưa có nhãn BPM). Chi tiết:
+  nhận các bài máy báo chuyển tone thật sự đổi tone → giữ tham số timeline. Đo trên iPhone (2026-10-28,
+  Phòng thử): phân tích bài 3,5–4 phút **1,0–1,2 s** (ngân sách 5 s); RAM đỉnh cả app 269–291 MB
+  (gồm beat + bản đổi tone). Còn mở: chỉ tiêu BPM trên nhạc Việt (chưa có nhãn BPM). Chi tiết:
   docs/key-results.md.
 
 ## Các điểm cần quyết (2026-10-22: duyệt theo đề nghị)

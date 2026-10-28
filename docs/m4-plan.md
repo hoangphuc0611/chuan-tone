@@ -5,7 +5,7 @@
 
 ---
 
-## Báo cáo M4 (bản nháp 2026-10-27 — chờ số đo iPhone)
+## Báo cáo M4 (2026-10-28 — xong)
 
 **Đã xong**
 - Đổi tone beat ±6 nửa cung, giữ tempo: phase vocoder khoá pha identity + chung pha stereo, giữ
@@ -18,18 +18,24 @@
 **Số đo**
 | Mục | Chỉ tiêu | Mac M1 | iPhone |
 |---|---|---|---|
-| Bấm tone → nghe tone mới | ≤ 300 ms | 7 ms | _chờ đo_ |
-| Render cả bài 4 phút | ≤ 4 s | 1,5 s (hạ) / 2,2 s (nâng) | _chờ đo_ |
-| RAM thêm, bài 4 phút | ≤ 50 MB | 46 MB (tính) | _chờ đo_ |
-| Nghe A/B mù ±2…±4 | không nhòe / méo "rõ" | hạ tone tốt hơn Signalsmith; nâng: 0 "rõ", "hơi méo" 4 / 8 | _chờ nghe_ |
+| Bấm tone → nghe tone mới | ≤ 300 ms | 7 ms | 26–34 ms |
+| Render cả bài 4 phút | ≤ 4 s | 1,5 s (hạ) / 2,2 s (nâng) | 2,7–3,1 s (bài 3,5–4 phút) |
+| RAM thêm, bài 4 phút | ≤ 50 MB | 46 MB (tính) | cả app 167–185 MB, đỉnh 269–291 MB (gồm phân tích bài) |
+| Nghe A/B mù ±2…±4 | không nhòe / méo "rõ" | hạ tone tốt hơn Signalsmith; nâng: 0 "rõ", "hơi méo" 4 / 8 | chủ dự án: ổn (AirPods, 2026-10-28) |
 | Mẫu bị cắt sau đổi tone | 0 | 0 (7 beat × 6 mức) | — |
-| Test | xanh | 215 engine + 16 binding + 26 app; ASan / UBSan / TSan sạch | — |
+| Test | xanh | 217 engine + 16 binding + 28 app; ASan / UBSan / TSan sạch | 217 / 217 trong iOS Simulator (Xcode 26) |
+| Vị trí phát sau khi đổi tone | đều theo đồng hồ | — | ×1.00, nhảy lùi 0, khựng 0, xrun 0 |
 
 **Vấn đề còn lại**
 - Nâng tone (+4…+6) "hơi méo / phơ" ở vài beat, kém Signalsmith một chút; Trống Cơm +6 nhòe rõ → M9.
 - RAM tăng theo độ dài bài (6 phút ≈ 71 MB) — nếu Android tầm trung căng: chỉ giữ cửa sổ quanh đầu
   phát (rủi ro 3).
 - Chưa cache bản render ra đĩa (đổi tone lại phải render lại, ~2 s).
+- Lúc chuyển sang bản mới, nếu khối kế tiếp chưa kịp render thì vị trí phát khựng 1 block (~10 ms);
+  chỉ thấy khi render chậm (bản ASan), máy thật render nhanh hơn thời gian thực ~80 lần.
+- Lần nghe đầu trên iPhone (2026-10-28) báo "vang / đánh đôi, về Gốc cũng bị" ở +2: không tái hiện
+  được — bản engine 48 kHz khớp bản gốc về bao biên, không có tiếng dội cố định (tự tương quan bao
+  biên 15–300 ms ngang Signalsmith); lần thử sau nghe ổn. Theo dõi tiếp khi nghiệm thu M5.
 
 **Cách tự kiểm tra**: mục "Cách bạn tự kiểm tra khi xong M4" ở phần 5.
 
@@ -81,11 +87,16 @@
   tone…" / "Đang chuẩn bị cả bài: N%", tone hiển thị = tone đang nghe kèm "beat +2"; chọn tone tay
   khi beat đã đổi thì quy về tone gốc trước khi giao engine; nhớ tone theo bài (`song_prefs.json`,
   khoá tên + kích thước file, không gắn phiên bản engine) và tự đặt lại khi mở bài — 24 test app.
-- [~] **B7** (2026-10-27): Phòng thử hiện số đo trên máy thật — "Đổi tone beat: nghe sau … ms ·
-  cả bài … s", "Phân tích bài: … s" (cho việc còn mở của M3), "RAM: … MB (đỉnh … MB)"
-  (`app/lib/engine/transpose_timing.dart`, 26 test app). Tốc độ sau B4 trên M1: nâng 107–110×, hạ
-  153–167× (bài 4 phút 2,2 / 1,5 s). Trang A/B: xong (2 lần nghe). **Còn**: nghe + đo trên iPhone,
-  báo cáo M4 (bản nháp ở đầu file).
+- [x] **B7** (2026-10-27/28): Phòng thử hiện số đo trên máy thật — "Đổi tone beat: nghe sau … ms ·
+  cả bài … s", "Sau khi đổi tone: vị trí ×… · nhảy lùi … · khựng …" (`playback_watch.dart`),
+  "Phân tích bài: … s", "RAM: … MB (đỉnh … MB)"; 28 test app. Tốc độ sau B4 trên M1: nâng
+  107–110×, hạ 153–167×. iPhone (AirPods): nghe tone mới sau 26–34 ms, render cả bài 2,7–3,1 s,
+  phân tích bài 1,0–1,2 s. Điều tra báo lỗi "lặp / vang" ở lần nghe đầu: vị trí phát trên máy đều
+  (×1.00), engine đúng ở mọi lần dựng lại trên Mac (thời gian thực, khối 256–4096, phân tích song
+  song, dọn bộ nhớ, ASan / MallocScribble); thêm test nội dung đúng chỗ (`EveryNoteInRightPlace`,
+  `KeepsSongPositionAndReturnsToOriginalExactly`) và CI chạy toàn bộ test trong iOS Simulator +
+  macos-26 (Xcode 26 như bản IPA). Thử "splice" (chỉ dời đoạn ngắn quanh tiếng đánh): tệ hơn trên
+  beat thật → bỏ. Chủ dự án nghe lại: ổn → M4 xong.
 
 ## Các điểm cần quyết (2026-10-26: duyệt theo đề nghị)
 
