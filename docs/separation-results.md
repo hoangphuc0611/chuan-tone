@@ -35,3 +35,20 @@ Beat không lời: stem giọng tách ra còn −53 dBFS RMS (gần như im).
 
 Ước tổng thời gian bài 4 phút qua Wi-Fi: giải mã + FLAC 2–4 s, upload 4–10 s, tách 32–42 s, tải
 giọng 3–8 s, phân tích lại ~1 s → **≈ 42–65 s** — sát chỉ tiêu; khi Mac thiếu RAM thì vượt.
+
+## B3 — tổng thời gian qua server, upload gối với tách (2026-10-29)
+
+`server/tools/client_sim.py` làm như app: `tcflac export` (giải mã + FLAC 44,1 kHz, đoạn 20 s) →
+upload từng đoạn ngay khi có (giả lập tốc độ mạng) → hỏi trạng thái → tải giọng từng đoạn → xoá job.
+Server chạy trên cùng Mac M1 (htdemucs, MPS, autocast 16-bit, chồng đoạn 0,1; cửa sổ 30 s chồng
+2 s). Bài: beat 4 phút (12 đoạn, FLAC 26,6 MB).
+
+| Mạng (upload) | Xuất FLAC xong | Upload xong | Có đoạn giọng đầu | **Tải giọng xong** | Server tách |
+|---|---|---|---|---|---|
+| không giới hạn | 1,3 s | 2,1 s | 7,5 s | **43,8 s** | 40,4 s |
+| 20 Mbit/s (Wi-Fi) | 1,3 s | 12,1 s | 7,0 s | **42,4 s** | 38,3 s |
+| 8 Mbit/s (4G) | 1,3 s | 28,1 s | 8,9 s | **45,4 s** | 40,0 s |
+
+- Upload chạy gối với tách → mạng chậm chỉ thêm ~2 s. Phần tách (~40 s, gồm 7% chồng giữa các cửa
+  sổ) là phần chính.
+- Chưa gồm: thời gian iPhone giải mã + nén (B7 đo trên máy thật) và tải giọng qua Wi-Fi thật.

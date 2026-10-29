@@ -64,13 +64,14 @@ class DemucsSeparator:
         from demucs.pretrained import get_model
 
         if device is None:
-            device = "mps" if torch.backends.mps.is_available() else "cpu"
+            device = ("cuda" if torch.cuda.is_available()
+                      else "mps" if torch.backends.mps.is_available() else "cpu")
         self.device = device
         self.shifts = shifts
         self.overlap = overlap
-        # Tính 16-bit trên GPU Apple (autocast: STFT vẫn 32-bit): nhanh hơn ~27% trên M1, lệch so
-        # với 32-bit −57 dB (đo ở B1, docs/separation-results.md).
-        self.half = half and device == "mps"
+        # Tính 16-bit trên GPU (autocast: STFT vẫn 32-bit): trên M1 nhanh gấp ~2 lần (bớt thiếu
+        # RAM), lệch so với 32-bit −57 dB (đo ở B1, docs/separation-results.md).
+        self.half = half and device in ("mps", "cuda")
         self._torch = torch
         self._model = get_model("htdemucs")
         self._model.eval()
@@ -90,7 +91,8 @@ class DemucsSeparator:
         ref = wav.mean(0)
         mean, std = ref.mean(), ref.std().clamp_min(1e-8)
         autocast = (
-            torch.autocast("mps", dtype=torch.float16) if self.half else contextlib.nullcontext()
+            torch.autocast(self.device, dtype=torch.float16) if self.half
+            else contextlib.nullcontext()
         )
         with torch.no_grad(), autocast:
             sources = apply_model(

@@ -4,7 +4,10 @@ name = "chuantone-server"
 version = "0.1.0"
 description = "Tách giọng ca sĩ cho ChuẩnTone (FastAPI)."
 requires-python = ">=3.12,<3.14"
-dependencies = ["numpy>=2.0"]
+dependencies = ["numpy>=2.0", "fastapi>=0.115", "uvicorn>=0.32"]
+
+[project.scripts]
+chuantone-server = "chuantone_server.app:main"
 
 [project.optional-dependencies]
 # Bộ tách htdemucs — CHỈ PHÁT TRIỂN NỘI BỘ: trọng số "chỉ cho mục đích khoa học" (docs/m6-plan.md

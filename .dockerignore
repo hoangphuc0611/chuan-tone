@@ -1,0 +1,7 @@
+# Docker build từ thư mục gốc (server/Dockerfile): chỉ cần engine/ và server/.
+*
+!engine/
+!server/
+engine/build/
+server/.venv/
+**/__pycache__/

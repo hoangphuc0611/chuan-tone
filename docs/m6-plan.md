@@ -36,7 +36,22 @@
     - beat thật còn **61,8–61,9% PCM** (bộ nén FLAC của Apple: 62,1–62,7%; trước khi có LPC: 68–71%);
     - bài 5–6 phút xuất trong **1,8–2,2 s** trên M1 (Release), đoạn đầu 20 s có sau 0,3 s.
   - Test: 8 test mới (`FlacEncoder`, `FlacExportApi`); engine 276/276, binding 21/21.
-- [ ] B3 … B7: xem mục 7.
+- [x] **B3** (2026-10-29): server API v1 (`server/src/chuantone_server/`, ADR-006).
+  - `POST /v1/jobs`, `PUT …/chunks/{i}` (FLAC từng đoạn, lộn thứ tự / gửi lại được),
+    `GET …/{id}` (trạng thái, tiến độ, số đoạn giọng tải được, số đo thời gian),
+    `GET …/vocals/{i}`, `DELETE`, `GET /v1/health`.
+  - Tách theo cửa sổ 30 s chồng 2 s ngay khi phần đầu bài đủ dài (trộn tuyến tính vùng chồng);
+    một luồng tách cho mọi job; nén giọng từng đoạn bằng `tcflac`.
+  - Xoá sau DELETE / 24 giờ / bỏ dở 15 phút / thư mục mồ côi; mã máy + 50 job / ngày; ≤ 10 phút,
+    đoạn ≤ 32 MB; khoá API tuỳ chọn. Hàng đợi và trạng thái job trong bộ nhớ (không cần SQLite).
+  - `uv run chuantone-server` in địa chỉ để nhập vào app; `tools/client_sim.py` giả lập app.
+  - CI `server` (pytest, bộ tách giả, build `tcflac`); `server/Dockerfile` cho máy GPU (chưa build
+    thử — M9).
+  - Số đo bài 4 phút trên Mac M1: **42–45 s** từ lúc bắt đầu tới khi tải xong giọng, mạng không
+    giới hạn / 20 / 8 Mbit/s (upload giấu sau phần tách) → `docs/separation-results.md`.
+  - Test: 11 mới (cửa sổ khớp tách một lần kể cả đoạn đến lộn thứ tự, vùng chồng không nhảy, kiểm
+    tra đầu vào, giới hạn, dọn dẹp; API chạy uvicorn thật + tcflac).
+- [ ] B4 … B7: xem mục 7.
 
 ---
 

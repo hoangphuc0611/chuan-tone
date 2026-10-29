@@ -35,10 +35,16 @@ Quy tắc (CLAUDE.md mục 0.2): chỉ MIT / BSD / Apache-2.0 / Zlib / ISC. LGPL
 | sympy, mpmath, networkx, Jinja2, MarkupSafe, fsspec | theo torch | BSD | phụ thuộc của torch |
 | filelock, setuptools | theo torch | MIT | phụ thuộc của torch |
 | typing_extensions | 4.16.0 | PSF-2.0 (thoáng, như chính Python) | phụ thuộc của torch |
+| FastAPI | 0.162.0 | MIT | HTTP API |
+| Starlette, uvicorn, click, idna | theo FastAPI | BSD-3 | web server |
+| pydantic, pydantic-core, anyio, h11, annotated-types, annotated-doc, typing-inspection | theo FastAPI | MIT | |
+| opentelemetry-api | theo FastAPI | Apache-2.0 | phụ thuộc của FastAPI (không bật) |
 | pytest (+ pluggy, iniconfig, packaging, Pygments) | 9.2.0 | MIT / MIT / MIT / Apache-2.0 hoặc BSD-2 / BSD-2 | test (dev) |
 
 Mô-đun rỗng tự viết thay cho `tqdm` (MIT + MPL-2.0), `dora.log`, `omegaconf`: demucs chỉ import chúng
-để in tiến độ / khi huấn luyện (`server/src/chuantone_server/_stubs`).
+để in tiến độ / khi huấn luyện (`server/src/chuantone_server/_stubs`). Test API gọi bằng `urllib` của
+Python (không dùng `httpx` / TestClient: kéo `certifi`, MPL-2.0). FLAC phía server dùng công cụ
+`tcflac` của engine (không thêm thư viện FLAC cho Python).
 
 Lịch sử đo độ trễ lưu bằng file JSON (`app/lib/data/latency_history.dart`), không dùng `shared_preferences`: bản Android của nó gọi Kotlin qua JNI và lỗi `NoSuchMethodError` ở bản release.
 
