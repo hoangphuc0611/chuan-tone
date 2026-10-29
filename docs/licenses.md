@@ -22,6 +22,24 @@ Quy tắc (CLAUDE.md mục 0.2): chỉ MIT / BSD / Apache-2.0 / Zlib / ISC. LGPL
 | Signalsmith Linear | 0.6.4 (commit `de55e6a`) | MIT | phụ thuộc của Signalsmith Stretch (FFT), cùng chỗ | Không |
 | numpy / scipy / decorator | theo mir_eval | BSD-3 / BSD-3 / BSD-2 | phụ thuộc của mir_eval | Không |
 
+### Server tách giọng (`server/`, M6 — chạy trên máy chủ, không ship trong app)
+
+| Thư viện | Phiên bản | License | Ghi chú |
+|---|---|---|---|
+| PyTorch | 2.15.0 | BSD-3 (gồm phần Apache-2.0 / MIT / Zlib / ISC / BSL-1.0) | suy luận model |
+| demucs (mã) | 4.0.1 | MIT | cài không kéo phụ thuộc (`tool.uv.dependency-metadata`): bỏ `lameenc` (bọc LAME, **LGPL**), torchaudio / ffmpeg, dora-search, tqdm |
+| **Trọng số htdemucs** | `955717e8` | **"chỉ cho mục đích khoa học"** (không phải MIT — issue facebookresearch/demucs#327) | **CHỈ PHÁT TRIỂN NỘI BỘ**, không phát hành, không đưa vào app; phải thay / mua giấy phép trước khi phát hành (docs/m6-plan.md điểm 1) |
+| openunmix | 1.3.0 | MIT | demucs import `openunmix.filtering`; không kéo phụ thuộc, không chạy `__init__` (kéo torchaudio) |
+| einops / julius / PyYAML | 0.8.2 / 0.2.8 / 6.0.3 | MIT | phụ thuộc thật của demucs |
+| numpy | 2.5.4 | BSD-3 (gồm phần 0BSD / MIT / Zlib / CC0) | |
+| sympy, mpmath, networkx, Jinja2, MarkupSafe, fsspec | theo torch | BSD | phụ thuộc của torch |
+| filelock, setuptools | theo torch | MIT | phụ thuộc của torch |
+| typing_extensions | 4.16.0 | PSF-2.0 (thoáng, như chính Python) | phụ thuộc của torch |
+| pytest (+ pluggy, iniconfig, packaging, Pygments) | 9.2.0 | MIT / MIT / MIT / Apache-2.0 hoặc BSD-2 / BSD-2 | test (dev) |
+
+Mô-đun rỗng tự viết thay cho `tqdm` (MIT + MPL-2.0), `dora.log`, `omegaconf`: demucs chỉ import chúng
+để in tiến độ / khi huấn luyện (`server/src/chuantone_server/_stubs`).
+
 Lịch sử đo độ trễ lưu bằng file JSON (`app/lib/data/latency_history.dart`), không dùng `shared_preferences`: bản Android của nó gọi Kotlin qua JNI và lỗi `NoSuchMethodError` ở bản release.
 
 Quyền micro tự làm trong plugin (Java + AVAudioSession), không dùng `permission_handler`: bản mới nhất đòi Android SDK 37 mà bộ build hiện tại (AGP 9.1) chưa hỗ trợ.

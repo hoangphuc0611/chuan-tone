@@ -93,6 +93,13 @@ Mọi thuật toán trong ToneCore được viết từ các nguồn công khai 
 | J. O. Smith, *Physical Audio Signal Processing* (online book, CCRMA) — Lagrange interpolation, FDN | Dòng trễ phân số (nội suy Lagrange bậc 3) cho delay | `fx/delay.cpp` |
 | U. Zölzer (ed.), *DAFX*, 2nd ed. — ch. 2 (delay, echo có lọc trong vòng hồi tiếp) | Delay theo nhịp | `fx/delay.cpp` |
 
+## Tách giọng ca sĩ (M6)
+
+| Nguồn | Dùng cho | File |
+|---|---|---|
+| S. Rouard, F. Massa, A. Défossez, *Hybrid Transformers for Music Source Separation*, ICASSP 2023 (HT Demucs) | Model tách giọng htdemucs — dùng nguyên gói `demucs` qua API công khai (`get_model` / `apply_model`), không tự viết lại; trọng số chỉ phát triển nội bộ | `server/src/chuantone_server/separator.py` |
+| E. Vincent, R. Gribonval, C. Févotte, *Performance measurement in blind audio source separation*, IEEE TASLP 2006 | Chỉ số SDR (bản đơn giản: 10·log10(Σ s² / Σ (s − ŝ)²)) | `server/tools/bench_separate.py` |
+
 ## Fingerprint
 
 - A. Wang, *An Industrial-Strength Audio Search Algorithm*, ISMIR 2003 — cần ghi vào `patent-review.md`.
