@@ -110,6 +110,32 @@
   - Trang nghe `tools/fx/fxpage.py` → `testdata/fx-ab/` (6 preset × 2 giọng, khô / preset, phiếu
     chấm).
   - **Còn:** bạn nghe và chấm → chỉnh lần 1.
+- [x] **B7** (2026-10-29): binding Dart 0.6 + Phòng thử.
+  - Binding (`bindings/tonecore_flutter` 0.6.0, sinh lại từ `tonecore.h`):
+    - `FxPreset` / `EqBand` Dart thuần, các trường khớp `tc_fx_preset`, có `copyWith`, `==`,
+      `toJson` / `fromJson` (enum ghi theo tên; thiếu trường thì lấy từ preset gốc);
+    - `ToneCore.genrePreset(Genre)` (lấy từ engine — preset chỉnh ở B6 không phải chép sang Dart);
+    - `engine.applyFxPreset / fxPreset / fxEnabled / fxMix ("Vang") / tempo / gateEnabled /
+      gateThresholdDb`;
+    - `EngineMetrics.fxLoad / fxChains`.
+  - App (`app/lib/engine/genre_rules.dart`, `widgets/fx_panel.dart`):
+    - chip 7 preset (Khô, Bolero, Ballad, Nhạc trẻ, Remix, Rap, Lofi), dòng tóm tắt preset ("Vang
+      hội trường 2,2 s · vọng 1/4 nốt · nén 3:1"), thanh "Vang" 0–200%, công tắc "Lọc tiếng ồn
+      micro" (gate);
+    - chọn preset đặt luôn mức chỉnh giọng theo bảng mục 6 (Bolero Tự nhiên 45 ms, Ballad 35 ms,
+      Nhạc trẻ Ca sĩ 15 ms, Remix 8 ms, Rap tắt, Lofi Tự nhiên 30 ms, Khô giữ nguyên); bấm nút
+      chỉnh giọng sau đó thì giữ nút đó;
+    - gợi ý khi nạp bài: đã chọn cho bài → từ khoá trong tên file (bỏ dấu, cả dạng NFD của iOS;
+      khớp nguyên từ; lofi > remix / vinahouse / edm > rap / hip hop > bolero / trữ tình / nhạc
+      vàng > ballad) → BPM sau khi phân tích (≥ 118 Nhạc trẻ, ≤ 80 Ballad) → không đoán thì giữ
+      preset chọn lần trước; dòng nhỏ dưới chip cho biết vì sao;
+    - nhớ preset theo bài (cùng file với tone beat) và preset gần nhất (mở lại app);
+    - BPM của bài → `tempo` (delay theo nhịp bài);
+    - dòng "FX giọng: x % CPU · n chuỗi" trong Thông số kỹ thuật.
+  - Test: binding 21 (5 mới: preset Khô của engine khớp mặc định Dart, JSON đi về cả 7 preset, kẹp
+    / NaN, Vang / nhịp / gate, đuôi vang stereo sau khi hết tiếng + 2 chuỗi khi đổi preset); app 44
+    (16 mới: luật gợi ý, mức chỉnh giọng, nhãn, nhớ theo bài kể cả ghi liền nhau, khu hiệu ứng ở
+    bề ngang 320 px).
 
 ---
 

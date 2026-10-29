@@ -2,6 +2,7 @@
 //   TONECORE_LIB=../../engine/build/host/libtonecore.dylib fvm flutter test
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -425,12 +426,188 @@ void main() {
     },
   );
 
+  group('FX giọng (v0.6)', () {
+    test('preset "Khô" của engine khớp mặc định của FxPreset', () {
+      _expectPresetClose(ToneCore.genrePreset(Genre.dry), const FxPreset());
+    });
+
+    test('preset theo thể loại: giá trị chính và JSON đi về giữ nguyên', () {
+      final bolero = ToneCore.genrePreset(Genre.bolero);
+      expect(bolero.reverbEnabled, isTrue);
+      expect(bolero.reverbType, ReverbType.hall);
+      expect(bolero.reverbDecayS, closeTo(2.2, 1e-6));
+      expect(bolero.delayDivision, DelayDivision.quarter);
+      expect(bolero.compEnabled, isTrue);
+      expect(bolero.deessEnabled, isTrue);
+      expect(bolero.eqBands[0].type, EqBandType.bell);
+      expect(bolero.eqBands[0].freqHz, closeTo(300, 1e-3));
+      expect(bolero.eqBands[0].gainDb, closeTo(-2, 1e-6));
+
+      final pop = ToneCore.genrePreset(Genre.pop);
+      expect(pop.eqBands[1].type, EqBandType.highShelf);
+      expect(pop.eqBands[1].freqHz, closeTo(12000, 1e-2));
+
+      final rap = ToneCore.genrePreset(Genre.rap);
+      expect(rap.delayEnabled, isFalse);
+      expect(rap.reverbType, ReverbType.room);
+
+      final lofi = ToneCore.genrePreset(Genre.lofi);
+      expect(lofi.eqHighPassHz, closeTo(150, 1e-3));
+      expect(lofi.eqLowPassHz, closeTo(9000, 1e-2));
+
+      for (final g in Genre.values) {
+        final p = ToneCore.genrePreset(g);
+        final back = FxPreset.fromJson(
+          jsonDecode(jsonEncode(p.toJson())) as Map<String, dynamic>,
+        );
+        expect(back, p, reason: g.name);
+        expect(back.hashCode, p.hashCode, reason: g.name);
+      }
+      expect(
+        ToneCore.genrePreset(Genre.ballad),
+        isNot(ToneCore.genrePreset(Genre.pop)),
+      );
+    });
+
+    test('JSON thiếu trường lấy từ preset gốc', () {
+      final base = ToneCore.genrePreset(Genre.ballad);
+      final p = FxPreset.fromJson({
+        'reverbMix': 0.4,
+        'delayDivision': 'khong-co',
+        'eqBands': [
+          {'type': 'lowShelf', 'freqHz': 200, 'gainDb': 2},
+        ],
+      }, base: base);
+      expect(p.reverbMix, 0.4);
+      expect(p.delayDivision, base.delayDivision);
+      expect(
+        p.eqBands[0],
+        const EqBand(type: EqBandType.lowShelf, freqHz: 200, gainDb: 2),
+      );
+      expect(p.eqBands[1], base.eqBands[1]);
+      expect(p.compThresholdDb, base.compThresholdDb);
+    });
+
+    test('áp preset, đọc lại (có kẹp), Vang, nhịp, gate', () {
+      final engine = ToneCoreEngine.create(maxBlockFrames: 256);
+      addTearDown(engine.dispose);
+      engine.start();
+      _expectPresetClose(engine.fxPreset, const FxPreset());
+      expect(engine.fxEnabled, isTrue);
+      expect(engine.fxMix, 1.0);
+
+      final bolero = ToneCore.genrePreset(Genre.bolero);
+      engine.applyFxPreset(bolero);
+      _expectPresetClose(engine.fxPreset, bolero);
+
+      engine.applyFxPreset(
+        bolero.copyWith(delayFeedback: 0.9, reverbDecayS: 20),
+      );
+      expect(engine.fxPreset.delayFeedback, closeTo(0.5, 1e-6));
+      expect(engine.fxPreset.reverbDecayS, closeTo(8, 1e-6));
+      expect(
+        () => engine.applyFxPreset(bolero.copyWith(reverbMix: double.nan)),
+        throwsA(
+          isA<ToneCoreException>().having(
+            (e) => e.code,
+            'code',
+            TcResult.invalidArg,
+          ),
+        ),
+      );
+
+      engine.fxMix = 1.5;
+      expect(engine.fxMix, closeTo(1.5, 1e-6));
+      engine.fxEnabled = false;
+      expect(engine.fxEnabled, isFalse);
+      engine.tempo = 128;
+      expect(engine.tempo, closeTo(128, 1e-6));
+      expect(engine.gateEnabled, isFalse);
+      engine.gateEnabled = true;
+      engine.gateThresholdDb = -45;
+      expect(engine.gateEnabled, isTrue);
+      expect(engine.gateThresholdDb, closeTo(-45, 1e-6));
+    });
+
+    test('Bolero: đuôi vang stereo sau khi hết tiếng; Khô: im ngay', () {
+      final engine = ToneCoreEngine.create(maxBlockFrames: 256);
+      addTearDown(engine.dispose);
+      engine.start();
+      engine.monitorEnabled = true;
+
+      // 0,2 s sin 500 Hz rồi im 0,3 s; trả về năng lượng hai kênh và độ lệch L–R của đoạn im.
+      (double, double) tail() {
+        final block = Float32List(256);
+        var t = 0;
+        for (var b = 0; b < 38; b++) {
+          for (var i = 0; i < 256; i++, t++) {
+            block[i] = 0.2 * math.sin(2 * math.pi * 500 * t / 48000);
+          }
+          engine.processOffline(block, 256);
+        }
+        var energy = 0.0;
+        var diff = 0.0;
+        for (var b = 0; b < 56; b++) {
+          final out = engine.processOffline(null, 256);
+          // Bỏ 20 ms đầu (limiter nhìn trước 1 ms + nhả của nén).
+          if (b < 4) continue;
+          for (var i = 0; i < 256; i++) {
+            final l = out[2 * i];
+            final r = out[2 * i + 1];
+            energy += l * l + r * r;
+            diff += (l - r) * (l - r);
+          }
+        }
+        return (energy, diff);
+      }
+
+      final (dryEnergy, _) = tail();
+      expect(dryEnergy, lessThan(1e-6));
+
+      engine.applyFxPreset(ToneCore.genrePreset(Genre.bolero));
+      final (wetEnergy, wetDiff) = tail();
+      expect(wetEnergy, greaterThan(1e-2));
+      expect(wetDiff, greaterThan(0.1 * wetEnergy)); // vang hai kênh khác nhau
+      final m = engine.metrics;
+      expect(m.fxChains, greaterThanOrEqualTo(1));
+      expect(m.fxLoad, inInclusiveRange(0.0, 1.0));
+
+      // Đổi sang Rap (khác cấu trúc: tắt delay, đổi phòng) → đuôi Hall cũ còn ngân song song.
+      engine.applyFxPreset(ToneCore.genrePreset(Genre.rap));
+      engine.processOffline(null, 256);
+      expect(engine.metrics.fxChains, 2);
+    });
+  });
+
   test('block quá lớn bị từ chối ở phía Dart', () {
     final engine = ToneCoreEngine.create(maxBlockFrames: 64);
     addTearDown(engine.dispose);
     engine.start();
     expect(() => engine.processOffline(null, 65), throwsRangeError);
   });
+}
+
+/// So hai preset theo từng trường (giá trị đi qua float 32 bit của C nên lệch ~1e-7).
+void _expectPresetClose(FxPreset actual, FxPreset expected) {
+  void compare(Object? a, Object? e, String path) {
+    if (e is Map) {
+      expect(a, isA<Map>(), reason: path);
+      for (final k in e.keys) {
+        compare((a as Map)[k], e[k], '$path.$k');
+      }
+    } else if (e is List) {
+      expect((a as List).length, e.length, reason: path);
+      for (var i = 0; i < e.length; i++) {
+        compare(a[i], e[i], '$path[$i]');
+      }
+    } else if (e is double) {
+      expect(a, closeTo(e, 1e-4 * math.max(1, e.abs())), reason: path);
+    } else {
+      expect(a, e, reason: path);
+    }
+  }
+
+  compare(actual.toJson(), expected.toJson(), 'preset');
 }
 
 /// Ghi WAV 16-bit stereo, sin 440 Hz.

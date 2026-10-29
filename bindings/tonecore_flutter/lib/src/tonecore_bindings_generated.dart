@@ -290,6 +290,92 @@ class ToneCoreBindings {
         int Function(ffi.Pointer<tc_engine>, ffi.Pointer<ffi.Int32>)
       >();
 
+  /// Điền preset theo thể loại (giá trị khởi đầu của bảng mục 6, CLAUDE.md). genre lạ → "Khô".
+  /// Mức chỉnh giọng của thể loại do app đặt riêng (tc_set_correction_preset).
+  void tc_fx_preset_init(ffi.Pointer<tc_fx_preset> preset, int genre) {
+    return _tc_fx_preset_init(preset, genre);
+  }
+
+  late final _tc_fx_preset_initPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<tc_fx_preset>, ffi.Int32)
+        >
+      >('tc_fx_preset_init');
+  late final _tc_fx_preset_init = _tc_fx_preset_initPtr
+      .asFunction<void Function(ffi.Pointer<tc_fx_preset>, int)>();
+
+  /// Thông số ngoài khoảng thì bị kẹp; NaN hoặc struct_size sai → TC_ERR_INVALID_ARG.
+  int tc_apply_fx_preset(
+    ffi.Pointer<tc_engine> engine,
+    ffi.Pointer<tc_fx_preset> preset,
+  ) {
+    return _tc_apply_fx_preset(engine, preset);
+  }
+
+  late final _tc_apply_fx_presetPtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(ffi.Pointer<tc_engine>, ffi.Pointer<tc_fx_preset>)
+        >
+      >('tc_apply_fx_preset');
+  late final _tc_apply_fx_preset = _tc_apply_fx_presetPtr
+      .asFunction<
+        int Function(ffi.Pointer<tc_engine>, ffi.Pointer<tc_fx_preset>)
+      >();
+
+  /// Preset đang đặt (kể cả khi TC_NODE_FX đang tắt).
+  int tc_get_fx_preset(
+    ffi.Pointer<tc_engine> engine,
+    ffi.Pointer<tc_fx_preset> out_preset,
+  ) {
+    return _tc_get_fx_preset(engine, out_preset);
+  }
+
+  late final _tc_get_fx_presetPtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(ffi.Pointer<tc_engine>, ffi.Pointer<tc_fx_preset>)
+        >
+      >('tc_get_fx_preset');
+  late final _tc_get_fx_preset = _tc_get_fx_presetPtr
+      .asFunction<
+        int Function(ffi.Pointer<tc_engine>, ffi.Pointer<tc_fx_preset>)
+      >();
+
+  /// Nhịp bài (BPM) cho delay theo nốt; ≤ 0 = không rõ (100). Thường gọi khi nạp bài (BPM từ phân
+  /// tích).
+  int tc_set_tempo(ffi.Pointer<tc_engine> engine, double bpm) {
+    return _tc_set_tempo(engine, bpm);
+  }
+
+  late final _tc_set_tempoPtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(ffi.Pointer<tc_engine>, ffi.Float)
+        >
+      >('tc_set_tempo');
+  late final _tc_set_tempo = _tc_set_tempoPtr
+      .asFunction<int Function(ffi.Pointer<tc_engine>, double)>();
+
+  int tc_get_tempo(
+    ffi.Pointer<tc_engine> engine,
+    ffi.Pointer<ffi.Float> out_bpm,
+  ) {
+    return _tc_get_tempo(engine, out_bpm);
+  }
+
+  late final _tc_get_tempoPtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(ffi.Pointer<tc_engine>, ffi.Pointer<ffi.Float>)
+        >
+      >('tc_get_tempo');
+  late final _tc_get_tempo = _tc_get_tempoPtr
+      .asFunction<
+        int Function(ffi.Pointer<tc_engine>, ffi.Pointer<ffi.Float>)
+      >();
+
   /// ---- Route ----
   /// Android: lớp Kotlin báo loại thiết bị (NDK không đọc được). iOS: engine tự phát hiện.
   int tc_set_route_hint(ffi.Pointer<tc_engine> engine, int route) {
@@ -807,6 +893,12 @@ sealed class tc_node_id {
 
   /// tự chỉnh giọng (từ v0.3)
   static const TC_NODE_PITCH = 3;
+
+  /// cổng chặn tiếng ồn trên micro, trước dò cao độ (từ v0.6)
+  static const TC_NODE_GATE = 4;
+
+  /// chuỗi FX giọng EQ → nén → de-esser → delay → reverb (từ v0.6)
+  static const TC_NODE_FX = 5;
 }
 
 sealed class tc_param_id {
@@ -830,6 +922,15 @@ sealed class tc_param_id {
 
   /// 0..50 cent: vùng trễ khi chuyển nốt đích
   static const TC_PARAM_HYSTERESIS_CENTS = 6;
+
+  /// ---- từ v0.6 ----
+  /// TC_NODE_GATE: TC_PARAM_ENABLED (mặc định tắt), TC_PARAM_THRESHOLD_DB.
+  /// TC_NODE_FX: TC_PARAM_ENABLED (mặc định bật; tắt = preset "Khô", đuôi vang đang có vẫn ngân
+  /// nốt), TC_PARAM_MIX ("Vang": nhân phần vọng + vang của preset, 0..2, mặc định 1, trượt 20 ms).
+  static const TC_PARAM_MIX = 7;
+
+  /// −80..0 dBFS: gate mở khi tiếng to hơn (đóng thì giảm −30 dB)
+  static const TC_PARAM_THRESHOLD_DB = 8;
 }
 
 /// Thang âm cho tự chỉnh giọng (từ v0.3).
@@ -991,9 +1092,18 @@ final class tc_metrics extends ffi.Struct {
   @ffi.Float()
   external double cpu_load_peak;
 
-  /// độ trễ thêm do xử lý (480 khi bật chỉnh giọng ở 48 kHz)
+  /// độ trễ thêm do xử lý: 48 (limiter đầu ra 1 ms, từ M5) + 480
+  /// khi bật chỉnh giọng, ở 48 kHz
   @ffi.Int32()
   external int algorithm_latency_frames;
+
+  /// 0..1 – phần thời gian của block dành cho chuỗi FX giọng (block gần nhất)
+  @ffi.Float()
+  external double fx_load;
+
+  /// số chuỗi FX đang chạy: 1 + số chuỗi cũ còn ngân sau khi đổi preset
+  @ffi.Int32()
+  external int fx_chains;
 }
 
 final class tc_playback_state extends ffi.Struct {
@@ -1273,10 +1383,179 @@ final class tc_analysis_result extends ffi.Struct {
 
 final class tc_analyzer extends ffi.Opaque {}
 
+/// ---- FX giọng (từ v0.6, xem docs/adr/005-fx-chain.md) ----
+/// Chuỗi trên đường giọng nghe lại: micro → HPF 80 Hz → gate → chỉnh giọng → EQ → compressor →
+/// de-esser → delay → reverb → trộn beat → limiter. Preset là một struct C (không JSON trong
+/// engine). tc_apply_fx_preset đổi preset khi đang hát không click:
+/// - khác "cấu trúc" (bật / tắt khối, loại băng EQ, thời gian delay, kiểu phòng, pre-delay) → dựng
+/// chuỗi mới; phần khô crossfade 15 ms, đuôi delay / reverb của preset cũ ngân nốt (tới −80 dB,
+/// tối đa 4 s);
+/// - cùng cấu trúc (dB, tần số, Q, ngưỡng, tỉ lệ, độ ướt, hồi tiếp, RT60, damping…) → chuỗi đang
+/// chạy trượt dần sang giá trị mới.
+/// Gọi liên tiếp trước khi audio kịp nhận → chỉ lần cuối được dùng.
+sealed class tc_genre {
+  /// "Khô": không hiệu ứng
+  static const TC_GENRE_DRY = 0;
+  static const TC_GENRE_BOLERO = 1;
+  static const TC_GENRE_BALLAD = 2;
+
+  /// Nhạc trẻ
+  static const TC_GENRE_POP = 3;
+  static const TC_GENRE_REMIX = 4;
+  static const TC_GENRE_RAP = 5;
+  static const TC_GENRE_LOFI = 6;
+}
+
+sealed class tc_eq_band_type {
+  static const TC_EQ_OFF = 0;
+  static const TC_EQ_BELL = 3;
+  static const TC_EQ_LOW_SHELF = 4;
+  static const TC_EQ_HIGH_SHELF = 5;
+}
+
+sealed class tc_delay_division {
+  static const TC_DELAY_OFF = 0;
+
+  /// 1/4 nốt (theo tc_set_tempo)
+  static const TC_DELAY_QUARTER = 1;
+
+  /// 1/8
+  static const TC_DELAY_EIGHTH = 2;
+
+  /// 1/8 chấm
+  static const TC_DELAY_DOTTED_EIGHTH = 3;
+
+  /// 1/16
+  static const TC_DELAY_SIXTEENTH = 4;
+
+  /// theo delay_ms
+  static const TC_DELAY_MS = 5;
+}
+
+sealed class tc_reverb_type {
+  static const TC_REVERB_ROOM = 0;
+  static const TC_REVERB_HALL = 1;
+  static const TC_REVERB_PLATE = 2;
+}
+
+final class tc_eq_band extends ffi.Struct {
+  /// tc_eq_band_type
+  @ffi.Int32()
+  external int type;
+
+  @ffi.Float()
+  external double freq_hz;
+
+  /// −18..18
+  @ffi.Float()
+  external double gain_db;
+
+  /// 0,1..10
+  @ffi.Float()
+  external double q;
+}
+
+final class tc_fx_preset extends ffi.Struct {
+  /// = sizeof(tc_fx_preset); tc_fx_preset_init tự điền
+  @ffi.Uint32()
+  external int struct_size;
+
+  /// EQ: thông cao / thông thấp bậc 2 (0 = tắt) + 5 băng
+  @ffi.Float()
+  external double eq_high_pass_hz;
+
+  @ffi.Float()
+  external double eq_low_pass_hz;
+
+  @ffi.Array.multi([5])
+  external ffi.Array<tc_eq_band> eq_bands;
+
+  /// Compressor
+  @ffi.Int32()
+  external int comp_enabled;
+
+  /// dBFS (sin toàn thang = 0)
+  @ffi.Float()
+  external double comp_threshold_db;
+
+  /// ≥ 1
+  @ffi.Float()
+  external double comp_ratio;
+
+  @ffi.Float()
+  external double comp_knee_db;
+
+  @ffi.Float()
+  external double comp_attack_ms;
+
+  @ffi.Float()
+  external double comp_release_ms;
+
+  @ffi.Float()
+  external double comp_makeup_db;
+
+  /// De-esser (băng 5–9 kHz, shelf 5 kHz)
+  @ffi.Int32()
+  external int deess_enabled;
+
+  @ffi.Float()
+  external double deess_threshold_db;
+
+  /// 0..12
+  @ffi.Float()
+  external double deess_max_reduction_db;
+
+  /// tc_delay_division
+  @ffi.Int32()
+  external int delay_division;
+
+  /// khi TC_DELAY_MS: 1..2000
+  @ffi.Float()
+  external double delay_ms;
+
+  /// 0..0,5
+  @ffi.Float()
+  external double delay_feedback;
+
+  /// 0..1: độ lớn tiếng vọng so với tiếng khô
+  @ffi.Float()
+  external double delay_mix;
+
+  @ffi.Float()
+  external double delay_low_pass_hz;
+
+  @ffi.Float()
+  external double delay_high_pass_hz;
+
+  /// Reverb (FDN 8 dòng, stereo)
+  @ffi.Int32()
+  external int reverb_enabled;
+
+  /// tc_reverb_type
+  @ffi.Int32()
+  external int reverb_type;
+
+  /// RT60 0,2..8
+  @ffi.Float()
+  external double reverb_decay_s;
+
+  /// 0..100
+  @ffi.Float()
+  external double reverb_pre_delay_ms;
+
+  /// 0..0,9: RT60 ở 4 kHz = decay · (1 − damping)
+  @ffi.Float()
+  external double reverb_damping;
+
+  /// 0..1: độ lớn tiếng vang so với tiếng khô (trong băng giọng)
+  @ffi.Float()
+  external double reverb_mix;
+}
+
 const int TC_API_VERSION_MAJOR = 0;
 
-const int TC_API_VERSION_MINOR = 5;
+const int TC_API_VERSION_MINOR = 6;
 
 const int TC_API_VERSION_PATCH = 0;
 
-const int TC_API_VERSION = 1280;
+const int TC_API_VERSION = 1536;

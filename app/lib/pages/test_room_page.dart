@@ -8,14 +8,18 @@ import 'package:tonecore_flutter/tonecore_flutter.dart';
 import '../data/analysis_cache.dart';
 import '../data/song_prefs.dart';
 import '../engine/audio_service.dart';
+import '../engine/genre_rules.dart';
 import '../engine/labels.dart';
 import '../engine/playback_watch.dart';
 import '../engine/transpose_timing.dart';
+import '../widgets/fx_panel.dart';
+import '../widgets/gain_slider.dart';
 import '../widgets/pitch_meter.dart';
 import '../widgets/transpose_control.dart';
 
-/// Màn thử M1–M4: phát beat, đổi tone beat (nhớ theo bài), tự dò tone / BPM khi nạp bài, nghe lại
-/// giọng, tự chỉnh giọng theo tone của bài (tự cộng số nửa cung đổi tone), đồng hồ cao độ, số đo.
+/// Màn thử M1–M5: phát beat, đổi tone beat (nhớ theo bài), tự dò tone / BPM khi nạp bài, nghe lại
+/// giọng, hiệu ứng giọng theo thể loại (gợi ý + nhớ theo bài), tự chỉnh giọng theo tone của bài (tự
+/// cộng số nửa cung đổi tone), đồng hồ cao độ, số đo.
 class TestRoomPage extends StatefulWidget {
   const TestRoomPage({super.key});
 
@@ -53,9 +57,10 @@ class _TestRoomPageState extends State<TestRoomPage> {
   Duration? _analysisTime;
   int _rssMb = 0;
   int _maxRssMb = 0;
-  String?
-  _beatFile; // tên + kích thước của beat đang nạp: khoá nhớ tone theo bài
+  String? _beatFile; // tên + kích thước của beat đang nạp: khoá nhớ tone / preset theo bài
   int? _beatSize;
+  // Preset đang chọn có từ đâu (null: giữ preset chọn lần trước).
+  GenreSource? _genreSource;
 
   @override
   void initState() {
@@ -64,6 +69,11 @@ class _TestRoomPageState extends State<TestRoomPage> {
   }
 
   Future<void> _start() async {
+    if (!_service.isRunning) {
+      // Mở app: dùng lại preset chọn gần nhất (kèm mức chỉnh giọng của nó).
+      final last = await _prefs.lastGenre();
+      if (last != null) _service.setGenre(last);
+    }
     final ok = await _service.ensureStarted();
     if (!mounted) return;
     setState(() => _starting = false);
@@ -177,6 +187,13 @@ class _TestRoomPageState extends State<TestRoomPage> {
       if (saved != 0 && _service.setTranspose(saved)) {
         _timing.requested(saved, _clock.elapsed);
       }
+      // Preset: đã chọn cho bài → theo tên file; theo BPM thì chờ phân tích xong.
+      _applySuggestion(
+        suggestGenre(
+          saved: await _prefs.genreFor(name: files.single.name, size: size),
+          fileName: files.single.name,
+        ),
+      );
       _playback = e.playback;
       unawaited(_analyze(path, files.single.name, size));
     } on ToneCoreException catch (err) {
@@ -228,11 +245,36 @@ class _TestRoomPageState extends State<TestRoomPage> {
       }
     }
     if (!mounted) return;
-    if (result != null) _service.applySongAnalysis(result);
+    if (result != null) {
+      _service.applySongAnalysis(result);
+      // Chưa có preset nhớ / theo tên, người dùng chưa bấm chip, beat chưa đổi → gợi ý theo nhịp.
+      if (_genreSource == null && _beatFile == name && _beatSize == size) {
+        _applySuggestion(suggestGenre(fileName: name, bpm: result.bpm));
+      }
+    }
     setState(() {
       _analyzing = false;
       _currentKey = _service.currentKey;
     });
+  }
+
+  /// null → giữ preset đang dùng (người dùng chọn lần trước). Cùng preset đang dùng thì không áp
+  /// lại: mức chỉnh giọng người dùng đã bấm vẫn giữ.
+  void _applySuggestion(GenreSuggestion? s) {
+    _genreSource = s?.source;
+    if (s != null && s.genre != _service.genre) _service.setGenre(s.genre);
+    if (mounted) setState(() {});
+  }
+
+  void _pickGenre(Genre g) {
+    _service.setGenre(g);
+    final name = _beatFile;
+    final size = _beatSize;
+    setState(() => _genreSource = name != null ? GenreSource.saved : null);
+    unawaited(_prefs.setLastGenre(g));
+    if (name != null && size != null) {
+      unawaited(_prefs.setGenre(name: name, size: size, genre: g));
+    }
   }
 
   @override
@@ -333,7 +375,7 @@ class _TestRoomPageState extends State<TestRoomPage> {
             onChanged: _setTranspose,
           ),
         ],
-        _GainSlider(
+        GainSlider(
           label: 'Âm lượng nhạc',
           value: _beatGain,
           onChanged: (v) {
@@ -358,7 +400,7 @@ class _TestRoomPageState extends State<TestRoomPage> {
             'Đang dùng loa ngoài: dễ bị hú. Hãy cắm tai nghe có dây.',
             style: TextStyle(color: theme.colorScheme.error),
           ),
-        _GainSlider(
+        GainSlider(
           label: 'Âm lượng giọng',
           value: _monitorGain,
           max: 2,
@@ -366,6 +408,20 @@ class _TestRoomPageState extends State<TestRoomPage> {
             setState(() => _monitorGain = v);
             e.monitorGain = v;
           },
+        ),
+        const Divider(height: 32),
+        // ---- Hiệu ứng giọng ----
+        FxPanel(
+          genre: _service.genre,
+          preset: _service.presetOf(_service.genre),
+          source: _genreSource,
+          bpm: _service.songAnalysis?.bpm,
+          mix: _service.fxMix,
+          gateOn: _service.gateOn,
+          monitorOn: _monitorOn,
+          onGenre: _pickGenre,
+          onMix: (v) => setState(() => _service.setFxMix(v)),
+          onGate: (v) => setState(() => _service.setGate(v)),
         ),
         const Divider(height: 32),
         // ---- Tự chỉnh giọng ----
@@ -581,33 +637,6 @@ class _KeyPicker extends StatelessWidget {
   }
 }
 
-class _GainSlider extends StatelessWidget {
-  const _GainSlider({
-    required this.label,
-    required this.value,
-    required this.onChanged,
-    this.max = 1,
-  });
-
-  final String label;
-  final double value;
-  final double max;
-  final ValueChanged<double> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        SizedBox(width: 120, child: Text(label)),
-        Expanded(
-          child: Slider(value: value, max: max, onChanged: onChanged),
-        ),
-        SizedBox(width: 44, child: Text('${(value * 100).round()}%')),
-      ],
-    );
-  }
-}
-
 class _MetricsCard extends StatelessWidget {
   const _MetricsCard({
     required this.metrics,
@@ -640,6 +669,10 @@ class _MetricsCard extends StatelessWidget {
       (
         'CPU',
         '${(m.cpuLoad * 100).toStringAsFixed(1)} % (đỉnh ${(m.cpuLoadPeak * 100).toStringAsFixed(1)} %)',
+      ),
+      (
+        'FX giọng',
+        '${(m.fxLoad * 100).toStringAsFixed(1)} % CPU · ${m.fxChains} chuỗi',
       ),
       ('Trễ xử lý', '${m.algorithmLatencyMs.toStringAsFixed(1)} ms'),
       ('Xrun (rè)', '${m.xruns}'),

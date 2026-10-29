@@ -1,6 +1,6 @@
 name: tonecore_flutter
 description: "Binding Dart FFI cho ToneCore – engine âm thanh của ChuẩnTone."
-version: 0.5.0
+version: 0.6.0
 publish_to: none
 
 environment:

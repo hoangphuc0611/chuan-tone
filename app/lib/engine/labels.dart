@@ -1,5 +1,7 @@
 import 'package:tonecore_flutter/tonecore_flutter.dart';
 
+import 'genre_rules.dart';
+
 /// Nhãn tiếng Việt cho UI.
 String routeLabel(AudioRoute r) => switch (r) {
   AudioRoute.unknown => 'Chưa rõ',
@@ -137,4 +139,62 @@ String correctionPresetLabel(CorrectionPreset p) => switch (p) {
   CorrectionPreset.natural => 'Tự nhiên',
   CorrectionPreset.singer => 'Ca sĩ',
   CorrectionPreset.robot => 'Robot',
+};
+
+// ---- Hiệu ứng giọng ----
+
+String genreLabel(Genre g) => switch (g) {
+  Genre.dry => 'Khô',
+  Genre.bolero => 'Bolero',
+  Genre.ballad => 'Ballad',
+  Genre.pop => 'Nhạc trẻ',
+  Genre.remix => 'Remix',
+  Genre.rap => 'Rap',
+  Genre.lofi => 'Lofi',
+};
+
+String _dec(double v) => v.toStringAsFixed(1).replaceAll('.', ',');
+
+String _reverbTypeLabel(ReverbType t) => switch (t) {
+  ReverbType.room => 'phòng',
+  ReverbType.hall => 'hội trường',
+  ReverbType.plate => 'plate',
+};
+
+String _delayLabel(FxPreset p) => switch (p.delayDivision) {
+  DelayDivision.off => '',
+  DelayDivision.quarter => '1/4 nốt',
+  DelayDivision.eighth => '1/8 nốt',
+  DelayDivision.dottedEighth => '1/8 chấm',
+  DelayDivision.sixteenth => '1/16 nốt',
+  DelayDivision.ms => '${p.delayMs.round()} ms',
+};
+
+/// "Vang hội trường 2,2 s · vọng 1/4 nốt · nén 3:1"; "Không hiệu ứng" cho preset Khô.
+String fxSummary(FxPreset p) {
+  final parts = [
+    if (p.reverbEnabled)
+      'Vang ${_reverbTypeLabel(p.reverbType)} ${_dec(p.reverbDecayS)} s',
+    if (p.delayEnabled) 'vọng ${_delayLabel(p)}',
+    if (p.compEnabled) 'nén ${p.compRatio.round()}:1',
+  ];
+  if (parts.isEmpty) return 'Không hiệu ứng';
+  final s = parts.join(' · ');
+  return s[0].toUpperCase() + s.substring(1);
+}
+
+/// "Tự nhiên 45 ms", "Tắt"; null khi preset giữ nguyên chỉnh giọng (Khô).
+String? genreCorrectionLabel(GenreCorrection c) {
+  if (c.keep) return null;
+  final level = c.level;
+  if (level == null) return 'Tắt';
+  return '${correctionPresetLabel(level)} ${c.retuneMs!.round()} ms';
+}
+
+/// Vì sao chip này đang được chọn.
+String genreSourceLabel(GenreSource s, {double? bpm}) => switch (s) {
+  GenreSource.saved => 'Đã chọn cho bài này',
+  GenreSource.name => 'Gợi ý theo tên bài',
+  GenreSource.bpm =>
+    bpm == null ? 'Gợi ý theo nhịp bài' : 'Gợi ý theo nhịp ${bpm.round()} BPM',
 };

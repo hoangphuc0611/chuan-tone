@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:tonecore_flutter/tonecore_flutter.dart';
 
+import 'genre_rules.dart';
 import 'labels.dart';
 
 /// Giữ một engine ToneCore dùng chung cho cả app (thiết bị âm thanh thật).
@@ -35,6 +36,24 @@ class AudioService extends ChangeNotifier {
   /// Mức tự chỉnh giọng; null = tắt.
   CorrectionPreset? correction;
 
+  /// Thời gian kéo về nốt do preset thể loại đặt (thay cho giá trị của [correction]); null = theo
+  /// mức. Bấm nút chỉnh giọng thì về null.
+  double? correctionRetuneMs;
+
+  /// Preset hiệu ứng giọng đang chọn.
+  Genre genre = Genre.dry;
+
+  /// "Vang": 0..2 (1 = đúng preset).
+  double fxMix = 1.0;
+
+  /// Cổng chặn tiếng ồn micro.
+  bool gateOn = false;
+
+  final _presets = <Genre, FxPreset>{};
+
+  /// Thông số của preset thể loại (lấy từ engine một lần).
+  FxPreset presetOf(Genre g) => _presets[g] ??= ToneCore.genrePreset(g);
+
   ToneCoreEngine? get engine => _engine;
 
   /// Tone đang áp dụng = tone đang nghe (khi theo bài thì đổi theo vị trí beat; đã cộng số nửa
@@ -61,9 +80,9 @@ class AudioService extends ChangeNotifier {
       final e = ToneCoreEngine.platform();
       e.start();
       e.key = key;
-      e.applyCorrectionPreset(correction ?? CorrectionPreset.singer);
-      e.pitchCorrectionEnabled = correction != null;
       _engine = e;
+      _syncCorrection();
+      _syncFx();
       _syncSong();
       _routeMonitor = RouteMonitor(e)..start();
       _eventSub = e.events.listen(_events.add);
@@ -117,6 +136,7 @@ class AudioService extends ChangeNotifier {
     if (e == null) return;
     final a = songAnalysis;
     e.tuningCents = a?.tuningCents ?? 0;
+    e.tempo = a?.bpm ?? 0; // delay theo nhịp bài; chưa rõ → engine dùng 100 BPM
     if (followSong && a != null && a.timeline.isNotEmpty) {
       e.setKeyTimeline(a.timeline);
     } else {
@@ -124,15 +144,58 @@ class AudioService extends ChangeNotifier {
     }
   }
 
-  /// null = tắt tự chỉnh giọng.
+  /// Người dùng bấm nút chỉnh giọng (null = tắt): giữ lựa chọn này tới khi chọn preset khác.
   void setCorrection(CorrectionPreset? p) {
     correction = p;
-    final e = _engine;
-    if (e != null) {
-      if (p != null) e.applyCorrectionPreset(p);
-      e.pitchCorrectionEnabled = p != null;
-    }
+    correctionRetuneMs = null;
+    _syncCorrection();
     notifyListeners();
+  }
+
+  void _syncCorrection() {
+    final e = _engine;
+    if (e == null) return;
+    final p = correction;
+    if (p != null) {
+      e.applyCorrectionPreset(p);
+      final retune = correctionRetuneMs;
+      if (retune != null) e.setParam(TcNode.pitch, TcParam.retuneMs, retune);
+    }
+    e.pitchCorrectionEnabled = p != null;
+  }
+
+  /// Chọn preset hiệu ứng giọng (đổi khi đang hát không click) và đặt luôn mức tự chỉnh giọng theo
+  /// thể loại ([genreCorrection]; Khô giữ nguyên).
+  void setGenre(Genre g) {
+    genre = g;
+    final c = genreCorrection(g);
+    if (!c.keep) {
+      correction = c.level;
+      correctionRetuneMs = c.retuneMs;
+      _syncCorrection();
+    }
+    _engine?.applyFxPreset(presetOf(g));
+    notifyListeners();
+  }
+
+  void setFxMix(double v) {
+    fxMix = v.clamp(0.0, 2.0);
+    _engine?.fxMix = fxMix;
+    notifyListeners();
+  }
+
+  void setGate(bool on) {
+    gateOn = on;
+    _engine?.gateEnabled = on;
+    notifyListeners();
+  }
+
+  void _syncFx() {
+    final e = _engine;
+    if (e == null) return;
+    e.applyFxPreset(presetOf(genre));
+    e.fxMix = fxMix;
+    e.gateEnabled = gateOn;
   }
 
   Future<void> shutdown() async {
