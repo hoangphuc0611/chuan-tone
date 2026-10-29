@@ -10,8 +10,10 @@
 #include <mutex>
 #include <new>
 #include <string>
+#include <vector>
 
 #include "core/worker.h"
+#include "decode/stems.h"
 #include "key/song_analyzer.h"
 #include "tonecore/tonecore.h"
 
@@ -33,11 +35,24 @@ int32_t scaleOf(tonecore::KeyMode mode) {
 }
 
 void runJob(tc_analyzer* a, const std::shared_ptr<tonecore::AnalysisControl>& ctl,
-            const std::string& path) {
+            const std::string& path, const std::vector<std::string>& vocals) {
   tonecore::SongAnalysis result;
   tc_result r = TC_ERR_INTERNAL;
   try {
-    r = tonecore::analyzeFile(path, tonecore::AnalysisConfig{}, *ctl, result);
+    if (vocals.empty()) {
+      r = tonecore::analyzeFile(path, tonecore::AnalysisConfig{}, *ctl, result);
+    } else {
+      // Phần nhạc = bài − giọng (M6): dò tone không bị giọng ca sĩ làm nhiễu.
+      ctl->report(tonecore::AnalysisStage::Decoding, 0.0f);
+      tonecore::DecodedAudio instrumental;
+      tonecore::DecodedAudio vocal;
+      r = tonecore::decodeStems(path, vocals, instrumental, vocal);
+      vocal = tonecore::DecodedAudio{};
+      if (r == TC_OK) {
+        r = tonecore::analyzeDecoded(std::move(instrumental), tonecore::AnalysisConfig{}, *ctl,
+                                     result);
+      }
+    }
   } catch (const std::bad_alloc&) {
     r = TC_ERR_OUT_OF_MEMORY;
   } catch (...) {
@@ -49,6 +64,27 @@ void runJob(tc_analyzer* a, const std::shared_ptr<tonecore::AnalysisControl>& ct
              : r == tonecore::kResultCancelled ? TC_ANALYSIS_CANCELLED
                                                : TC_ANALYSIS_FAILED;
   if (r == TC_OK) a->analysis = std::move(result);
+}
+
+}  // namespace
+
+namespace {
+
+tc_result startJob(tc_analyzer* analyzer, const char* path_utf8, std::vector<std::string> vocals) {
+  if (analyzer == nullptr || path_utf8 == nullptr || path_utf8[0] == '\0') {
+    return TC_ERR_INVALID_ARG;
+  }
+  std::lock_guard<std::mutex> lock(analyzer->mutex);
+  if (analyzer->state == TC_ANALYSIS_RUNNING) return TC_ERR_INVALID_STATE;
+  auto ctl = std::make_shared<tonecore::AnalysisControl>();
+  analyzer->control = ctl;
+  analyzer->state = TC_ANALYSIS_RUNNING;
+  analyzer->result = TC_OK;
+  analyzer->analysis = tonecore::SongAnalysis{};
+  analyzer->worker.post([analyzer, ctl, path = std::string(path_utf8), v = std::move(vocals)] {
+    runJob(analyzer, ctl, path, v);
+  });
+  return TC_OK;
 }
 
 }  // namespace
@@ -69,25 +105,34 @@ tc_result tc_analyzer_create(tc_analyzer** out_analyzer) {
 }
 
 tc_result tc_analyzer_start(tc_analyzer* analyzer, const char* path_utf8) {
-  if (analyzer == nullptr || path_utf8 == nullptr || path_utf8[0] == '\0') {
-    return TC_ERR_INVALID_ARG;
-  }
   try {
-    std::lock_guard<std::mutex> lock(analyzer->mutex);
-    if (analyzer->state == TC_ANALYSIS_RUNNING) return TC_ERR_INVALID_STATE;
-    auto ctl = std::make_shared<tonecore::AnalysisControl>();
-    analyzer->control = ctl;
-    analyzer->state = TC_ANALYSIS_RUNNING;
-    analyzer->result = TC_OK;
-    analyzer->analysis = tonecore::SongAnalysis{};
-    analyzer->worker.post(
-        [analyzer, ctl, path = std::string(path_utf8)] { runJob(analyzer, ctl, path); });
+    return startJob(analyzer, path_utf8, {});
   } catch (const std::bad_alloc&) {
     return TC_ERR_OUT_OF_MEMORY;
   } catch (...) {
     return TC_ERR_INTERNAL;
   }
-  return TC_OK;
+}
+
+tc_result tc_analyzer_start_with_vocals(tc_analyzer* analyzer, const char* path_utf8,
+                                        const char* const* vocal_paths_utf8, uint32_t vocal_count) {
+  if (vocal_paths_utf8 == nullptr || vocal_count == 0 || vocal_count > 4096) {
+    return TC_ERR_INVALID_ARG;
+  }
+  try {
+    std::vector<std::string> vocals;
+    for (uint32_t i = 0; i < vocal_count; ++i) {
+      if (vocal_paths_utf8[i] == nullptr || vocal_paths_utf8[i][0] == '\0') {
+        return TC_ERR_INVALID_ARG;
+      }
+      vocals.emplace_back(vocal_paths_utf8[i]);
+    }
+    return startJob(analyzer, path_utf8, std::move(vocals));
+  } catch (const std::bad_alloc&) {
+    return TC_ERR_OUT_OF_MEMORY;
+  } catch (...) {
+    return TC_ERR_INTERNAL;
+  }
 }
 
 tc_result tc_analyzer_get_status(tc_analyzer* analyzer, tc_analysis_status* out_status) {

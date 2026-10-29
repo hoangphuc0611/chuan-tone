@@ -1,5 +1,7 @@
 #include "player/track.h"
 
+#include <algorithm>
+
 #include "dsp/resampler.h"
 
 namespace tonecore {
@@ -34,6 +36,20 @@ std::unique_ptr<Track> prepareTrack(DecodedAudio&& decoded, uint32_t engineRate)
     track->pcm = rs.process(stereo.data(), frames, 2);
     track->frames = track->pcm.size() / 2;
   }
+  return track;
+}
+
+std::unique_ptr<Track> prepareTrackWithVocal(DecodedAudio&& instrumental, DecodedAudio&& vocal,
+                                             uint32_t engineRate) {
+  auto track = prepareTrack(std::move(instrumental), engineRate);
+  auto v = prepareTrack(std::move(vocal), engineRate);
+  if (!track || !v) return nullptr;
+  // Cùng độ dài vào + cùng bộ đổi tần số → cùng độ dài ra; vẫn chốt cho chắc.
+  const uint64_t frames = std::min(track->frames, v->frames);
+  track->frames = frames;
+  track->pcm.resize(static_cast<std::size_t>(frames) * 2);
+  v->pcm.resize(static_cast<std::size_t>(frames) * 2);
+  track->vocal = std::move(v->pcm);
   return track;
 }
 

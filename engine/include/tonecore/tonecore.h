@@ -87,7 +87,9 @@ typedef enum tc_node_id {
   TC_NODE_BEAT = 2,    /* nhạc beat */
   TC_NODE_PITCH = 3,   /* tự chỉnh giọng (từ v0.3) */
   TC_NODE_GATE = 4,    /* cổng chặn tiếng ồn trên micro, trước dò cao độ (từ v0.6) */
-  TC_NODE_FX = 5       /* chuỗi FX giọng EQ → nén → de-esser → delay → reverb (từ v0.6) */
+  TC_NODE_FX = 5,      /* chuỗi FX giọng EQ → nén → de-esser → delay → reverb (từ v0.6) */
+  TC_NODE_VOCAL = 6    /* giọng ca sĩ gốc của beat có stem giọng (từ v0.7): TC_PARAM_GAIN 0..1,
+                          mặc định 0 = karaoke, 1 = như bài gốc; trượt 20 ms */
 } tc_node_id;
 
 typedef enum tc_param_id {
@@ -194,6 +196,8 @@ typedef struct tc_playback_state {
   int32_t transpose;         /* số nửa cung đã yêu cầu (tc_set_transpose) */
   int32_t audible_transpose; /* số nửa cung đang nghe (đổi sau ~0,1 s khi bản mới sẵn) */
   float transpose_progress;  /* 0..1: phần bài đã render ở tone yêu cầu (1 khi transpose = 0) */
+  /* (từ v0.7) */
+  int32_t has_vocal; /* 1 nếu beat nạp kèm stem giọng (tc_load_beat_with_vocals) */
 } tc_playback_state;
 
 typedef struct tc_latency_result {
@@ -342,6 +346,13 @@ TC_EXPORT tc_result tc_get_param(tc_engine* engine, int32_t node_id, int32_t par
  * tc_load_beat chạy nền; kết quả đến qua sự kiện TC_EVENT_BEAT_LOADED.
  * Hỗ trợ định dạng mà codec của hệ điều hành đọc được (MP3, M4A/AAC, WAV...). */
 TC_EXPORT tc_result tc_load_beat(tc_engine* engine, const char* path_utf8);
+/* (từ v0.7) Nạp bài gốc kèm stem giọng đã tách (các đoạn FLAC theo thứ tự, như server trả về cho
+ * các đoạn tc_exporter gửi lên). Engine phát phần nhạc = bài − giọng, cộng thêm giọng theo
+ * TC_NODE_VOCAL / TC_PARAM_GAIN; đổi tone thì đổi cả hai. Giọng lệch độ dài / số kênh so với bài →
+ * TC_EVENT_BEAT_LOADED mang TC_ERR_INVALID_ARG. */
+TC_EXPORT tc_result tc_load_beat_with_vocals(tc_engine* engine, const char* path_utf8,
+                                             const char* const* vocal_paths_utf8,
+                                             uint32_t vocal_count);
 TC_EXPORT tc_result tc_play(tc_engine* engine);
 TC_EXPORT tc_result tc_pause(tc_engine* engine);
 TC_EXPORT tc_result tc_seek(tc_engine* engine, double position_ms);
@@ -513,6 +524,11 @@ TC_EXPORT tc_result tc_analyzer_create(tc_analyzer** out_analyzer);
 /* Bắt đầu phân tích file (định dạng như tc_load_beat). Đang chạy → TC_ERR_INVALID_STATE.
  * Kết quả lần trước bị xoá. Lỗi đọc file báo qua trạng thái TC_ANALYSIS_FAILED. */
 TC_EXPORT tc_result tc_analyzer_start(tc_analyzer* analyzer, const char* path_utf8);
+/* (từ v0.7) Phân tích phần nhạc = bài − stem giọng (như tc_load_beat_with_vocals): dò tone không
+ * bị giọng ca sĩ luyến láy làm nhiễu. */
+TC_EXPORT tc_result tc_analyzer_start_with_vocals(tc_analyzer* analyzer, const char* path_utf8,
+                                                  const char* const* vocal_paths_utf8,
+                                                  uint32_t vocal_count);
 TC_EXPORT tc_result tc_analyzer_get_status(tc_analyzer* analyzer, tc_analysis_status* out_status);
 /* Yêu cầu dừng (không chờ). Trạng thái chuyển sang TC_ANALYSIS_CANCELLED khi luồng nền dừng. */
 TC_EXPORT tc_result tc_analyzer_cancel(tc_analyzer* analyzer);

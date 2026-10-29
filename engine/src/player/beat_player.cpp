@@ -16,7 +16,9 @@ constexpr float kHalfPi = 1.57079632679489661923f;
 BeatPlayer::BeatPlayer(uint32_t sampleRate)
     : xfadeLen_(std::max<uint32_t>(1, static_cast<uint32_t>(kCrossfadeSec * sampleRate))),
       fadeFrames_(static_cast<uint32_t>(kFadeSec * sampleRate)),
-      fadeStep_(static_cast<float>(1.0 / (kFadeSec * sampleRate))) {}
+      fadeStep_(static_cast<float>(1.0 / (kFadeSec * sampleRate))) {
+  vocalGain_.prepare(sampleRate, 0.020);
+}
 
 // Audio thread đã dừng: mọi con trỏ thô đều thuộc liveTracks_ / liveTransposed_, tự huỷ theo.
 BeatPlayer::~BeatPlayer() = default;
@@ -30,6 +32,7 @@ bool BeatPlayer::setTrack(std::shared_ptr<const Track> track) {
   playing_.store(false, std::memory_order_relaxed);
   seekRequest_.store(-1, std::memory_order_relaxed);
   position_.store(0, std::memory_order_relaxed);
+  hasVocal_.store(liveTracks_.back()->hasVocal(), std::memory_order_relaxed);
   duration_.store(frames, std::memory_order_relaxed);
   ended_.store(false, std::memory_order_relaxed);
   return true;
@@ -125,16 +128,21 @@ bool BeatPlayer::available(const TransposedTrack* src, uint64_t frame) const noe
 }
 
 // [RT]
-void BeatPlayer::sampleAt(const TransposedTrack* src, uint64_t frame, float& l,
+void BeatPlayer::sampleAt(const TransposedTrack* src, uint64_t frame, float g, float& l,
                           float& r) const noexcept {
   const auto i = 2 * static_cast<std::size_t>(frame);
-  if (src == nullptr) {
-    l = static_cast<float>(track_->pcm[i]) * kInt16ToFloat;
-    r = static_cast<float>(track_->pcm[i + 1]) * kInt16ToFloat;
-  } else {
-    l = static_cast<float>(src->pcm[i]) * kTransposedToFloat;
-    r = static_cast<float>(src->pcm[i + 1]) * kTransposedToFloat;
+  const int16_t* music = src == nullptr ? track_->pcm.data() : src->pcm.get();
+  const int16_t* vocal =
+      src == nullptr ? (track_->hasVocal() ? track_->vocal.data() : nullptr) : src->vocal.get();
+  const float scale = src == nullptr ? kInt16ToFloat : kTransposedToFloat;
+  float a = static_cast<float>(music[i]);
+  float b = static_cast<float>(music[i + 1]);
+  if (vocal != nullptr && g != 0.0f) {
+    a += g * static_cast<float>(vocal[i]);
+    b += g * static_cast<float>(vocal[i + 1]);
   }
+  l = a * scale;
+  r = b * scale;
 }
 
 // [RT] Không cấp phát, không khóa.
@@ -181,10 +189,12 @@ void BeatPlayer::render(float* outStereo, uint32_t frames) noexcept {
   }
 
   const uint64_t total = track_->frames;
+  const bool withVocal = track_->hasVocal();
   bool starved = false;
   for (uint32_t i = 0; i < frames; ++i) {
     float& outL = outStereo[2 * i];
     float& outR = outStereo[2 * i + 1];
+    const float g = withVocal ? vocalGain_.next() : 0.0f;
     if (cursor_ < total && !available(active_, cursor_)) {
       // Khối tại vị trí phát chưa render (vừa tua tới): im lặng, đứng yên, sẵn thì fade vào lại.
       starved = true;
@@ -206,7 +216,7 @@ void BeatPlayer::render(float* outStereo, uint32_t frames) noexcept {
     }
     float l = 0.0f;
     float r = 0.0f;
-    sampleAt(active_, cursor_, l, r);
+    sampleAt(active_, cursor_, g, l, r);
     if (xfade_ > 0) {
       // Crossfade công suất đều (hai bản khác cao độ → gần như không tương quan).
       const float x = 1.0f - static_cast<float>(xfade_) / static_cast<float>(xfadeLen_);
@@ -214,7 +224,7 @@ void BeatPlayer::render(float* outStereo, uint32_t frames) noexcept {
       const float gOld = std::cos(kHalfPi * x);
       float ol = 0.0f;
       float orr = 0.0f;
-      if (available(fadeFrom_, cursor_)) sampleAt(fadeFrom_, cursor_, ol, orr);
+      if (available(fadeFrom_, cursor_)) sampleAt(fadeFrom_, cursor_, g, ol, orr);
       l = gNew * l + gOld * ol;
       r = gNew * r + gOld * orr;
       if (--xfade_ == 0) {

@@ -194,6 +194,45 @@ class ToneCoreBindings {
         int Function(ffi.Pointer<tc_engine>, ffi.Pointer<ffi.Char>)
       >();
 
+  /// (từ v0.7) Nạp bài gốc kèm stem giọng đã tách (các đoạn FLAC theo thứ tự, như server trả về cho
+  /// các đoạn tc_exporter gửi lên). Engine phát phần nhạc = bài − giọng, cộng thêm giọng theo
+  /// TC_NODE_VOCAL / TC_PARAM_GAIN; đổi tone thì đổi cả hai. Giọng lệch độ dài / số kênh so với bài →
+  /// TC_EVENT_BEAT_LOADED mang TC_ERR_INVALID_ARG.
+  int tc_load_beat_with_vocals(
+    ffi.Pointer<tc_engine> engine,
+    ffi.Pointer<ffi.Char> path_utf8,
+    ffi.Pointer<ffi.Pointer<ffi.Char>> vocal_paths_utf8,
+    int vocal_count,
+  ) {
+    return _tc_load_beat_with_vocals(
+      engine,
+      path_utf8,
+      vocal_paths_utf8,
+      vocal_count,
+    );
+  }
+
+  late final _tc_load_beat_with_vocalsPtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(
+            ffi.Pointer<tc_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Pointer<ffi.Char>>,
+            ffi.Uint32,
+          )
+        >
+      >('tc_load_beat_with_vocals');
+  late final _tc_load_beat_with_vocals = _tc_load_beat_with_vocalsPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<tc_engine>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Pointer<ffi.Char>>,
+          int,
+        )
+      >();
+
   int tc_play(ffi.Pointer<tc_engine> engine) {
     return _tc_play(engine);
   }
@@ -695,6 +734,43 @@ class ToneCoreBindings {
         int Function(ffi.Pointer<tc_analyzer>, ffi.Pointer<ffi.Char>)
       >();
 
+  /// (từ v0.7) Phân tích phần nhạc = bài − stem giọng (như tc_load_beat_with_vocals): dò tone không
+  /// bị giọng ca sĩ luyến láy làm nhiễu.
+  int tc_analyzer_start_with_vocals(
+    ffi.Pointer<tc_analyzer> analyzer,
+    ffi.Pointer<ffi.Char> path_utf8,
+    ffi.Pointer<ffi.Pointer<ffi.Char>> vocal_paths_utf8,
+    int vocal_count,
+  ) {
+    return _tc_analyzer_start_with_vocals(
+      analyzer,
+      path_utf8,
+      vocal_paths_utf8,
+      vocal_count,
+    );
+  }
+
+  late final _tc_analyzer_start_with_vocalsPtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(
+            ffi.Pointer<tc_analyzer>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Pointer<ffi.Char>>,
+            ffi.Uint32,
+          )
+        >
+      >('tc_analyzer_start_with_vocals');
+  late final _tc_analyzer_start_with_vocals = _tc_analyzer_start_with_vocalsPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<tc_analyzer>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Pointer<ffi.Char>>,
+          int,
+        )
+      >();
+
   int tc_analyzer_get_status(
     ffi.Pointer<tc_analyzer> analyzer,
     ffi.Pointer<tc_analysis_status> out_status,
@@ -1007,6 +1083,10 @@ sealed class tc_node_id {
 
   /// chuỗi FX giọng EQ → nén → de-esser → delay → reverb (từ v0.6)
   static const TC_NODE_FX = 5;
+
+  /// giọng ca sĩ gốc của beat có stem giọng (từ v0.7): TC_PARAM_GAIN 0..1,
+  /// mặc định 0 = karaoke, 1 = như bài gốc; trượt 20 ms
+  static const TC_NODE_VOCAL = 6;
 }
 
 sealed class tc_param_id {
@@ -1241,6 +1321,10 @@ final class tc_playback_state extends ffi.Struct {
   /// 0..1: phần bài đã render ở tone yêu cầu (1 khi transpose = 0)
   @ffi.Float()
   external double transpose_progress;
+
+  /// 1 nếu beat nạp kèm stem giọng (tc_load_beat_with_vocals)
+  @ffi.Int32()
+  external int has_vocal;
 }
 
 final class tc_latency_result extends ffi.Struct {

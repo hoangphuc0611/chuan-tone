@@ -29,6 +29,7 @@ struct TransposedTrack {
         blocks(static_cast<uint32_t>((frames + kBlockFrames - 1) / kBlockFrames)),
         // Không cần xoá về 0: chỉ đọc khối đã công bố.
         pcm(new int16_t[static_cast<std::size_t>(frames) * 2]),
+        vocal(source->hasVocal() ? new int16_t[static_cast<std::size_t>(frames) * 2] : nullptr),
         ready(new std::atomic<uint8_t>[blocks]()) {}
 
   bool blockReady(uint64_t frame) const noexcept {
@@ -46,6 +47,8 @@ struct TransposedTrack {
   const uint64_t frames;
   const uint32_t blocks;
   std::unique_ptr<int16_t[]> pcm;  // stereo interleaved, × kStoreGain
+  // (M6) Stem giọng đổi tone cùng lúc (cùng khối, cùng cờ ready); nullptr khi beat không có giọng.
+  std::unique_ptr<int16_t[]> vocal;
   std::unique_ptr<std::atomic<uint8_t>[]> ready;
   std::atomic<uint32_t> readyCount{0};
   std::atomic<int64_t> wantFrame{-1};  // tua tới vùng chưa có → luồng render ưu tiên chỗ này

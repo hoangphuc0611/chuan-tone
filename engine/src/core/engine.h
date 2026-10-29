@@ -65,7 +65,8 @@ class Engine : public BackendHost {
   tc_result setParam(int32_t nodeId, int32_t paramId, float value) noexcept;
   tc_result getParam(int32_t nodeId, int32_t paramId, float* outValue) const noexcept;
 
-  tc_result loadBeat(const std::string& path);
+  // vocalPaths không rỗng: bài gốc + stem giọng (M6) — phát phần nhạc + k · giọng.
+  tc_result loadBeat(const std::string& path, std::vector<std::string> vocalPaths = {});
   tc_result play() noexcept;
   tc_result pause() noexcept;
   tc_result seekMs(double ms) noexcept;

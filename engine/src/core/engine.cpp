@@ -7,6 +7,7 @@
 
 #include "core/denormal.h"
 #include "decode/decoder.h"
+#include "decode/stems.h"
 
 namespace tonecore {
 
@@ -120,6 +121,12 @@ tc_result Engine::setParam(int32_t nodeId, int32_t paramId, float value) noexcep
         return TC_OK;
       }
       break;
+    case TC_NODE_VOCAL:
+      if (paramId == TC_PARAM_GAIN && std::isfinite(value)) {
+        player_.setVocalGain(value);
+        return TC_OK;
+      }
+      break;
     case TC_NODE_GATE:
       if (!std::isfinite(value)) return TC_ERR_INVALID_ARG;
       if (paramId == TC_PARAM_ENABLED) {
@@ -184,6 +191,9 @@ tc_result Engine::getParam(int32_t nodeId, int32_t paramId, float* outValue) con
         return TC_OK;
       case TC_NODE_BEAT:
         *outValue = beatGain_.target();
+        return TC_OK;
+      case TC_NODE_VOCAL:
+        *outValue = player_.vocalGain();
         return TC_OK;
       default:
         return TC_ERR_INVALID_ARG;
@@ -343,15 +353,25 @@ void Engine::fillPitchState(tc_pitch_state& s) const noexcept {
 // ---------------------------------------------------------------------------
 // Beat
 
-tc_result Engine::loadBeat(const std::string& path) {
+tc_result Engine::loadBeat(const std::string& path, std::vector<std::string> vocalPaths) {
   if (path.empty()) return TC_ERR_INVALID_ARG;
   const uint32_t rate = config_.sampleRate;
-  worker_.post([this, path, rate] {
-    DecodedAudio decoded;
-    tc_result r = decodeFile(path, decoded);
+  worker_.post([this, path, vocals = std::move(vocalPaths), rate] {
+    std::shared_ptr<const Track> track;
+    tc_result r = TC_OK;
+    if (vocals.empty()) {
+      DecodedAudio decoded;
+      r = decodeFile(path, decoded);
+      if (r == TC_OK) track = prepareTrack(std::move(decoded), rate);
+    } else {
+      DecodedAudio instrumental;
+      DecodedAudio vocal;
+      r = decodeStems(path, vocals, instrumental, vocal);
+      if (r == TC_OK)
+        track = prepareTrackWithVocal(std::move(instrumental), std::move(vocal), rate);
+    }
     double durationMs = 0.0;
     if (r == TC_OK) {
-      std::shared_ptr<const Track> track = prepareTrack(std::move(decoded), rate);
       if (!track) {
         r = TC_ERR_NOT_SUPPORTED;
       } else {
@@ -444,6 +464,7 @@ void Engine::fillPlayback(tc_playback_state& s) const noexcept {
   s.transpose = requestedSemis_.load(std::memory_order_relaxed);
   s.transpose_progress = transposeProgress_.load(std::memory_order_relaxed);
   s.audible_transpose = player_.audibleSemitones();
+  s.has_vocal = player_.hasTrack() && player_.hasVocal() ? 1 : 0;
 }
 
 // ---------------------------------------------------------------------------

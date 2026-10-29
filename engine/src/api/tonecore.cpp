@@ -8,6 +8,8 @@
 #include <cstddef>
 #include <cstring>
 #include <new>
+#include <string>
+#include <vector>
 
 #include "core/engine.h"
 #include "fx/fx_presets.h"
@@ -321,6 +323,29 @@ tc_result tc_load_beat(tc_engine* engine, const char* path_utf8) {
   if (engine == nullptr || path_utf8 == nullptr) return TC_ERR_INVALID_ARG;
   try {
     return engine->impl.loadBeat(path_utf8);
+  } catch (const std::bad_alloc&) {
+    return TC_ERR_OUT_OF_MEMORY;
+  } catch (...) {
+    return TC_ERR_INTERNAL;
+  }
+}
+
+tc_result tc_load_beat_with_vocals(tc_engine* engine, const char* path_utf8,
+                                   const char* const* vocal_paths_utf8, uint32_t vocal_count) {
+  if (engine == nullptr || path_utf8 == nullptr || vocal_paths_utf8 == nullptr ||
+      vocal_count == 0 || vocal_count > 4096) {
+    return TC_ERR_INVALID_ARG;
+  }
+  try {
+    std::vector<std::string> vocals;
+    vocals.reserve(vocal_count);
+    for (uint32_t i = 0; i < vocal_count; ++i) {
+      if (vocal_paths_utf8[i] == nullptr || vocal_paths_utf8[i][0] == '\0') {
+        return TC_ERR_INVALID_ARG;
+      }
+      vocals.emplace_back(vocal_paths_utf8[i]);
+    }
+    return engine->impl.loadBeat(path_utf8, std::move(vocals));
   } catch (const std::bad_alloc&) {
     return TC_ERR_OUT_OF_MEMORY;
   } catch (...) {

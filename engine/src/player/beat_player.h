@@ -5,6 +5,7 @@
 #include <memory>
 #include <vector>
 
+#include "core/smoothed_param.h"
 #include "core/spsc_ring.h"
 #include "player/track.h"
 #include "player/transposed_track.h"
@@ -57,6 +58,10 @@ class BeatPlayer {
   int audibleSemitones() const noexcept { return audible_.load(std::memory_order_relaxed); }
   // true khi đang chờ khối chưa render tại vị trí phát.
   bool starved() const noexcept { return starved_.load(std::memory_order_relaxed); }
+  // (M6) Beat có stem giọng: phát phần nhạc + k · giọng; k 0…1 trượt 20 ms (0 = karaoke).
+  void setVocalGain(float k) noexcept { vocalGain_.setTarget(k); }
+  float vocalGain() const noexcept { return vocalGain_.target(); }
+  bool hasVocal() const noexcept { return hasVocal_.load(std::memory_order_relaxed); }
 
   // ---- Audio thread ----
   // Ghi beat (stereo interleaved, float −1..1) vào `outStereo`, `frames` frame. [RT]
@@ -75,7 +80,9 @@ class BeatPlayer {
   void adoptCommands() noexcept;
   void retire(const Track* track, TransposedTrack* tt) noexcept;
   bool available(const TransposedTrack* src, uint64_t frame) const noexcept;
-  void sampleAt(const TransposedTrack* src, uint64_t frame, float& l, float& r) const noexcept;
+  // Phần nhạc (+ g · giọng nếu có stem giọng) tại `frame`.
+  void sampleAt(const TransposedTrack* src, uint64_t frame, float g, float& l,
+                float& r) const noexcept;
 
   SpscRing<Command> incoming_{16};
   SpscRing<Retired> retired_{64};
@@ -109,6 +116,8 @@ class BeatPlayer {
   std::atomic<bool> ended_{false};
   std::atomic<int> audible_{0};
   std::atomic<bool> starved_{false};
+  std::atomic<bool> hasVocal_{false};
+  SmoothedParam vocalGain_{0.0f, 0.0f, 1.0f};
 };
 
 }  // namespace tonecore

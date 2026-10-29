@@ -51,7 +51,24 @@
     giới hạn / 20 / 8 Mbit/s (upload giấu sau phần tách) → `docs/separation-results.md`.
   - Test: 11 mới (cửa sổ khớp tách một lần kể cả đoạn đến lộn thứ tự, vùng chồng không nhảy, kiểm
     tra đầu vào, giới hạn, dọn dẹp; API chạy uvicorn thật + tcflac).
-- [ ] B4 … B7: xem mục 7.
+- [x] **B4** (2026-10-29): engine phát bài gốc + stem giọng.
+  - `decode/stems.*`: giải mã bài + ghép các đoạn giọng, đổi giọng về tần số bài nếu khác, chốt
+    độ dài (lệch ≤ 1024 mẫu), **phần nhạc = bài − giọng** (16 bit, kẹp).
+  - `Track.vocal`, `TransposedTrack.vocal`: bộ render đổi tone chạy theo "làn" — mỗi stem một bộ
+    đổi tone + limiter + phần nối riêng, công bố cùng khối → đổi tone đổi cả giọng.
+  - `BeatPlayer`: phát phần nhạc + k · giọng, k trượt 20 ms.
+  - C API: `tc_load_beat_with_vocals`, `TC_NODE_VOCAL` / `TC_PARAM_GAIN` (mặc định 0 = karaoke),
+    `tc_playback_state.has_vocal`, `tc_analyzer_start_with_vocals` (dò tone trên phần nhạc).
+  - Số đo / test:
+    - phần nhạc = bài − giọng đúng từng mẫu (cùng tần số); bài 48 kHz gửi 44,1 kHz: giọng còn sót
+      < −50 dB;
+    - k = 0: giọng 1 kHz không lọt (< 0,002); k = 1: như bài gốc (±2%); kéo k không có bước nhảy;
+    - đổi tone +2: nhạc và giọng cùng lên, k = 0 vẫn không lọt giọng;
+    - phân tích bài + giọng = phân tích file phần nhạc (tone, BPM, LUFS);
+    - audio thread không cấp phát khi đổi k / đổi tone.
+  - Test: 7 mới (`Stems`, `EngineVocalStem`, `AnalyzerVocalStem`, `RealTime.VocalStemDoesNotAllocate`);
+    engine 282/282.
+- [ ] B5 … B7: xem mục 7.
 
 ---
 

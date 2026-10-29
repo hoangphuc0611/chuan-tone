@@ -27,8 +27,11 @@ triển nội bộ; bộ tách phải thay được.
    - `GET /v1/jobs/{id}/vocals/{i}`: giọng của đúng đoạn i (cùng ranh giới mẫu) → app tải dần.
    - `DELETE /v1/jobs/{id}` khi tải xong.
 3. **Chỉ trả stem giọng.** Phần nhạc = bài gốc − giọng, tính trên máy (đúng cách "no_vocals" của
-   Demucs); engine phát `bài − (1 − k) · giọng` với k = "Giữ giọng ca sĩ gốc". Đỡ một nửa dữ liệu tải
-   về, không lưu thêm file nhạc.
+   Demucs); engine phát `phần nhạc + k · giọng` với k = "Giữ giọng ca sĩ gốc" (`TC_NODE_VOCAL`,
+   mặc định 0). Đỡ một nửa dữ liệu tải về, không lưu thêm file nhạc (`tc_load_beat_with_vocals`
+   tính lại khi nạp bài).
+   - Đổi tone: phần nhạc và giọng đổi **riêng** (hai làn của bộ render, cùng khối) rồi mới cộng —
+     đổi tone cả bài rồi trừ giọng đã đổi tone sẽ không triệt tiêu (bộ đổi tone phi tuyến).
 4. **Quyền riêng tư:**
    - Chỉ gửi khi người dùng bấm "Tách giọng ca sĩ" và đồng ý.
    - Server không nhận tên bài; không ghi log nội dung âm thanh.

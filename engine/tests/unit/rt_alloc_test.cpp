@@ -14,6 +14,7 @@
 #include <thread>
 #include <vector>
 
+#include "codec/flac_encoder.h"
 #include "fx/compressor.h"
 #include "fx/de_esser.h"
 #include "fx/delay.h"
@@ -225,6 +226,61 @@ TEST(RealTime, TransposeDoesNotAllocate) {
   EXPECT_EQ(g_allocs.load(), 0);
   tc_engine_destroy(e);
   std::remove(path.c_str());
+#endif
+}
+
+// Beat có stem giọng (M6): phát phần nhạc + k · giọng, đổi k và đổi tone (render cả hai) khi đang
+// phát — audio thread không cấp phát.
+TEST(RealTime, VocalStemDoesNotAllocate) {
+#ifdef TC_SANITIZED
+  GTEST_SKIP() << "Sanitizer tự thay operator new – chạy ở bản build thường.";
+#else
+  tc_engine* e = nullptr;
+  ASSERT_EQ(tc_engine_create(nullptr, &e), TC_OK);
+  ASSERT_EQ(tc_engine_start(e), TC_OK);
+  const auto vocal = tonecore::test::sineInt16(880.0, 44100, 44100 * 4, 2, 0.2);
+  auto mix = tonecore::test::sineInt16(330.0, 44100, 44100 * 4, 2, 0.2);
+  for (std::size_t i = 0; i < mix.size(); ++i) {
+    mix[i] = static_cast<int16_t>(mix[i] + vocal[i]);
+  }
+  const std::string path = tonecore::test::tempPath("rt_stem_mix.wav");
+  const std::string vpath = tonecore::test::tempPath("rt_stem_vocal.flac");
+  ASSERT_TRUE(tonecore::test::writeWav16(path, mix, 44100, 2));
+  ASSERT_EQ(tonecore::writeFileAtomic(
+                vpath, tonecore::encodeFlac(vocal.data(), vocal.size() / 2, 2, 44100)),
+            TC_OK);
+  const char* vocals[] = {vpath.c_str()};
+  ASSERT_EQ(tc_load_beat_with_vocals(e, path.c_str(), vocals, 1), TC_OK);
+  bool loaded = false;
+  for (int i = 0; i < 5000 && !loaded; ++i) {
+    tc_event ev[8];
+    const int32_t n = tc_poll_events(e, ev, 8);
+    for (int32_t k = 0; k < n; ++k) loaded = loaded || ev[k].type == TC_EVENT_BEAT_LOADED;
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  ASSERT_TRUE(loaded);
+  ASSERT_EQ(tc_play(e), TC_OK);
+  std::vector<float> out(2 * 512);
+  g_allocs.store(0);
+  for (int round = 0; round < 300; ++round) {
+    g_counting = true;
+    const tc_result r = tc_engine_process_offline(e, nullptr, out.data(), 512);
+    g_counting = false;
+    ASSERT_EQ(r, TC_OK);
+    if (round % 20 == 5) {
+      ASSERT_EQ(tc_set_param(e, TC_NODE_VOCAL, TC_PARAM_GAIN, (round / 20) % 2 ? 0.0f : 0.8f),
+                TC_OK);
+    }
+    if (round == 50) ASSERT_EQ(tc_set_transpose(e, 2), TC_OK);
+    if (round == 200) ASSERT_EQ(tc_set_transpose(e, 0), TC_OK);
+    if (round % 4 == 0) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    tc_event ev[8];
+    tc_poll_events(e, ev, 8);
+  }
+  EXPECT_EQ(g_allocs.load(), 0);
+  tc_engine_destroy(e);
+  std::remove(path.c_str());
+  std::remove(vpath.c_str());
 #endif
 }
 

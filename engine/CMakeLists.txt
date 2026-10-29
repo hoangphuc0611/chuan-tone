@@ -46,6 +46,7 @@ add_library(tonecore_core STATIC
   src/api/analyzer.cpp
   src/api/exporter.cpp
   src/codec/flac_encoder.cpp
+  src/decode/stems.cpp
   src/latency/mls.cpp
   src/latency/latency_probe.cpp
   src/dsp/resampler.cpp
