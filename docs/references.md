@@ -98,6 +98,9 @@ Mọi thuật toán trong ToneCore được viết từ các nguồn công khai 
 | Nguồn | Dùng cho | File |
 |---|---|---|
 | S. Rouard, F. Massa, A. Défossez, *Hybrid Transformers for Music Source Separation*, ICASSP 2023 (HT Demucs) | Model tách giọng htdemucs — dùng nguyên gói `demucs` qua API công khai (`get_model` / `apply_model`), không tự viết lại; trọng số chỉ phát triển nội bộ | `server/src/chuantone_server/separator.py` |
+| M. van Beurden, A. Weaver, *Free Lossless Audio Codec (FLAC)*, RFC 9639, IETF 2024 | Định dạng FLAC: STREAMINFO, khung, CRC-8 / CRC-16, bộ dự đoán cố định, LPC, mã Rice chia vùng — bộ nén tự viết | `engine/src/codec/flac_encoder.cpp` |
+| J. Makhoul, *Linear prediction: A tutorial review*, Proc. IEEE 63(4), 1975 | Tự tương quan có cửa sổ + Levinson–Durbin cho hệ số LPC của bộ nén FLAC | `engine/src/codec/flac_encoder.cpp` |
+| R. F. Rice, *Some practical universal noiseless coding techniques*, JPL Publication 79-22, 1979 | Mã Rice cho phần dư (chọn tham số theo tổng phần dư) | `engine/src/codec/flac_encoder.cpp` |
 | E. Vincent, R. Gribonval, C. Févotte, *Performance measurement in blind audio source separation*, IEEE TASLP 2006 | Chỉ số SDR (bản đơn giản: 10·log10(Σ s² / Σ (s − ŝ)²)) | `server/tools/bench_separate.py` |
 
 ## Fingerprint

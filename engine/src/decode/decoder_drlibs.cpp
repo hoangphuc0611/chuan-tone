@@ -1,8 +1,9 @@
-// Bộ giải mã dựa trên dr_wav / dr_mp3 (public domain / MIT-0) — dùng cho bản host (test, CLI,
-// CI Linux). App trên điện thoại dùng codec của hệ điều hành.
+// Bộ giải mã dựa trên dr_wav / dr_mp3 / dr_flac (public domain / MIT-0) — dùng cho bản host (test,
+// CLI, CI Linux). App trên điện thoại dùng codec của hệ điều hành.
 
 #define DR_WAV_IMPLEMENTATION
 #define DR_MP3_IMPLEMENTATION
+#define DR_FLAC_IMPLEMENTATION
 #define DR_WAV_NO_STDIO_WIDE  // không cần đường dẫn wchar_t
 #include "decode/decoder.h"
 
@@ -20,6 +21,7 @@
 #pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
 #pragma GCC diagnostic ignored "-Wunused-function"
 #endif
+#include "dr_flac.h"
 #include "dr_mp3.h"
 #include "dr_wav.h"
 #if defined(__clang__) || defined(__GNUC__)
@@ -67,6 +69,23 @@ tc_result decodeFileDrLibs(const std::string& path, DecodedAudio& out) {
     out.frames = drmp3_read_pcm_frames_s16(&mp3, frames, out.samples.data());
     out.samples.resize(static_cast<std::size_t>(out.frames) * out.channels);
     drmp3_uninit(&mp3);
+    return out.frames > 0 ? TC_OK : TC_ERR_NOT_SUPPORTED;
+  }
+
+  if (hasSuffix(path, ".flac")) {
+    drflac* flac = drflac_open_file(path.c_str(), nullptr);
+    if (flac == nullptr) return TC_ERR_INVALID_ARG;
+    const drflac_uint64 frames = flac->totalPCMFrameCount;
+    if (checkLength(frames, flac->sampleRate) != TC_OK || flac->channels == 0) {
+      drflac_close(flac);
+      return TC_ERR_NOT_SUPPORTED;
+    }
+    out.sampleRate = flac->sampleRate;
+    out.channels = flac->channels;
+    out.samples.resize(static_cast<std::size_t>(frames) * flac->channels);
+    out.frames = drflac_read_pcm_frames_s16(flac, frames, out.samples.data());
+    out.samples.resize(static_cast<std::size_t>(out.frames) * out.channels);
+    drflac_close(flac);
     return out.frames > 0 ? TC_OK : TC_ERR_NOT_SUPPORTED;
   }
 

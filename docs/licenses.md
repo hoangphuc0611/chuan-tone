@@ -14,7 +14,7 @@ Quy tắc (CLAUDE.md mục 0.2): chỉ MIT / BSD / Apache-2.0 / Zlib / ISC. LGPL
 | cupertino_icons | ^1.0.8 | MIT | `app` | Có |
 | flutter_lints | ^6.0.0 | BSD-3-Clause | kiểm tra code (dev) | Không |
 | Oboe | 1.11.0 (Gradle prefab) | Apache-2.0 | `engine/src/io/android` | Có |
-| dr_wav / dr_mp3 | commit `dfe8377` (`engine/third_party/dr_libs/COMMIT`) | Public domain / MIT-0 | giải mã cho bản host (test, CI) | Không |
+| dr_wav / dr_mp3 / dr_flac | commit `dfe8377` (`engine/third_party/dr_libs/COMMIT`) | Public domain / MIT-0 | giải mã cho bản host (test, CI, `tcflac` của server); dr_flac từ M6 | Không |
 | file_picker | ^13.1.0 | MIT | `app` – chọn file beat | Có |
 | device_info_plus | ^13.3.0 | BSD-3-Clause | `app` – tên máy trong báo cáo độ trễ | Có |
 | mir_eval | 0.8.2 | MIT | `tools/keytest` – kiểm chéo điểm MIREX (không bắt buộc) | Không |

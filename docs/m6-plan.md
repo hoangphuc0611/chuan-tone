@@ -15,7 +15,28 @@
   - Số đo trên Mac M1 8 GB, bài 4 phút: mặc định demucs 62–97 s; **GPU Apple + autocast 16-bit +
     chồng đoạn 0,1: 31,8–41,8 s** (54–84 s khi máy thiếu RAM), SDR không đổi (11,5 dB) →
     `docs/separation-results.md`.
-- [ ] B2 … B7: xem mục 7.
+  - **Quyết định sau B1** (2026-10-29): upload và tách **gối nhau** — app gửi từng đoạn ~20 s,
+    server tách đoạn nào đủ là tách ngay; khi đo nghiệm thu đóng bớt ứng dụng nặng trên Mac.
+- [x] **B2** (2026-10-29): engine 0.7.
+  - **Bộ nén FLAC tự viết theo RFC 9639** (`engine/src/codec/flac_encoder.*`) thay cho libFLAC, để
+    khỏi đưa thêm một thư viện C (dò CPU, iconv, rule cài đặt) vào bốn nền tảng build:
+    - ghép kênh trái / phải / giữa / hiệu;
+    - bộ dự đoán cố định bậc 0–4 + LPC bậc ≤ 8 (Tukey, Levinson–Durbin, hệ số 12 bit);
+    - mã Rice chia vùng (RICE / RICE2); CRC-8 / CRC-16.
+  - Tần số không có mã riêng ghi thẳng trong đầu khung (ExtAudioFile của Apple không đọc được khung
+    mã "lấy từ STREAMINFO").
+  - C API `tc_export_config_init / tc_exporter_create / start / get_status / cancel / destroy`:
+    giải mã bằng codec OS → (đổi tần số) → các đoạn `<prefix>_000.flac`… ghi qua tên tạm, luồng nền
+    riêng; `chunks_done` cho app upload ngay đoạn đã xong.
+  - `dr_flac` (cùng commit dr_libs) để giải mã trên host; công cụ `tcflac decode / encode / export`
+    cho server.
+  - Số đo:
+    - giải mã lại bằng dr_flac và ExtAudioFile **đúng từng mẫu** (stereo, mono, 11,025–352,8 kHz,
+      khối ngắn / im lặng / nhiễu trắng / mép ±32768);
+    - beat thật còn **61,8–61,9% PCM** (bộ nén FLAC của Apple: 62,1–62,7%; trước khi có LPC: 68–71%);
+    - bài 5–6 phút xuất trong **1,8–2,2 s** trên M1 (Release), đoạn đầu 20 s có sau 0,3 s.
+  - Test: 8 test mới (`FlacEncoder`, `FlacExportApi`); engine 276/276, binding 21/21.
+- [ ] B3 … B7: xem mục 7.
 
 ---
 
@@ -68,8 +89,8 @@
    - Nếu Mac M1 tách chậm (đo ở B1): 60 s đo trên GPU thuê theo giờ — cần bạn có tài khoản.
 3. **Định dạng gửi / nhận.**
    - Gửi lên:
-     - Máy giải mã bằng codec của OS (như phát beat) rồi nén **FLAC 16-bit** (libFLAC, BSD-3, vào
-       engine) — đúng hướng đã chốt ở mục 11.
+     - Máy giải mã bằng codec của OS (như phát beat) rồi nén **FLAC 16-bit** — đúng hướng đã chốt
+       ở mục 11 (B2: bộ nén tự viết theo RFC 9639 thay cho libFLAC).
      - Bài 4 phút 44,1 kHz stereo ≈ 42 MB PCM → **≈ 25 MB FLAC**. Wi-Fi 20–50 Mbit/s mất 4–10 s;
        4G 5–15 Mbit/s mất 15–40 s.
    - Nhận về:

@@ -24,7 +24,7 @@ void main() {
   test('thông tin phiên bản', () {
     expect(ToneCore.isCompatible, isTrue);
     expect(ToneCore.version, isNotEmpty);
-    expect(ToneCore.apiVersionString, '0.6.0');
+    expect(ToneCore.apiVersionString, '0.7.0');
   });
 
   test('tạo, chạy, dừng và huỷ engine', () {

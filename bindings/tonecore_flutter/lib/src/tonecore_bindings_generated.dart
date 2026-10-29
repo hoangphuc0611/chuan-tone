@@ -787,6 +787,112 @@ class ToneCoreBindings {
   late final _tc_analyzer_destroy = _tc_analyzer_destroyPtr
       .asFunction<void Function(ffi.Pointer<tc_analyzer>)>();
 
+  /// ---- Xuất FLAC (từ v0.7) ----
+  /// Giải mã file bằng codec của hệ điều hành (như tc_load_beat) → PCM 16-bit → FLAC (bộ nén tự viết
+  /// theo RFC 9639, không mất dữ liệu). Chia đoạn để app upload dần trong lúc còn đang xuất và server
+  /// tách dần trong lúc còn đang nhận. Luồng nền riêng, kéo trạng thái như tc_analyzer.
+  /// Ghép PCM các đoạn theo thứ tự = đúng PCM bài đã giải mã (+ đổi tần số nếu có).
+  void tc_export_config_init(ffi.Pointer<tc_export_config> config) {
+    return _tc_export_config_init(config);
+  }
+
+  late final _tc_export_config_initPtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Void Function(ffi.Pointer<tc_export_config>)>
+      >('tc_export_config_init');
+  late final _tc_export_config_init = _tc_export_config_initPtr
+      .asFunction<void Function(ffi.Pointer<tc_export_config>)>();
+
+  int tc_exporter_create(ffi.Pointer<ffi.Pointer<tc_exporter>> out_exporter) {
+    return _tc_exporter_create(out_exporter);
+  }
+
+  late final _tc_exporter_createPtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(ffi.Pointer<ffi.Pointer<tc_exporter>>)
+        >
+      >('tc_exporter_create');
+  late final _tc_exporter_create = _tc_exporter_createPtr
+      .asFunction<int Function(ffi.Pointer<ffi.Pointer<tc_exporter>>)>();
+
+  /// out_prefix: đường dẫn không đuôi (thư mục phải có sẵn). Đang chạy → TC_ERR_INVALID_STATE.
+  /// Lỗi đọc / ghi file báo qua trạng thái TC_ANALYSIS_FAILED.
+  int tc_exporter_start(
+    ffi.Pointer<tc_exporter> exporter,
+    ffi.Pointer<ffi.Char> in_path_utf8,
+    ffi.Pointer<ffi.Char> out_prefix_utf8,
+    ffi.Pointer<tc_export_config> config,
+  ) {
+    return _tc_exporter_start(exporter, in_path_utf8, out_prefix_utf8, config);
+  }
+
+  late final _tc_exporter_startPtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(
+            ffi.Pointer<tc_exporter>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<tc_export_config>,
+          )
+        >
+      >('tc_exporter_start');
+  late final _tc_exporter_start = _tc_exporter_startPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<tc_exporter>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<tc_export_config>,
+        )
+      >();
+
+  int tc_exporter_get_status(
+    ffi.Pointer<tc_exporter> exporter,
+    ffi.Pointer<tc_export_status> out_status,
+  ) {
+    return _tc_exporter_get_status(exporter, out_status);
+  }
+
+  late final _tc_exporter_get_statusPtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(
+            ffi.Pointer<tc_exporter>,
+            ffi.Pointer<tc_export_status>,
+          )
+        >
+      >('tc_exporter_get_status');
+  late final _tc_exporter_get_status = _tc_exporter_get_statusPtr
+      .asFunction<
+        int Function(ffi.Pointer<tc_exporter>, ffi.Pointer<tc_export_status>)
+      >();
+
+  /// Yêu cầu dừng (không chờ); các đoạn đã ghi vẫn giữ.
+  int tc_exporter_cancel(ffi.Pointer<tc_exporter> exporter) {
+    return _tc_exporter_cancel(exporter);
+  }
+
+  late final _tc_exporter_cancelPtr =
+      _lookup<ffi.NativeFunction<tc_result Function(ffi.Pointer<tc_exporter>)>>(
+        'tc_exporter_cancel',
+      );
+  late final _tc_exporter_cancel = _tc_exporter_cancelPtr
+      .asFunction<int Function(ffi.Pointer<tc_exporter>)>();
+
+  /// Huỷ việc đang chạy và chờ luồng nền dừng. Cho phép exporter == NULL.
+  void tc_exporter_destroy(ffi.Pointer<tc_exporter> exporter) {
+    return _tc_exporter_destroy(exporter);
+  }
+
+  late final _tc_exporter_destroyPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<tc_exporter>)>>(
+        'tc_exporter_destroy',
+      );
+  late final _tc_exporter_destroy = _tc_exporter_destroyPtr
+      .asFunction<void Function(ffi.Pointer<tc_exporter>)>();
+
   /// ---- Đo lường ----
   int tc_get_metrics(
     ffi.Pointer<tc_engine> engine,
@@ -816,6 +922,8 @@ class _SymbolAddresses {
   get tc_engine_destroy => _library._tc_engine_destroyPtr;
   ffi.Pointer<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<tc_analyzer>)>>
   get tc_analyzer_destroy => _library._tc_analyzer_destroyPtr;
+  ffi.Pointer<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<tc_exporter>)>>
+  get tc_exporter_destroy => _library._tc_exporter_destroyPtr;
 }
 
 /// Mã kết quả. Dùng int32_t (không dùng kiểu enum) trong chữ ký hàm vì kích thước enum
@@ -1383,6 +1491,69 @@ final class tc_analysis_result extends ffi.Struct {
 
 final class tc_analyzer extends ffi.Opaque {}
 
+/// ---- Xuất FLAC (từ v0.7, gửi bài lên server tách giọng — docs/m6-plan.md) ----
+final class tc_export_config extends ffi.Struct {
+  /// = sizeof(tc_export_config); tc_export_config_init tự điền
+  @ffi.Uint32()
+  external int struct_size;
+
+  /// 0 = giữ tần số của file; khác → đổi tần số (tách giọng cần 44100)
+  @ffi.Uint32()
+  external int sample_rate;
+
+  /// 0 = một file <prefix>.flac; > 0 = các đoạn <prefix>_000.flac,
+  /// <prefix>_001.flac… mỗi đoạn chừng này giây (đoạn cuối ngắn hơn)
+  @ffi.Float()
+  external double chunk_seconds;
+
+  /// bài dài hơn → TC_ERR_NOT_SUPPORTED; 0 = giới hạn chung (12 phút)
+  @ffi.Float()
+  external double max_seconds;
+}
+
+final class tc_export_status extends ffi.Struct {
+  /// = sizeof(tc_export_status)
+  @ffi.Uint32()
+  external int struct_size;
+
+  /// tc_analysis_state (cùng các trạng thái)
+  @ffi.Int32()
+  external int state;
+
+  /// 0..1
+  @ffi.Float()
+  external double progress;
+
+  /// tc_result của lần chạy gần nhất
+  @ffi.Int32()
+  external int result;
+
+  /// số file đã ghi xong — đọc / upload được ngay (ghi qua tên tạm)
+  @ffi.Uint32()
+  external int chunks_done;
+
+  /// biết sau khi giải mã xong (0 trước đó)
+  @ffi.Uint32()
+  external int chunks_total;
+
+  /// của file xuất
+  @ffi.Uint32()
+  external int sample_rate;
+
+  @ffi.Uint32()
+  external int channels;
+
+  /// tổng số mẫu mỗi kênh của file xuất; đoạn i bắt đầu ở i·chunk_frames
+  @ffi.Uint64()
+  external int frames;
+
+  /// số mẫu mỗi đoạn (trừ đoạn cuối)
+  @ffi.Uint64()
+  external int chunk_frames;
+}
+
+final class tc_exporter extends ffi.Opaque {}
+
 /// ---- FX giọng (từ v0.6, xem docs/adr/005-fx-chain.md) ----
 /// Chuỗi trên đường giọng nghe lại: micro → HPF 80 Hz → gate → chỉnh giọng → EQ → compressor →
 /// de-esser → delay → reverb → trộn beat → limiter. Preset là một struct C (không JSON trong
@@ -1554,8 +1725,8 @@ final class tc_fx_preset extends ffi.Struct {
 
 const int TC_API_VERSION_MAJOR = 0;
 
-const int TC_API_VERSION_MINOR = 6;
+const int TC_API_VERSION_MINOR = 7;
 
 const int TC_API_VERSION_PATCH = 0;
 
-const int TC_API_VERSION = 1536;
+const int TC_API_VERSION = 1792;

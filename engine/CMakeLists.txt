@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(ToneCore VERSION 0.6.0 LANGUAGES C CXX)
+project(ToneCore VERSION 0.7.0 LANGUAGES C CXX)
 
 # ---- Tùy chọn ----
 option(TC_BUILD_TESTS "Build unit test (GoogleTest)" ON)
@@ -44,6 +44,8 @@ add_library(tonecore_core STATIC
   src/core/engine.cpp
   src/api/tonecore.cpp
   src/api/analyzer.cpp
+  src/api/exporter.cpp
+  src/codec/flac_encoder.cpp
   src/latency/mls.cpp
   src/latency/latency_probe.cpp
   src/dsp/resampler.cpp

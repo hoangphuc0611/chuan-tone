@@ -47,6 +47,7 @@ add_executable(tonecore_tests
   unit/fx_dynamics_test.cpp
   unit/fx_space_test.cpp
   unit/fx_rack_test.cpp
+  unit/flac_test.cpp
 )
 target_link_libraries(tonecore_tests PRIVATE tonecore_testutil GTest::gtest_main)
 tc_set_warnings(tonecore_tests)

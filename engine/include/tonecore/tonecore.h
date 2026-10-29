@@ -31,7 +31,7 @@ extern "C" {
 /* Phiên bản API: (major << 16) | (minor << 8) | patch.
  * Tăng major khi phá vỡ ABI; tăng minor khi thêm hàm. */
 #define TC_API_VERSION_MAJOR 0
-#define TC_API_VERSION_MINOR 6
+#define TC_API_VERSION_MINOR 7
 #define TC_API_VERSION_PATCH 0
 #define TC_API_VERSION \
   ((TC_API_VERSION_MAJOR << 16) | (TC_API_VERSION_MINOR << 8) | TC_API_VERSION_PATCH)
@@ -294,6 +294,31 @@ typedef struct tc_analysis_result {
 
 typedef struct tc_analyzer tc_analyzer;
 
+/* ---- Xuất FLAC (từ v0.7, gửi bài lên server tách giọng — docs/m6-plan.md) ---- */
+
+typedef struct tc_export_config {
+  uint32_t struct_size; /* = sizeof(tc_export_config); tc_export_config_init tự điền */
+  uint32_t sample_rate; /* 0 = giữ tần số của file; khác → đổi tần số (tách giọng cần 44100) */
+  float chunk_seconds;  /* 0 = một file <prefix>.flac; > 0 = các đoạn <prefix>_000.flac,
+                           <prefix>_001.flac… mỗi đoạn chừng này giây (đoạn cuối ngắn hơn) */
+  float max_seconds;    /* bài dài hơn → TC_ERR_NOT_SUPPORTED; 0 = giới hạn chung (12 phút) */
+} tc_export_config;
+
+typedef struct tc_export_status {
+  uint32_t struct_size;  /* = sizeof(tc_export_status) */
+  int32_t state;         /* tc_analysis_state (cùng các trạng thái) */
+  float progress;        /* 0..1 */
+  int32_t result;        /* tc_result của lần chạy gần nhất */
+  uint32_t chunks_done;  /* số file đã ghi xong — đọc / upload được ngay (ghi qua tên tạm) */
+  uint32_t chunks_total; /* biết sau khi giải mã xong (0 trước đó) */
+  uint32_t sample_rate;  /* của file xuất */
+  uint32_t channels;
+  uint64_t frames;       /* tổng số mẫu mỗi kênh của file xuất; đoạn i bắt đầu ở i·chunk_frames */
+  uint64_t chunk_frames; /* số mẫu mỗi đoạn (trừ đoạn cuối) */
+} tc_export_status;
+
+typedef struct tc_exporter tc_exporter;
+
 /* ---- Thông tin thư viện ---- */
 TC_EXPORT uint32_t tc_get_api_version(void);
 TC_EXPORT const char* tc_get_version_string(void);
@@ -499,6 +524,23 @@ TC_EXPORT int32_t tc_analyzer_get_key_timeline(tc_analyzer* analyzer, tc_key_seg
                                                uint32_t max_segments);
 /* Huỷ việc đang chạy và chờ luồng nền dừng (thường < 50 ms). Cho phép analyzer == NULL. */
 TC_EXPORT void tc_analyzer_destroy(tc_analyzer* analyzer);
+
+/* ---- Xuất FLAC (từ v0.7) ----
+ * Giải mã file bằng codec của hệ điều hành (như tc_load_beat) → PCM 16-bit → FLAC (bộ nén tự viết
+ * theo RFC 9639, không mất dữ liệu). Chia đoạn để app upload dần trong lúc còn đang xuất và server
+ * tách dần trong lúc còn đang nhận. Luồng nền riêng, kéo trạng thái như tc_analyzer.
+ * Ghép PCM các đoạn theo thứ tự = đúng PCM bài đã giải mã (+ đổi tần số nếu có). */
+TC_EXPORT void tc_export_config_init(tc_export_config* config);
+TC_EXPORT tc_result tc_exporter_create(tc_exporter** out_exporter);
+/* out_prefix: đường dẫn không đuôi (thư mục phải có sẵn). Đang chạy → TC_ERR_INVALID_STATE.
+ * Lỗi đọc / ghi file báo qua trạng thái TC_ANALYSIS_FAILED. */
+TC_EXPORT tc_result tc_exporter_start(tc_exporter* exporter, const char* in_path_utf8,
+                                      const char* out_prefix_utf8, const tc_export_config* config);
+TC_EXPORT tc_result tc_exporter_get_status(tc_exporter* exporter, tc_export_status* out_status);
+/* Yêu cầu dừng (không chờ); các đoạn đã ghi vẫn giữ. */
+TC_EXPORT tc_result tc_exporter_cancel(tc_exporter* exporter);
+/* Huỷ việc đang chạy và chờ luồng nền dừng. Cho phép exporter == NULL. */
+TC_EXPORT void tc_exporter_destroy(tc_exporter* exporter);
 
 /* ---- Đo lường ---- */
 TC_EXPORT tc_result tc_get_metrics(tc_engine* engine, tc_metrics* out_metrics);

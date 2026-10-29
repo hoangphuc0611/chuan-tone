@@ -14,6 +14,7 @@ functions:
     include:
       - tc_engine_destroy
       - tc_analyzer_destroy
+      - tc_exporter_destroy
 structs:
   include:
     - tc_.*

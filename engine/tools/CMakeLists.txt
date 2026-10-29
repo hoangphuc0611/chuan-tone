@@ -41,3 +41,9 @@ if(TARGET tonecore_testutil)
     set_source_files_properties(signalsmith_ref.cpp PROPERTIES COMPILE_OPTIONS "-w")
   endif()
 endif()
+
+# Nén / giải mã FLAC cho server tách giọng (M6) — dùng chính mã của engine.
+add_executable(tcflac tcflac.cpp)
+target_link_libraries(tcflac PRIVATE tonecore_core)
+tc_set_warnings(tcflac)
+tc_apply_sanitizer(tcflac)
