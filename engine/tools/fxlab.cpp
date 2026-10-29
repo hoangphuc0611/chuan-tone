@@ -1,6 +1,8 @@
 // fxlab — thử bộ FX giọng (M5) trên máy dev.
 //
-//   fxlab render <file> -o out.wav [--start giây] [--dur giây] [khối FX…]
+//   fxlab render <file> -o out.wav [--start giây] [--dur giây] [--normalize-lufs -20]
+//                [--preset dry|bolero|ballad|pop|remix|rap|lofi [--bpm 92] [--makeup dB] [--wet 1]]
+//                [khối FX…]
 //       Giọng (trộn về mono) → gate → EQ → WAV stereo (hai kênh như nhau). In một dòng JSON: độ to
 //       (LUFS) vào / ra, đỉnh, thời gian xử lý.
 //   fxlab response [khối EQ…] [--rate 48000]
@@ -34,6 +36,8 @@
 #include "fx/de_esser.h"
 #include "fx/delay.h"
 #include "fx/equalizer.h"
+#include "fx/fx_chain.h"
+#include "fx/fx_presets.h"
 #include "fx/noise_gate.h"
 #include "fx/reverb.h"
 #include "key/loudness.h"
@@ -70,7 +74,20 @@ struct Chain {
   DelayParams delayParams;
   bool reverb = false;
   ReverbParams reverbParams;
+  // --preset: dùng đúng chuỗi của engine (HPF 80 Hz → FxChain của thể loại) thay cho các khối lẻ.
+  int genre = -1;
+  float makeup = NAN;     // --makeup: ghi đè makeup của preset
+  float threshold = NAN;  // --threshold: ghi đè ngưỡng nén của preset
+  float wet = 1.0f;       // --wet: "Vang"
 };
+
+int genreOf(const std::string& s) {
+  const char* names[] = {"dry", "bolero", "ballad", "pop", "remix", "rap", "lofi"};
+  for (int i = 0; i < 7; ++i) {
+    if (s == names[i]) return i;
+  }
+  return -1;
+}
 
 // "1/4", "1/8", "1/8d", "1/16" hoặc số mili giây.
 bool parseDivision(const std::string& s, DelayParams& p) {
@@ -115,6 +132,22 @@ int parseFx(Chain& c, int i, int argc, char** argv) {
     if (std::sscanf(v, "%f,%f", &c.deessParams.thresholdDb, &c.deessParams.maxReductionDb) < 1) {
       return 0;
     }
+    return 2;
+  }
+  if (a == "--preset") {
+    c.genre = genreOf(v);
+    return c.genre >= 0 ? 2 : 0;
+  }
+  if (a == "--makeup") {
+    c.makeup = static_cast<float>(std::atof(v));
+    return 2;
+  }
+  if (a == "--threshold") {
+    c.threshold = static_cast<float>(std::atof(v));
+    return 2;
+  }
+  if (a == "--wet") {
+    c.wet = static_cast<float>(std::atof(v));
     return 2;
   }
   if (a == "--delay") {  // phần_nốt|ms,hồi_tiếp,ướt[,lpf]
@@ -178,15 +211,20 @@ BiquadCoeffs rbjOf(SvfType type, double fs, double f, double q, double db) {
   }
 }
 
-std::optional<float> lufsOf(const std::vector<float>& mono, uint32_t rate) {
+// Độ to (LUFS) của tín hiệu stereo như lúc phát ra tai nghe (giọng mono = hai kênh như nhau).
+std::optional<float> lufsOf(const std::vector<float>& l, const std::vector<float>& r,
+                            uint32_t rate) {
   DecodedAudio a;
   a.sampleRate = rate;
-  a.channels = 1;
-  a.frames = mono.size();
-  a.samples.resize(mono.size());
-  for (std::size_t i = 0; i < mono.size(); ++i) {
-    a.samples[i] =
-        static_cast<int16_t>(std::lrint(std::fmax(-1.0f, std::fmin(1.0f, mono[i])) * 32767.0f));
+  a.channels = 2;
+  a.frames = l.size();
+  a.samples.resize(2 * l.size());
+  const auto q = [](float v) {
+    return static_cast<int16_t>(std::lrint(std::fmax(-1.0f, std::fmin(1.0f, v)) * 32767.0f));
+  };
+  for (std::size_t i = 0; i < l.size(); ++i) {
+    a.samples[2 * i] = q(l[i]);
+    a.samples[2 * i + 1] = q(r[i]);
   }
   return measureLoudness(a).integratedLufs;
 }
@@ -196,6 +234,7 @@ int cmdRender(int argc, char** argv) {
   const std::string in = argv[2];
   std::string out;
   double startSec = 0.0, durSec = 0.0;
+  double normalizeLufs = 0.0;  // 0 = giữ nguyên mức
   Chain chain;
   for (int i = 3; i < argc;) {
     const std::string a = argv[i];
@@ -208,6 +247,9 @@ int cmdRender(int argc, char** argv) {
       i += 2;
     } else if (a == "--dur" && hasVal) {
       durSec = std::atof(argv[i + 1]);
+      i += 2;
+    } else if (a == "--normalize-lufs" && hasVal) {
+      normalizeLufs = std::atof(argv[i + 1]);
       i += 2;
     } else if (const int used = parseFx(chain, i, argc, argv)) {
       i += used;
@@ -237,7 +279,14 @@ int cmdRender(int argc, char** argv) {
     }
     x[i] = sum / static_cast<float>(ch);
   }
-  const auto lufsIn = lufsOf(x, dec.sampleRate);
+  auto lufsIn = lufsOf(x, x, dec.sampleRate);
+  if (normalizeLufs != 0.0 && lufsIn) {
+    // Đưa giọng về mức hát thật (vocadito thu nhỏ ~ −33 LUFS) để ngưỡng nén / de-esser có nghĩa.
+    const auto g =
+        static_cast<float>(std::pow(10.0, (normalizeLufs - static_cast<double>(*lufsIn)) / 20.0));
+    for (float& v : x) v *= g;
+    lufsIn = lufsOf(x, x, dec.sampleRate);
+  }
 
   const auto t0 = std::chrono::steady_clock::now();
   NoiseGate gate(dec.sampleRate);
@@ -249,6 +298,14 @@ int cmdRender(int argc, char** argv) {
   comp.reset();
   DeEsser deess(dec.sampleRate);
   deess.setParams(chain.deessParams);
+  // --preset: đúng đường giọng của engine — HPF 80 Hz (VoicePitchNode) → [gate] → FxChain.
+  FxPreset preset = genrePreset(static_cast<Genre>(std::max(0, chain.genre)));
+  preset.delay.bpm = chain.delayParams.bpm;
+  if (!std::isnan(chain.makeup)) preset.comp.makeupDb = chain.makeup;
+  if (!std::isnan(chain.threshold)) preset.comp.thresholdDb = chain.threshold;
+  FxChain fxChain(dec.sampleRate, 256, preset, 0);
+  Biquad voiceHpf;
+  voiceHpf.setCoeffs(BiquadCoeffs::highpass(dec.sampleRate, 80.0));
   Delay delay(dec.sampleRate);
   delay.setParams(chain.delayParams);
   delay.reset();
@@ -258,9 +315,32 @@ int cmdRender(int argc, char** argv) {
   std::vector<float> outL(x.size(), 0.0f), outR(x.size(), 0.0f);
   std::vector<float> echo(256), send(256), revL(256), revR(256);
   float maxComp = 0.0f, maxDeess = 0.0f;
+  // Thống kê theo khối khi có tiếng (bỏ khoảng lặng): % thời gian de-esser giảm > 1 dB, mức nén
+  // trung bình.
+  std::size_t voiced = 0, deessBlocks = 0;
+  double compSum = 0.0;
   constexpr uint32_t kBlock = 256;
   for (std::size_t i = 0; i < x.size(); i += kBlock) {
     const auto n = static_cast<uint32_t>(std::min<std::size_t>(kBlock, x.size() - i));
+    if (chain.genre >= 0) {
+      voiceHpf.process(x.data() + i, x.data() + i, n);
+      if (chain.gate) gate.process(x.data() + i, n);
+      fxChain.process(x.data() + i, n, true, 1.0f, 1.0f);
+      for (uint32_t k = 0; k < n; ++k) {
+        outL[i + k] = fxChain.dry()[k] + chain.wet * fxChain.wetL()[k];
+        outR[i + k] = fxChain.dry()[k] + chain.wet * fxChain.wetR()[k];
+      }
+      maxComp = std::fmin(maxComp, fxChain.compGainReductionDb());
+      maxDeess = std::fmin(maxDeess, fxChain.deessGainReductionDb());
+      float e = 0.0f;
+      for (uint32_t k = 0; k < n; ++k) e += x[i + k] * x[i + k];
+      if (e / static_cast<float>(n) > 1e-5f) {  // > −50 dBFS: đang hát
+        ++voiced;
+        deessBlocks += fxChain.deessGainReductionDb() < -1.0f;
+        compSum += static_cast<double>(fxChain.compGainReductionDb());
+      }
+      continue;
+    }
     if (chain.gate) gate.process(x.data() + i, n);
     eq.process(x.data() + i, n);
     if (chain.comp) {
@@ -287,28 +367,28 @@ int cmdRender(int argc, char** argv) {
 
   float peak = 0.0f;
   std::vector<float> stereo(2 * x.size());
-  std::vector<float> mid(x.size());
   for (std::size_t i = 0; i < x.size(); ++i) {
     peak = std::fmax(peak, std::fmax(std::fabs(outL[i]), std::fabs(outR[i])));
     stereo[2 * i] = outL[i];
     stereo[2 * i + 1] = outR[i];
-    mid[i] = 0.5f * (outL[i] + outR[i]);
   }
   if (!test::writeWav(out, stereo, 2, dec.sampleRate)) {
     std::fprintf(stderr, "Không ghi được %s\n", out.c_str());
     return 1;
   }
-  const auto lufsOut = lufsOf(mid, dec.sampleRate);
+  const auto lufsOut = lufsOf(outL, outR, dec.sampleRate);
   const double sec = std::chrono::duration<double>(t1 - t0).count();
   std::printf(
       "{\"file\": \"%s\", \"out\": \"%s\", \"duration_sec\": %.3f, \"lufs_in\": %.2f, "
       "\"lufs_out\": %.2f, \"peak_out_db\": %.2f, \"comp_max_db\": %.1f, \"deess_max_db\": %.1f, "
+      "\"comp_avg_db\": %.1f, \"deess_active_pct\": %.1f, "
       "\"process_sec\": %.4f, \"realtime_x\": %.0f}\n",
       in.c_str(), out.c_str(), static_cast<double>(frames) / dec.sampleRate,
       static_cast<double>(lufsIn.value_or(-99.0f)), static_cast<double>(lufsOut.value_or(-99.0f)),
       20.0 * std::log10(static_cast<double>(peak) + 1e-12), static_cast<double>(maxComp),
-      static_cast<double>(maxDeess), sec,
-      sec > 0.0 ? static_cast<double>(frames) / dec.sampleRate / sec : 0.0);
+      static_cast<double>(maxDeess), voiced > 0 ? compSum / static_cast<double>(voiced) : 0.0,
+      voiced > 0 ? 100.0 * static_cast<double>(deessBlocks) / static_cast<double>(voiced) : 0.0,
+      sec, sec > 0.0 ? static_cast<double>(frames) / dec.sampleRate / sec : 0.0);
   return 0;
 }
 

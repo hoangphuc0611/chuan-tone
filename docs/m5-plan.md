@@ -98,6 +98,18 @@
   - CPU trên M1: Khô ~0, Bolero 0,24%, đổi preset liên tục 0,34% một nhân.
   - 9 test `FxRack` + 6 test `EngineFx` + 1 test RT; không cấp phát; ASan / UBSan / TSan sạch (cả
     test hai luồng).
+- [~] **B6** (2026-10-29, chờ nghe):
+  - **Chỉnh bằng số** trên 10 giọng vocadito (nam / nữ, nhiều ngôn ngữ), chuẩn hoá −23 LUFS (mức
+    hát thật):
+    - ngưỡng nén hạ (−18…−24 → −28…−31 dB) để nén trung bình đạt 2,9–6,3 dB theo thể loại;
+    - makeup tính lại để độ to ≈ như khô: ΔLUFS trung bình −0,34…+0,20 LU;
+    - attack 2–3 ms cho Nhạc trẻ / Remix / Rap;
+    - de-esser chỉ làm việc 2–3% thời gian (đúng lúc có "s").
+  - `fxlab render --preset / --normalize-lufs / --makeup / --threshold / --wet` (thống kê nén và
+    de-esser).
+  - Trang nghe `tools/fx/fxpage.py` → `testdata/fx-ab/` (6 preset × 2 giọng, khô / preset, phiếu
+    chấm).
+  - **Còn:** bạn nghe và chấm → chỉnh lần 1.
 
 ---
 

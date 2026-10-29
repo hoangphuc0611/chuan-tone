@@ -52,6 +52,9 @@ class FxChain {
   // Trung bình bình phương phần ướt của khối vừa xử lý (dò đuôi đã tắt).
   float wetMeanSquare() const noexcept { return wetMs_; }
   bool hasWet() const noexcept { return delayOn_ || preset_.reverbOn; }
+  // Mức giảm hiện tại của compressor / de-esser (dB, ≤ 0) — đồng hồ, công cụ.
+  float compGainReductionDb() const noexcept { return comp_.gainReductionDb(); }
+  float deessGainReductionDb() const noexcept { return deess_.gainReductionDb(); }
 
   const FxPreset& preset() const noexcept { return preset_; }
   uint64_t generation() const noexcept { return generation_; }

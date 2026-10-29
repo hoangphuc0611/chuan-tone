@@ -1,7 +1,7 @@
 # Kết quả bộ FX giọng (M5)
 
 > Tình trạng 2026-10-28: xong B1 (EQ, gate, tiện ích đo, `fxlab`), B2 (compressor, de-esser), B3
-> (delay, reverb), B4 (limiter đầu ra), B5 (chuỗi FX trong engine, đổi preset). Kế hoạch:
+> (delay, reverb), B4 (limiter đầu ra), B5 (chuỗi FX trong engine, đổi preset), B6 (chỉnh preset bằng số; chờ nghe). Kế hoạch:
 > `docs/m5-plan.md`; kiến trúc: ADR-005.
 
 Chỉ tiêu M5 (CLAUDE.md mục 9): **demo đổi preset khi đang hát** — không click, không hụt tiếng.
@@ -233,3 +233,35 @@ Kiến trúc: ADR-005. Test `FxRack.*` (trực tiếp), `EngineFx.*` (qua C API)
 | Bolero (EQ + nén + de-esser + delay + Hall) | 6,5 | 0,24% |
 | Nhạc trẻ | 6,6 | 0,24% |
 | Đổi preset mỗi 2,7 s (trung bình 1,7 chuỗi) | 9,0 | 0,34% |
+
+## B6 — chỉnh preset
+
+**Bằng số** (`fxlab render --preset … --normalize-lufs -23`, 10 giọng vocadito: track 1, 2, 6, 10,
+11, 13, 15, 21, 23, 35 — nam / nữ, tiếng Anh / Tagalog / Tây Ban Nha / Pháp / Quan Thoại, 25 s mỗi
+giọng).
+
+Giá trị ban đầu (ngưỡng nén −18…−24 dB, đo ở −20 LUFS):
+- Nén trung bình chỉ 0,5–3,5 dB — giọng gần như không được nén.
+- Độ to so với khô: Rap −1,5 LU, Ballad +0,6 LU.
+- De-esser chạm −6 dB ở mọi preset nhưng chỉ làm việc 3% thời gian → giữ nguyên.
+
+Quét ngưỡng (−22 / −26 / −30 / −34 dB) → chọn ngưỡng cho mức nén mục tiêu (trữ tình nhẹ ~3 dB,
+Nhạc trẻ / Remix ~4,5 dB, Rap ~6 dB), tính lại makeup cho độ to ≈ khô:
+
+| Preset | Ngưỡng / tỉ lệ / attack / makeup | Nén TB / tối đa | ΔLUFS TB (min / max) | De-esser làm việc (TB / max) |
+|---|---|---|---|---|
+| Bolero | −28 dB / 3:1 / 5 ms / +5 | −2,9 / −13,8 dB | −0,19 (−1,35 / +0,68) | 2% / 7% |
+| Ballad | −28 / 3:1 / 5 / +5 | −3,3 / −13,9 | −0,01 (−1,28 / +0,62) | 2% / 7% |
+| Nhạc trẻ | −29 / 4:1 / 3 / +6 | −4,4 / −17,0 | −0,34 (−1,58 / +0,37) | 3% / 8% |
+| Remix | −29 / 5:1 / 3 / +6,5 | −4,6 / −18,1 | −0,21 (−1,39 / +0,48) | 3% / 8% |
+| Rap | −31 / 6:1 / 2 / +8,5 | −6,3 / −20,2 | −0,21 (−1,11 / +0,52) | 2% / 7% |
+| Lofi | −28 / 3:1 / 5 / +5,5 | −2,9 / −13,8 | +0,20 (−1,09 / +1,10) | 2% / 7% |
+
+**Đỉnh tức thời — còn mở, nghe kiểm ở B8:**
+- Tiếng bật hơi (p, t) lọt qua trước khi bộ dò RMS 10 ms kịp lên, nhân thêm nguyên makeup. Track 35:
+  Khô −2,1 dBFS → Rap +6,2 dBFS (attack 2 ms; 5 ms là +6,6).
+- Limiter đầu ra bắt các đỉnh này. Nếu nghe thấy "bóp" ở tiếng bật hơi:
+  - nâng HPF giọng của Rap,
+  - hoặc rút cửa sổ RMS cho preset nén mạnh.
+
+**Bằng tai:** `testdata/fx-ab/index.html` (`tools/fx/fxpage.py build`). Chờ kết quả.
