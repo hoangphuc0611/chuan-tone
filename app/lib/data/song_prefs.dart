@@ -5,9 +5,9 @@ import 'package:tonecore_flutter/tonecore_flutter.dart';
 
 import 'app_dirs.dart';
 
-/// Lựa chọn của người dùng theo từng bài — tone beat đã đổi (−6…+6) và preset hiệu ứng giọng — để
-/// mở lại bài là hát ngay như lần trước. Kèm preset chọn gần nhất (dùng khi bài mới không gợi ý được
-/// preset nào).
+/// Lựa chọn của người dùng theo từng bài — tone beat đã đổi (−6…+6), preset hiệu ứng giọng, tone sửa
+/// tay — để mở lại bài là hát ngay như lần trước. Kèm preset chọn gần nhất (dùng khi bài mới không
+/// gợi ý được preset nào).
 ///
 /// Khoá = tên file + kích thước, như [AnalysisCache] nhưng KHÔNG kèm phiên bản engine: đây là lựa
 /// chọn của người dùng, không phải kết quả thuật toán.
@@ -67,6 +67,31 @@ class SongPrefs {
     required int size,
     required Genre genre,
   }) => _update(name, size, 'genre', genre.name);
+
+  /// Tone người dùng sửa tay cho bài (tone của bài gốc, chưa cộng đổi tone beat); null = theo kết
+  /// quả dò.
+  Future<MusicKey?> keyFor({required String name, required int size}) async {
+    final k = (await _entry(name, size))['key'];
+    if (k is! Map) return null;
+    final root = k['root'];
+    MusicScale? scale;
+    for (final s in MusicScale.values) {
+      if (s.name == k['scale']) scale = s;
+    }
+    if (root is! int || root < 0 || root > 11 || scale == null) return null;
+    return MusicKey(root, scale);
+  }
+
+  Future<void> setKey({
+    required String name,
+    required int size,
+    required MusicKey? key,
+  }) => _update(
+    name,
+    size,
+    'key',
+    key == null ? null : {'root': key.root, 'scale': key.scale.name},
+  );
 
   /// Preset chọn gần nhất (bài nào cũng được).
   Future<Genre?> lastGenre() async =>

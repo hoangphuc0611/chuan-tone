@@ -43,6 +43,16 @@ class SeparationProgress {
     required this.elapsed,
   });
 
+  /// Trước khi có số liệu nào.
+  static const start = SeparationProgress(
+    stage: SeparationStage.preparing,
+    fraction: 0,
+    chunks: 0,
+    uploaded: 0,
+    downloaded: 0,
+    elapsed: Duration.zero,
+  );
+
   final SeparationStage stage;
 
   /// 0..1 cho thanh tiến độ.

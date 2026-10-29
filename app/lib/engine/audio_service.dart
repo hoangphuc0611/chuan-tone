@@ -106,6 +106,14 @@ class AudioService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Tone của beat GỐC người dùng đã sửa tay cho bài (màn Phân tích bài) → thôi theo bài.
+  void setBaseKey(MusicKey base) {
+    key = base;
+    followSong = false;
+    _engine?.key = key;
+    notifyListeners();
+  }
+
   /// Đổi tone beat (−6…+6). Trả false nếu chưa nạp beat.
   bool setTranspose(int semitones) {
     final e = _engine;

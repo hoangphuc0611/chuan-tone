@@ -90,7 +90,18 @@
   - Test: binding 23 (2 mới), app 58 (14 mới: client với server giả — đủ đường đi, thử lại 5xx,
     lỗi tách, 413 / 429, huỷ, mất kết nối; cài đặt; nơi lưu stem; khu tách giọng ở bề ngang 320 px)
     + `test/separation_e2e_test.dart` chạy khi có server thật.
-- [ ] B6 … B7: xem mục 7.
+- [x] **B6** (2026-10-29): màn Phân tích bài (CLAUDE.md mục 5 màn 2).
+  - Trang chủ: nút to **"Thêm bài hát"** → chọn file → `pages/analysis_page.dart`.
+  - Các bước có biểu tượng + tiến độ: **Tách giọng ca sĩ** (không bắt buộc; nút "Tách" khi đã có
+    máy chủ; xin đồng ý; huỷ được) → **Dò tone** → **Dò nhịp**. Phân tích bài gốc chạy ngay; tách
+    xong thì phân tích lại trên phần nhạc.
+  - Kết quả: "Tone: La thứ (Am)" thật to + BPM, chuyển tone, tuning; **"Sửa tone"** (12 nốt × trưởng /
+    thứ, "Theo máy dò" để bỏ) — nhớ theo bài, Phòng thử dùng tone sửa tay thay cho tone dò được.
+  - Nút **"Hát"** → Phòng thử với bài đã nạp sẵn (Màn hát làm ở M8); bài đã tách giọng tự nạp kèm
+    giọng, có thanh "Giữ giọng ca sĩ gốc".
+  - Dùng chung `engine/song_jobs.dart` (phân tích có bộ nhớ, tách giọng) giữa hai màn.
+  - Test app 63 (5 mới: các bước, thẻ kết quả, hộp sửa tone, nhớ tone sửa tay).
+- [ ] B7: đo trên iPhone, nghe chất lượng tách, báo cáo M6 (xem mục 7).
 
 ---
 

@@ -8,13 +8,14 @@ import 'package:tonecore_flutter/tonecore_flutter.dart';
 import '../data/analysis_cache.dart';
 import '../data/app_settings.dart';
 import '../data/song_prefs.dart';
+import '../data/song_ref.dart';
 import '../data/stem_store.dart';
 import '../engine/audio_service.dart';
 import '../engine/genre_rules.dart';
 import '../engine/labels.dart';
-import '../engine/native_chunk_source.dart';
 import '../engine/playback_watch.dart';
 import '../engine/separation_client.dart';
+import '../engine/song_jobs.dart';
 import '../engine/transpose_timing.dart';
 import '../widgets/fx_panel.dart';
 import '../widgets/gain_slider.dart';
@@ -27,7 +28,10 @@ import '../widgets/transpose_control.dart';
 /// loại (gợi ý + nhớ theo bài), tự chỉnh giọng theo tone của bài (tự cộng số nửa cung đổi tone),
 /// đồng hồ cao độ, số đo.
 class TestRoomPage extends StatefulWidget {
-  const TestRoomPage({super.key});
+  const TestRoomPage({super.key, this.initialSong});
+
+  /// Bài mở sẵn (từ màn Phân tích bài → "Hát").
+  final SongRef? initialSong;
 
   @override
   State<TestRoomPage> createState() => _TestRoomPageState();
@@ -100,6 +104,8 @@ class _TestRoomPageState extends State<TestRoomPage> {
     _monitorOn = e.monitorEnabled;
     _monitorGain = e.monitorGain;
     _sub = _service.events.listen(_onEvent);
+    final initial = widget.initialSong;
+    if (initial != null) unawaited(_openSong(initial));
     _ticker = Timer.periodic(
       const Duration(milliseconds: 250),
       (_) => _refresh(),
@@ -174,8 +180,7 @@ class _TestRoomPageState extends State<TestRoomPage> {
   }
 
   Future<void> _pickBeat() async {
-    final e = _service.engine;
-    if (e == null) return;
+    if (_service.engine == null) return;
     // Lọc theo đuôi file: trên iOS mở app Tệp (không cần quyền thư viện nhạc).
     final files = await FilePicker.pickFiles(
       type: FileType.custom,
@@ -184,26 +189,28 @@ class _TestRoomPageState extends State<TestRoomPage> {
     if (files.isEmpty) return; // người dùng huỷ
     final path = files.single.path;
     if (path == null) return;
+    await _openSong(await SongRef.open(path, files.single.name));
+  }
+
+  Future<void> _openSong(SongRef song) async {
+    final e = _service.engine;
+    if (e == null) return;
     setState(() {
       _loading = true;
       _message = null;
     });
     try {
-      final size = await File(path).length();
-      final vocals = await _loadSong(e, path, files.single.name, size);
-      _beatName = files.single.name;
-      _beatFile = files.single.name;
-      _beatSize = size;
-      _beatPath = path;
+      final vocals = await _loadSong(e, song);
+      _beatName = song.name;
+      _beatFile = song.name;
+      _beatSize = song.size;
+      _beatPath = song.path;
       _vocals = vocals;
       _sepError = null;
       _sepResult = null;
       _service.setVocalGain(0); // bài mới: karaoke
       // Nạp beat mới → engine về tone gốc; đặt lại tone người dùng đã chọn cho bài này.
-      final saved = await _prefs.transposeFor(
-        name: files.single.name,
-        size: size,
-      );
+      final saved = await _prefs.transposeFor(name: song.name, size: song.size);
       _timing.reset();
       _analysisTime = null;
       if (saved != 0 && _service.setTranspose(saved)) {
@@ -212,12 +219,12 @@ class _TestRoomPageState extends State<TestRoomPage> {
       // Preset: đã chọn cho bài → theo tên file; theo BPM thì chờ phân tích xong.
       _applySuggestion(
         suggestGenre(
-          saved: await _prefs.genreFor(name: files.single.name, size: size),
-          fileName: files.single.name,
+          saved: await _prefs.genreFor(name: song.name, size: song.size),
+          fileName: song.name,
         ),
       );
       _playback = e.playback;
-      unawaited(_analyze(path, files.single.name, size, vocals));
+      unawaited(_analyze(song, vocals));
     } on ToneCoreException catch (err) {
       _show('Không mở được file (${err.codeName}). Hãy thử MP3, M4A hoặc WAV.');
     } on TimeoutException {
@@ -226,14 +233,10 @@ class _TestRoomPageState extends State<TestRoomPage> {
     if (mounted) setState(() => _loading = false);
   }
 
-  /// Dò tone / chuyển tone / tuning / BPM của beat vừa nạp (lấy từ bộ nhớ nếu đã phân tích), rồi
-  /// cho tự chỉnh giọng theo bài.
-  Future<void> _analyze(
-    String path,
-    String name,
-    int size,
-    List<String>? vocals,
-  ) async {
+  /// Dò tone / chuyển tone / tuning / BPM của beat vừa nạp (lấy từ bộ nhớ nếu đã phân tích; đã tách
+  /// giọng thì phân tích phần nhạc), rồi cho tự chỉnh giọng theo bài — trừ khi người dùng đã sửa
+  /// tone tay cho bài ở màn Phân tích bài.
+  Future<void> _analyze(SongRef song, List<String>? vocals) async {
     _analyzer?.dispose(); // beat trước còn đang phân tích → dừng
     _analyzer = null;
     _service.applySongAnalysis(null);
@@ -243,45 +246,41 @@ class _TestRoomPageState extends State<TestRoomPage> {
       _analysisError = null;
     });
     final cache = _cache ??= AnalysisCache(engineVersion: ToneCore.version);
-    // Đã tách giọng: phân tích phần nhạc (bài − giọng), lưu riêng với kết quả của bài gốc.
-    final cacheName = vocals == null ? name : '$name#phan-nhac';
-    var result = await cache.lookup(name: cacheName, size: size);
-    if (result == null) {
-      final analyzer = _analyzer = SongAnalyzer.create();
-      final started = _clock.elapsed;
-      try {
-        result = await analyzer.analyze(
-          path,
-          vocals: vocals ?? const [],
-          onProgress: (s) {
-            if (mounted) setState(() => _analysisStatus = s);
-          },
-        );
-        _analysisTime = _clock.elapsed - started;
-        await cache.store(name: cacheName, size: size, analysis: result);
-      } on StateError {
-        return; // đã chọn beat khác: analyzer này bị dispose giữa chừng
-      } on ToneCoreException catch (err) {
-        if (err.code != TcResult.cancelled) {
-          _analysisError = 'Không phân tích được bài (${err.codeName}).';
-        }
-      } on TimeoutException {
-        _analysisError = 'Phân tích bài quá lâu.';
-      } finally {
-        if (identical(_analyzer, analyzer)) {
-          analyzer.dispose();
-          _analyzer = null;
-        }
+    SongAnalysis? result;
+    try {
+      final (r, took) = await analyzeSong(
+        song,
+        vocals: vocals,
+        cache: cache,
+        onAnalyzer: (a) => _analyzer = a,
+        onProgress: (s) {
+          if (mounted) setState(() => _analysisStatus = s);
+        },
+      );
+      result = r;
+      if (took != null) _analysisTime = took;
+    } on StateError {
+      return; // đã chọn beat khác: analyzer này bị dispose giữa chừng
+    } on ToneCoreException catch (err) {
+      if (err.code != TcResult.cancelled) {
+        _analysisError = 'Không phân tích được bài (${err.codeName}).';
+      }
+    } on TimeoutException {
+      _analysisError = 'Phân tích bài quá lâu.';
+    } finally {
+      _analyzer = null;
+    }
+    if (!mounted || _beatFile != song.name || _beatSize != song.size) return;
+    if (result != null) {
+      _service.applySongAnalysis(result);
+      final manual = await _prefs.keyFor(name: song.name, size: song.size);
+      if (manual != null) _service.setBaseKey(manual);
+      // Chưa có preset nhớ / theo tên, người dùng chưa bấm chip → gợi ý theo nhịp.
+      if (_genreSource == null) {
+        _applySuggestion(suggestGenre(fileName: song.name, bpm: result.bpm));
       }
     }
     if (!mounted) return;
-    if (result != null) {
-      _service.applySongAnalysis(result);
-      // Chưa có preset nhớ / theo tên, người dùng chưa bấm chip, beat chưa đổi → gợi ý theo nhịp.
-      if (_genreSource == null && _beatFile == name && _beatSize == size) {
-        _applySuggestion(suggestGenre(fileName: name, bpm: result.bpm));
-      }
-    }
     setState(() {
       _analyzing = false;
       _currentKey = _service.currentKey;
@@ -290,38 +289,34 @@ class _TestRoomPageState extends State<TestRoomPage> {
 
   /// Nạp bài; có stem giọng đã tách thì nạp kèm (hỏng thì xoá stem, nạp bài thường). Trả các đoạn
   /// giọng đã dùng (null = không có).
-  Future<List<String>?> _loadSong(
-    ToneCoreEngine e,
-    String path,
-    String name,
-    int size,
-  ) async {
-    final vocals = await _stemStore.vocalsFor(name: name, size: size);
+  Future<List<String>?> _loadSong(ToneCoreEngine e, SongRef song) async {
+    final vocals = await _stemStore.vocalsFor(name: song.name, size: song.size);
     if (vocals != null) {
       try {
-        await e.loadBeatWithVocalsAndWait(path, vocals);
+        await e.loadBeatWithVocalsAndWait(song.path, vocals);
         return vocals;
       } on ToneCoreException {
-        await _stemStore.delete(name: name, size: size);
+        await _stemStore.delete(name: song.name, size: song.size);
       }
     }
-    await e.loadBeatAndWait(path);
+    await e.loadBeatAndWait(song.path);
     return null;
+  }
+
+  SongRef? get _song {
+    final path = _beatPath;
+    final name = _beatFile;
+    final size = _beatSize;
+    return path == null || name == null || size == null
+        ? null
+        : SongRef(path: path, name: name, size: size);
   }
 
   Future<void> _separate() async {
     final e = _service.engine;
-    final path = _beatPath;
-    final name = _beatFile;
-    final size = _beatSize;
+    final song = _song;
     final server = _server;
-    if (e == null ||
-        path == null ||
-        name == null ||
-        size == null ||
-        server == null) {
-      return;
-    }
+    if (e == null || song == null || server == null) return;
     if (!await _settings.separationConsent()) {
       if (!mounted) return;
       final remember = await askSeparationConsent(context);
@@ -332,59 +327,38 @@ class _TestRoomPageState extends State<TestRoomPage> {
     setState(() {
       _sepError = null;
       _sepResult = null;
-      _sepProgress = const SeparationProgress(
-        stage: SeparationStage.preparing,
-        fraction: 0,
-        chunks: 0,
-        uploaded: 0,
-        downloaded: 0,
-        elapsed: Duration.zero,
-      );
+      _sepProgress = SeparationProgress.start;
     });
-    final tmp = await Directory.systemTemp.createTemp('tach');
-    final source = NativeChunkSource(path, tmp);
-    final client = SeparationClient(
-      baseUrl: server,
-      deviceId: await _settings.deviceId(),
-    );
     try {
-      final out = await _stemStore.prepare(name: name, size: size);
-      final r = await client.separate(
-        source,
-        out,
+      final r = await separateSong(
+        song,
+        server: server,
+        settings: _settings,
+        store: _stemStore,
         cancel: cancel,
         onProgress: (p) {
           if (mounted) setState(() => _sepProgress = p);
         },
       );
-      await _stemStore.markDone(
-        name: name,
-        size: size,
-        chunks: r.vocals.length,
-      );
-      if (!mounted || _beatFile != name || _beatSize != size) {
+      if (!mounted || _beatFile != song.name || _beatSize != song.size) {
         return; // đã đổi bài
       }
       final vocals = [for (final f in r.vocals) f.path];
       final transpose = _service.transpose;
-      await e.loadBeatWithVocalsAndWait(path, vocals);
+      await e.loadBeatWithVocalsAndWait(song.path, vocals);
       _vocals = vocals;
       _sepResult = r;
       _timing.reset();
       if (transpose != 0 && _service.setTranspose(transpose)) {
         _timing.requested(transpose, _clock.elapsed);
       }
-      unawaited(_analyze(path, name, size, vocals));
+      unawaited(_analyze(song, vocals));
     } on SeparationException catch (err) {
       _sepError = err.message;
-      await _stemStore.delete(name: name, size: size);
     } on ToneCoreException catch (err) {
       _sepError = 'Không nạp được giọng đã tách (${err.codeName}).';
-      await _stemStore.delete(name: name, size: size);
+      await _stemStore.delete(name: song.name, size: song.size);
     } finally {
-      source.dispose();
-      client.close();
-      unawaited(tmp.delete(recursive: true).then((_) {}, onError: (_) {}));
       if (mounted) {
         setState(() {
           _sepProgress = null;
@@ -397,14 +371,12 @@ class _TestRoomPageState extends State<TestRoomPage> {
 
   Future<void> _deleteStems() async {
     final e = _service.engine;
-    final path = _beatPath;
-    final name = _beatFile;
-    final size = _beatSize;
-    if (e == null || path == null || name == null || size == null) return;
-    await _stemStore.delete(name: name, size: size);
+    final song = _song;
+    if (e == null || song == null) return;
+    await _stemStore.delete(name: song.name, size: song.size);
     final transpose = _service.transpose;
     try {
-      await e.loadBeatAndWait(path);
+      await e.loadBeatAndWait(song.path);
     } on ToneCoreException catch (err) {
       _show('Không nạp lại được bài (${err.codeName}).');
       return;
@@ -416,7 +388,7 @@ class _TestRoomPageState extends State<TestRoomPage> {
       _timing.requested(transpose, _clock.elapsed);
     }
     if (mounted) setState(() => _playback = e.playback);
-    unawaited(_analyze(path, name, size, null));
+    unawaited(_analyze(song, null));
   }
 
   Future<String> _saveServer(String input) async {
