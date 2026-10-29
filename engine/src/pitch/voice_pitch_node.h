@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "dsp/biquad.h"
+#include "fx/noise_gate.h"
 #include "pitch/corrector.h"
 #include "pitch/pitch_analyzer.h"
 #include "pitch/pitch_state.h"
@@ -16,7 +17,7 @@ namespace tonecore {
 
 // Khối "Tự chỉnh giọng" trên đường micro:
 //
-//   mic → HPF 80 Hz ─┬────────────────────────────────────────────── khô (không trễ) ─┐
+//   mic → HPF 80 Hz → gate ─┬─────────────────────────────────────── khô (không trễ) ─┐
 //                    ├→ hạ mẫu → MPM → F0Tracker → PitchCorrector ─┐                  ├→ trộn
 //                    └──────────────────────────────→ TD-PSOLA (trễ 10 ms) ─ ướt ──────┘
 //
@@ -51,6 +52,13 @@ class VoicePitchNode {
   void setHumanize(float v) noexcept;
   void setFlexCents(float v) noexcept;
   void setVibratoPreserve(float v) noexcept;
+  // Gate (từ M5): bật / tắt và ngưỡng (dBFS, −80…0).
+  void setGateEnabled(bool on) noexcept { gateWanted_.store(on, std::memory_order_relaxed); }
+  bool gateEnabled() const noexcept { return gateWanted_.load(std::memory_order_relaxed); }
+  void setGateThresholdDb(float db) noexcept;
+  float gateThresholdDb() const noexcept {
+    return gateThresholdDb_.load(std::memory_order_relaxed);
+  }
   void setHysteresisCents(float v) noexcept;
   CorrectorParams params() const noexcept;
 
@@ -71,12 +79,19 @@ class VoicePitchNode {
 
  private:
   void syncParams() noexcept;
+  void syncGate() noexcept;
   uint16_t activeKeyMask() const noexcept;
   void onFrame(const PitchFrame& f) noexcept;
   void processSlice(float* io, uint32_t n) noexcept;
 
   double sampleRate_;
   Biquad hpf_;
+  // Gate trước dò cao độ (M5): tắt mặc định → không xử lý, giọng đi thẳng từng mẫu.
+  NoiseGate gate_;
+  std::atomic<bool> gateWanted_{false};
+  std::atomic<float> gateThresholdDb_{-50.0f};
+  bool gateActive_ = false;     // audio thread
+  float gateAppliedDb_ = 1.0f;  // ngưỡng đang dùng (audio thread; 1 = chưa đặt)
   PitchAnalyzer analyzer_;
   PitchCorrector corrector_;
   Psola psola_;

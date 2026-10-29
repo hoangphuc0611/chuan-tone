@@ -76,6 +76,28 @@
   - Dưới trần: đúng từng mẫu, chỉ trễ 48 frame (test đổi tone M4 so từng mẫu sau khi bù trễ).
   - CPU: 0,04% một nhân (M1).
   - Giọng nghe lại trễ thêm 1 ms: iPhone loa ngoài ước 12,6 → 13,6 ms (đo lại ở B8).
+- [x] **B5** (2026-10-29): engine lắp đủ chuỗi FX + đổi preset không click — ADR-005.
+  - `fx/fx_chain.*` (khô: EQ → nén → de-esser; ướt: delay → reverb), `needsRebuild` (cấu trúc /
+    liên tục).
+  - `fx/fx_rack.*`: ô atomic cho chuỗi mới / bản cập nhật (bấm dồn chỉ giữ lần cuối); crossfade
+    phần khô 15 ms; đuôi cũ ngân tới −80 dB / 4 s; tối đa 2 chuỗi cùng ngân; trả về qua SPSC.
+  - `fx/fx_presets.*`: 7 preset khởi đầu theo mục 5.
+  - Gate trong `VoicePitchNode` (sau HPF, trước dò cao độ; bật giữa câu không cắt cụt, tắt thì mở
+    hẳn rồi mới bỏ qua).
+  - C API 0.6: `tc_fx_preset` + `tc_fx_preset_init / tc_apply_fx_preset / tc_get_fx_preset /
+    tc_set_tempo / tc_get_tempo`, `TC_NODE_GATE`, `TC_NODE_FX` (`TC_PARAM_MIX` = "Vang"),
+    `tc_metrics.fx_load / fx_chains`.
+  - Mặc định Khô + gate tắt → mọi test cũ giữ nguyên.
+
+  Số đo:
+  - 7 preset đổi mỗi 200 ms khi đang hát: trên 12 kHz < −60 dB (crossfade 1 mẫu thì −55 dB → test
+    bắt được), không cửa sổ 10 ms nào tụt > 3 dB.
+  - Đuôi Hall còn ngân sau khi đổi sang Khô.
+  - Đổi độ ướt / EQ: không dựng lại chuỗi, đuôi +6,0 dB đúng.
+  - Gate −40 dB: tiếng −60 dBFS giảm 30 dB, tiếng to đi qua.
+  - CPU trên M1: Khô ~0, Bolero 0,24%, đổi preset liên tục 0,34% một nhân.
+  - 9 test `FxRack` + 6 test `EngineFx` + 1 test RT; không cấp phát; ASan / UBSan / TSan sạch (cả
+    test hai luồng).
 
 ---
 

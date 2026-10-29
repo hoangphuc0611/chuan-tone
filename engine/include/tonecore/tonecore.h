@@ -31,7 +31,7 @@ extern "C" {
 /* Phiên bản API: (major << 16) | (minor << 8) | patch.
  * Tăng major khi phá vỡ ABI; tăng minor khi thêm hàm. */
 #define TC_API_VERSION_MAJOR 0
-#define TC_API_VERSION_MINOR 5
+#define TC_API_VERSION_MINOR 6
 #define TC_API_VERSION_PATCH 0
 #define TC_API_VERSION \
   ((TC_API_VERSION_MAJOR << 16) | (TC_API_VERSION_MINOR << 8) | TC_API_VERSION_PATCH)
@@ -85,7 +85,9 @@ typedef enum tc_node_id {
   TC_NODE_MASTER = 0,  /* tổng đầu ra */
   TC_NODE_MONITOR = 1, /* nghe lại giọng (micro → tai nghe) */
   TC_NODE_BEAT = 2,    /* nhạc beat */
-  TC_NODE_PITCH = 3    /* tự chỉnh giọng (từ v0.3) */
+  TC_NODE_PITCH = 3,   /* tự chỉnh giọng (từ v0.3) */
+  TC_NODE_GATE = 4,    /* cổng chặn tiếng ồn trên micro, trước dò cao độ (từ v0.6) */
+  TC_NODE_FX = 5       /* chuỗi FX giọng EQ → nén → de-esser → delay → reverb (từ v0.6) */
 } tc_node_id;
 
 typedef enum tc_param_id {
@@ -98,7 +100,14 @@ typedef enum tc_param_id {
   TC_PARAM_HUMANIZE = 3,         /* 0..1: nốt ngân dài thì chỉnh chậm dần */
   TC_PARAM_FLEX_CENTS = 4,       /* 0..100 cent: lệch dưới ngưỡng này thì không chỉnh */
   TC_PARAM_VIBRATO_PRESERVE = 5, /* 0..1: giữ rung giọng / luyến láy */
-  TC_PARAM_HYSTERESIS_CENTS = 6  /* 0..50 cent: vùng trễ khi chuyển nốt đích */
+  TC_PARAM_HYSTERESIS_CENTS = 6, /* 0..50 cent: vùng trễ khi chuyển nốt đích */
+  /* ---- từ v0.6 ----
+   * TC_NODE_GATE: TC_PARAM_ENABLED (mặc định tắt), TC_PARAM_THRESHOLD_DB.
+   * TC_NODE_FX: TC_PARAM_ENABLED (mặc định bật; tắt = preset "Khô", đuôi vang đang có vẫn ngân
+   * nốt), TC_PARAM_MIX ("Vang": nhân phần vọng + vang của preset, 0..2, mặc định 1, trượt 20 ms).
+   */
+  TC_PARAM_MIX = 7,
+  TC_PARAM_THRESHOLD_DB = 8 /* −80..0 dBFS: gate mở khi tiếng to hơn (đóng thì giảm −30 dB) */
 } tc_param_id;
 
 /* Thang âm cho tự chỉnh giọng (từ v0.3). */
@@ -170,6 +179,9 @@ typedef struct tc_metrics {
   float cpu_load_peak;              /* 0..1 – tải cao nhất trong 1 giây gần nhất */
   int32_t algorithm_latency_frames; /* độ trễ thêm do xử lý: 48 (limiter đầu ra 1 ms, từ M5) + 480
                                        khi bật chỉnh giọng, ở 48 kHz */
+  /* ---- từ v0.6 ---- */
+  float fx_load;     /* 0..1 – phần thời gian của block dành cho chuỗi FX giọng (block gần nhất) */
+  int32_t fx_chains; /* số chuỗi FX đang chạy: 1 + số chuỗi cũ còn ngân sau khi đổi preset */
 } tc_metrics;
 
 typedef struct tc_playback_state {
@@ -321,6 +333,101 @@ TC_EXPORT tc_result tc_get_playback_state(tc_engine* engine, tc_playback_state* 
  * 0. */
 TC_EXPORT tc_result tc_set_transpose(tc_engine* engine, int32_t semitones);
 TC_EXPORT tc_result tc_get_transpose(tc_engine* engine, int32_t* out_semitones);
+
+/* ---- FX giọng (từ v0.6, xem docs/adr/005-fx-chain.md) ----
+ * Chuỗi trên đường giọng nghe lại: micro → HPF 80 Hz → gate → chỉnh giọng → EQ → compressor →
+ * de-esser → delay → reverb → trộn beat → limiter. Preset là một struct C (không JSON trong
+ * engine). tc_apply_fx_preset đổi preset khi đang hát không click:
+ *  - khác "cấu trúc" (bật / tắt khối, loại băng EQ, thời gian delay, kiểu phòng, pre-delay) → dựng
+ *    chuỗi mới; phần khô crossfade 15 ms, đuôi delay / reverb của preset cũ ngân nốt (tới −80 dB,
+ *    tối đa 4 s);
+ *  - cùng cấu trúc (dB, tần số, Q, ngưỡng, tỉ lệ, độ ướt, hồi tiếp, RT60, damping…) → chuỗi đang
+ *    chạy trượt dần sang giá trị mới.
+ * Gọi liên tiếp trước khi audio kịp nhận → chỉ lần cuối được dùng. */
+typedef enum tc_genre {
+  TC_GENRE_DRY = 0, /* "Khô": không hiệu ứng */
+  TC_GENRE_BOLERO = 1,
+  TC_GENRE_BALLAD = 2,
+  TC_GENRE_POP = 3, /* Nhạc trẻ */
+  TC_GENRE_REMIX = 4,
+  TC_GENRE_RAP = 5,
+  TC_GENRE_LOFI = 6
+} tc_genre;
+
+typedef enum tc_eq_band_type {
+  TC_EQ_OFF = 0,
+  TC_EQ_BELL = 3,
+  TC_EQ_LOW_SHELF = 4,
+  TC_EQ_HIGH_SHELF = 5
+} tc_eq_band_type;
+
+typedef enum tc_delay_division {
+  TC_DELAY_OFF = 0,
+  TC_DELAY_QUARTER = 1,       /* 1/4 nốt (theo tc_set_tempo) */
+  TC_DELAY_EIGHTH = 2,        /* 1/8 */
+  TC_DELAY_DOTTED_EIGHTH = 3, /* 1/8 chấm */
+  TC_DELAY_SIXTEENTH = 4,     /* 1/16 */
+  TC_DELAY_MS = 5             /* theo delay_ms */
+} tc_delay_division;
+
+typedef enum tc_reverb_type {
+  TC_REVERB_ROOM = 0,
+  TC_REVERB_HALL = 1,
+  TC_REVERB_PLATE = 2
+} tc_reverb_type;
+
+typedef struct tc_eq_band {
+  int32_t type; /* tc_eq_band_type */
+  float freq_hz;
+  float gain_db; /* −18..18 */
+  float q;       /* 0,1..10 */
+} tc_eq_band;
+
+typedef struct tc_fx_preset {
+  uint32_t struct_size; /* = sizeof(tc_fx_preset); tc_fx_preset_init tự điền */
+  /* EQ: thông cao / thông thấp bậc 2 (0 = tắt) + 5 băng */
+  float eq_high_pass_hz;
+  float eq_low_pass_hz;
+  tc_eq_band eq_bands[5];
+  /* Compressor */
+  int32_t comp_enabled;
+  float comp_threshold_db; /* dBFS (sin toàn thang = 0) */
+  float comp_ratio;        /* ≥ 1 */
+  float comp_knee_db;
+  float comp_attack_ms;
+  float comp_release_ms;
+  float comp_makeup_db;
+  /* De-esser (băng 5–9 kHz, shelf 5 kHz) */
+  int32_t deess_enabled;
+  float deess_threshold_db;
+  float deess_max_reduction_db; /* 0..12 */
+  /* Delay (mono; thời gian theo tc_set_tempo × phần nốt, hoặc delay_ms) */
+  int32_t delay_division; /* tc_delay_division */
+  float delay_ms;         /* khi TC_DELAY_MS: 1..2000 */
+  float delay_feedback;   /* 0..0,5 */
+  float delay_mix;        /* 0..1: độ lớn tiếng vọng so với tiếng khô */
+  float delay_low_pass_hz;
+  float delay_high_pass_hz;
+  /* Reverb (FDN 8 dòng, stereo) */
+  int32_t reverb_enabled;
+  int32_t reverb_type;       /* tc_reverb_type */
+  float reverb_decay_s;      /* RT60 0,2..8 */
+  float reverb_pre_delay_ms; /* 0..100 */
+  float reverb_damping;      /* 0..0,9: RT60 ở 4 kHz = decay · (1 − damping) */
+  float reverb_mix;          /* 0..1: độ lớn tiếng vang so với tiếng khô (trong băng giọng) */
+} tc_fx_preset;
+
+/* Điền preset theo thể loại (giá trị khởi đầu của bảng mục 6, CLAUDE.md). genre lạ → "Khô".
+ * Mức chỉnh giọng của thể loại do app đặt riêng (tc_set_correction_preset). */
+TC_EXPORT void tc_fx_preset_init(tc_fx_preset* preset, int32_t genre);
+/* Thông số ngoài khoảng thì bị kẹp; NaN hoặc struct_size sai → TC_ERR_INVALID_ARG. */
+TC_EXPORT tc_result tc_apply_fx_preset(tc_engine* engine, const tc_fx_preset* preset);
+/* Preset đang đặt (kể cả khi TC_NODE_FX đang tắt). */
+TC_EXPORT tc_result tc_get_fx_preset(tc_engine* engine, tc_fx_preset* out_preset);
+/* Nhịp bài (BPM) cho delay theo nốt; ≤ 0 = không rõ (100). Thường gọi khi nạp bài (BPM từ phân
+ * tích). */
+TC_EXPORT tc_result tc_set_tempo(tc_engine* engine, float bpm);
+TC_EXPORT tc_result tc_get_tempo(tc_engine* engine, float* out_bpm);
 
 /* ---- Route ----
  * Android: lớp Kotlin báo loại thiết bị (NDK không đọc được). iOS: engine tự phát hiện. */

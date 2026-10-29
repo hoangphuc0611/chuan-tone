@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(ToneCore VERSION 0.5.0 LANGUAGES C CXX)
+project(ToneCore VERSION 0.6.0 LANGUAGES C CXX)
 
 # ---- Tùy chọn ----
 option(TC_BUILD_TESTS "Build unit test (GoogleTest)" ON)
@@ -79,6 +79,9 @@ add_library(tonecore_core STATIC
   src/fx/de_esser.cpp
   src/fx/delay.cpp
   src/fx/reverb.cpp
+  src/fx/fx_chain.cpp
+  src/fx/fx_rack.cpp
+  src/fx/fx_presets.cpp
 )
 
 # Mã theo nền tảng: backend âm thanh + bộ giải mã file.

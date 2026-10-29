@@ -10,6 +10,8 @@
 #include "fx/de_esser.h"
 #include "fx/delay.h"
 #include "fx/equalizer.h"
+#include "fx/fx_presets.h"
+#include "fx/fx_rack.h"
 #include "fx/noise_gate.h"
 #include "fx/peak_limiter.h"
 #include "fx/reverb.h"
@@ -164,3 +166,46 @@ void BM_OutputLimiter(benchmark::State& state) {
 BENCHMARK(BM_OutputLimiter);
 
 }  // namespace
+
+// Cả chuỗi FX giọng qua FxRack theo preset (gồm crossfade / chuỗi cũ khi có): Khô, Bolero (đủ 5
+// khối, Hall), Nhạc trẻ.
+void BM_FxRackPreset(benchmark::State& state) {
+  tonecore::FxRack rack(kFs, kBlock);
+  rack.apply(tonecore::genrePreset(static_cast<tonecore::Genre>(state.range(0))));
+  auto x = voiceLike(kBlock);
+  std::vector<float> l(kBlock), r(kBlock);
+  for (int i = 0; i < 1000; ++i)
+    rack.process(x.data(), l.data(), r.data(), kBlock);  // qua crossfade
+  for (auto _ : state) {
+    rack.process(x.data(), l.data(), r.data(), kBlock);
+    benchmark::DoNotOptimize(l.data());
+  }
+  report(state, kBlock);
+}
+BENCHMARK(BM_FxRackPreset)->Arg(0)->Arg(1)->Arg(3);
+
+// Đổi preset liên tục (cứ 1 000 khối ≈ 2,7 s, xen kẽ Bolero / Nhạc trẻ): luôn có chuỗi cũ còn ngân
+// (tối đa 4 s) → đỉnh CPU của việc đổi preset. Không tính thời gian dựng chuỗi (luồng điều khiển).
+void BM_FxRackSwapping(benchmark::State& state) {
+  tonecore::FxRack rack(kFs, kBlock);
+  auto x = voiceLike(kBlock);
+  std::vector<float> l(kBlock), r(kBlock);
+  int it = 0;
+  double chains = 0.0;
+  for (auto _ : state) {
+    if (it % 1000 == 0) {
+      state.PauseTiming();
+      rack.apply(tonecore::genrePreset((it / 1000) % 2 == 0 ? tonecore::Genre::Bolero
+                                                            : tonecore::Genre::Pop));
+      rack.collectGarbage();
+      state.ResumeTiming();
+    }
+    rack.process(x.data(), l.data(), r.data(), kBlock);
+    benchmark::DoNotOptimize(l.data());
+    chains += rack.audioChains();
+    ++it;
+  }
+  state.counters["avg_chains"] = chains / static_cast<double>(it);
+  report(state, kBlock);
+}
+BENCHMARK(BM_FxRackSwapping);

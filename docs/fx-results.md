@@ -1,7 +1,8 @@
 # Kết quả bộ FX giọng (M5)
 
 > Tình trạng 2026-10-28: xong B1 (EQ, gate, tiện ích đo, `fxlab`), B2 (compressor, de-esser), B3
-> (delay, reverb), B4 (limiter đầu ra). Kế hoạch: `docs/m5-plan.md`.
+> (delay, reverb), B4 (limiter đầu ra), B5 (chuỗi FX trong engine, đổi preset). Kế hoạch:
+> `docs/m5-plan.md`; kiến trúc: ADR-005.
 
 Chỉ tiêu M5 (CLAUDE.md mục 9): **demo đổi preset khi đang hát** — không click, không hụt tiếng.
 
@@ -204,3 +205,31 @@ Engine trộn giọng nghe lại + beat → × master gain → `PeakLimiter` (nh
 - Phép đo độ trễ khứ hồi (MLS) đi đường riêng, không qua limiter. Vậy trễ nghe lại thật = số đo +
   `algorithm_latency_frames`.
 - Ước tính iPhone loa ngoài: 12,6 + 1 = 13,6 ms, vẫn ≤ 15 ms (ADR-002). Đo lại ở B8.
+
+## B5 — chuỗi FX trong engine và đổi preset
+
+Kiến trúc: ADR-005. Test `FxRack.*` (trực tiếp), `EngineFx.*` (qua C API):
+
+| Phép thử | Kết quả |
+|---|---|
+| Preset Khô (mặc định) | ra = giọng vào, đúng từng mẫu |
+| Bolero, hát 1 s rồi im | đuôi 200–700 ms sau vẫn còn (> −40 dB so với lúc hát); phần vang (không delay) hai kênh tương quan < 0,3 |
+| Đổi độ ướt ×2 + EQ khi đang hát (cùng cấu trúc) | vẫn 1 chuỗi; đuôi +6,0 dB (±1) |
+| Đổi sang Khô đúng lúc hát xong | 2 chuỗi trong lúc ngân; đuôi Hall còn 200–500 ms sau; chuỗi cũ được trả về khi < −80 dB (≤ 4 s) |
+| Đổi qua 7 preset mỗi 200 ms khi đang hát (sin 220 Hz) | trên 12 kHz < −60 dB; không cửa sổ 10 ms nào tụt > 3 dB so với hai bên |
+| Cùng phép thử, crossfade 1 mẫu (kiểm độ nhạy) | −55 dB → test đỏ |
+| 20 lần apply dồn trước khi audio nhận | ≤ 2 chuỗi (chỉ lần cuối được dùng) |
+| "Vang" 0 / 2 | hết đuôi / đuôi +6,02 dB |
+| Tắt FX | Khô + đuôi preset cũ ngân; preset người dùng vẫn nhớ |
+| Gate −40 dB, tiếng −60 dBFS / −12 dBFS | giảm 30 dB / không đổi (±0,1 dB) |
+| Hai luồng song song (điều khiển đổi preset / tempo / Vang mỗi 0,3 ms, audio xử lý) | TSan sạch |
+| Đổi preset, đặt Vang, gate giữa các block | audio thread không cấp phát |
+
+**CPU** (`BM_FxRack*`, Mac M1, Release, khối 128 mẫu):
+
+| Trường hợp | µs / khối | % một nhân |
+|---|---|---|
+| Khô | 0,16 | ~0 |
+| Bolero (EQ + nén + de-esser + delay + Hall) | 6,5 | 0,24% |
+| Nhạc trẻ | 6,6 | 0,24% |
+| Đổi preset mỗi 2,7 s (trung bình 1,7 chuỗi) | 9,0 | 0,34% |

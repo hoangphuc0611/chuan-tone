@@ -37,6 +37,13 @@ void NoiseGate::reset() noexcept {
 }
 
 // [RT]
+void NoiseGate::forceOpen() noexcept {
+  open_ = true;
+  hold_ = holdSamples_;
+  gain_ = 1.0f;
+}
+
+// [RT]
 void NoiseGate::process(float* x, uint32_t n) noexcept {
   for (uint32_t i = 0; i < n; ++i) {
     env_ = std::max(std::fabs(x[i]), env_ * envDecay_);

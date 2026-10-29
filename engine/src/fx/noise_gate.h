@@ -27,6 +27,8 @@ class NoiseGate {
 
   void setParams(const GateParams& p) noexcept;  // [RT]
   void reset() noexcept;
+  // [RT] Coi như đang mở (bắt đầu giữ): bật gate giữa câu hát không cắt cụt tiếng đang hát.
+  void forceOpen() noexcept;
   void process(float* x, uint32_t n) noexcept;  // [RT]
 
   bool isOpen() const noexcept { return open_; }

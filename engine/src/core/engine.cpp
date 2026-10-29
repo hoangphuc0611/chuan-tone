@@ -25,9 +25,12 @@ Engine::Engine(const EngineConfig& config)
       pitch_(config.sampleRate, config.maxBlockFrames),
       probe_(config.sampleRate),
       limiter_(2, config.sampleRate, kLimiterCeiling, kLimiterLookaheadMs, kLimiterReleaseMs),
+      fxRack_(config.sampleRate, config.maxBlockFrames),
       micBuf_(config.maxBlockFrames, 0.0f),
       beatBuf_(2 * static_cast<std::size_t>(config.maxBlockFrames), 0.0f),
       stimBuf_(config.maxBlockFrames, 0.0f),
+      voiceL_(config.maxBlockFrames, 0.0f),
+      voiceR_(config.maxBlockFrames, 0.0f),
       mixBuf_(2 * static_cast<std::size_t>(config.maxBlockFrames), 0.0f),
       outBuf_(2 * static_cast<std::size_t>(config.maxBlockFrames), 0.0f) {
   masterGain_.prepare(config_.sampleRate, kGainSmoothingSec);
@@ -117,6 +120,28 @@ tc_result Engine::setParam(int32_t nodeId, int32_t paramId, float value) noexcep
         return TC_OK;
       }
       break;
+    case TC_NODE_GATE:
+      if (!std::isfinite(value)) return TC_ERR_INVALID_ARG;
+      if (paramId == TC_PARAM_ENABLED) {
+        pitch_.setGateEnabled(value >= 0.5f);
+        return TC_OK;
+      }
+      if (paramId == TC_PARAM_THRESHOLD_DB) {
+        pitch_.setGateThresholdDb(value);
+        return TC_OK;
+      }
+      break;
+    case TC_NODE_FX:
+      if (!std::isfinite(value)) return TC_ERR_INVALID_ARG;
+      if (paramId == TC_PARAM_ENABLED) {
+        fxRack_.setEnabled(value >= 0.5f);
+        return TC_OK;
+      }
+      if (paramId == TC_PARAM_MIX) {
+        fxRack_.setWet(value);
+        return TC_OK;
+      }
+      break;
     case TC_NODE_PITCH:
       if (!std::isfinite(value)) return TC_ERR_INVALID_ARG;
       switch (paramId) {
@@ -167,6 +192,28 @@ tc_result Engine::getParam(int32_t nodeId, int32_t paramId, float* outValue) con
   if (paramId == TC_PARAM_ENABLED && nodeId == TC_NODE_MONITOR) {
     *outValue = monitorEnabled_.load(std::memory_order_relaxed) ? 1.0f : 0.0f;
     return TC_OK;
+  }
+  if (nodeId == TC_NODE_GATE) {
+    if (paramId == TC_PARAM_ENABLED) {
+      *outValue = pitch_.gateEnabled() ? 1.0f : 0.0f;
+      return TC_OK;
+    }
+    if (paramId == TC_PARAM_THRESHOLD_DB) {
+      *outValue = pitch_.gateThresholdDb();
+      return TC_OK;
+    }
+    return TC_ERR_INVALID_ARG;
+  }
+  if (nodeId == TC_NODE_FX) {
+    if (paramId == TC_PARAM_ENABLED) {
+      *outValue = fxRack_.enabled() ? 1.0f : 0.0f;
+      return TC_OK;
+    }
+    if (paramId == TC_PARAM_MIX) {
+      *outValue = fxRack_.wet();
+      return TC_OK;
+    }
+    return TC_ERR_INVALID_ARG;
   }
   if (nodeId == TC_NODE_PITCH) {
     const CorrectorParams p = pitch_.params();
@@ -495,6 +542,7 @@ std::size_t Engine::pollEvents(tc_event* out, std::size_t max) {
   checkLatencyCompletion();
   // Track cũ (vài chục MB) được huỷ ở luồng nền – cùng luồng với setTrack().
   if (player_.hasGarbage()) worker_.post([this] { player_.collectGarbage(); });
+  fxRack_.collectGarbage();  // chuỗi FX cũ đã ngân xong (luồng điều khiển)
   return events_.pop(out, max);
 }
 
@@ -613,13 +661,24 @@ void Engine::processChunk(const float* in, uint32_t inChannels, float* out, uint
     pitch_.setTranspose(audible);
   }
 
+  // FX giọng: khô (EQ, nén, de-esser) + ướt (delay, reverb) → stereo. Luôn chạy (cả khi tắt nghe
+  // lại) để đuôi vang liền mạch khi bật lại; preset "Khô" thì đi thẳng.
+  const auto fx0 = std::chrono::steady_clock::now();
+  float* vl = voiceL_.data();
+  float* vr = voiceR_.data();
+  fxRack_.process(mic, vl, vr, frames);
+  const double fxSec =
+      std::chrono::duration<double>(std::chrono::steady_clock::now() - fx0).count();
+  fxLoad_.store(static_cast<float>(fxSec * config_.sampleRate / static_cast<double>(frames)),
+                std::memory_order_relaxed);
+
   float* mix = mixBuf_.data();
   for (uint32_t i = 0; i < frames; ++i) {
-    const float voice = mic[i] * monitorGain_.next() * monitorMix_.next();
+    const float mon = monitorGain_.next() * monitorMix_.next();
     const float bg = beatGain_.next();
     const float mg = masterGain_.next();
-    mix[2 * i] = (beat[2 * i] * bg + voice) * mg;
-    mix[2 * i + 1] = (beat[2 * i + 1] * bg + voice) * mg;
+    mix[2 * i] = (beat[2 * i] * bg + vl[i] * mon) * mg;
+    mix[2 * i + 1] = (beat[2 * i + 1] * bg + vr[i] * mon) * mg;
   }
   // Limiter: đỉnh vượt trần (giọng to + beat to + gain) được hạ mượt thay vì kẹp méo.
   float* lim = outBuf_.data();
@@ -651,6 +710,8 @@ void Engine::fillMetrics(tc_metrics& m) const noexcept {
   m.cpu_load_peak =
       std::max(cpuPeak_.load(std::memory_order_relaxed), cpuLoad_.load(std::memory_order_relaxed));
   m.algorithm_latency_frames = pitch_.algorithmLatency() + limiter_.lookahead();
+  m.fx_load = fxLoad_.load(std::memory_order_relaxed);
+  m.fx_chains = fxRack_.audioChains();
   if (backend_) {
     const BackendInfo info = backend_->info();
     m.xruns = backend_->xruns();

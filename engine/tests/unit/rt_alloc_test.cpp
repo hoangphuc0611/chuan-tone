@@ -279,3 +279,43 @@ TEST(RealTime, FxBlocksDoNotAllocate) {
   EXPECT_EQ(g_allocs.load(), 0);
 #endif
 }
+
+// Engine: đổi preset FX / "Vang" / gate giữa các block (luồng điều khiển — được phép cấp phát; đổi
+// cấu trúc → dựng chuỗi mới ở đây). Audio thread nhận chuỗi, crossfade, cho chuỗi cũ ngân rồi trả
+// về mà không cấp phát.
+TEST(RealTime, FxPresetSwapsDoNotAllocate) {
+#ifdef TC_SANITIZED
+  GTEST_SKIP() << "Sanitizer tự thay operator new – chạy ở bản build thường.";
+#else
+  tc_engine* e = nullptr;
+  ASSERT_EQ(tc_engine_create(nullptr, &e), TC_OK);
+  ASSERT_EQ(tc_engine_start(e), TC_OK);
+  ASSERT_EQ(tc_set_param(e, TC_NODE_MONITOR, TC_PARAM_ENABLED, 1.0f), TC_OK);
+  ASSERT_EQ(tc_set_param(e, TC_NODE_GATE, TC_PARAM_ENABLED, 1.0f), TC_OK);
+  const auto s = tonecore::test::synthVoice(
+      tonecore::test::vietTone(tonecore::test::VietTone::Sac, 220.0), 3.0);
+  std::vector<float> out(2 * 512);
+  g_allocs.store(0);
+  std::size_t off = 0;
+  for (int round = 0; off + 512 <= s.audio.size(); ++round) {
+    if (round % 40 == 0) {
+      tc_fx_preset p;
+      tc_fx_preset_init(&p, 1 + (round / 40) % 6);
+      tc_apply_fx_preset(e, &p);
+      tc_set_param(e, TC_NODE_FX, TC_PARAM_MIX, 0.5f + 0.1f * static_cast<float>(round % 10));
+    }
+    if (round % 25 == 0) {
+      tc_event ev[8];
+      tc_poll_events(e, ev, 8);  // dọn chuỗi cũ (luồng điều khiển)
+    }
+    const uint32_t n = round % 2 == 0 ? 512u : 333u;
+    g_counting = true;
+    const tc_result r = tc_engine_process_offline(e, s.audio.data() + off, out.data(), n);
+    g_counting = false;
+    ASSERT_EQ(r, TC_OK);
+    off += n;
+  }
+  EXPECT_EQ(g_allocs.load(), 0);
+  tc_engine_destroy(e);
+#endif
+}

@@ -11,6 +11,7 @@
 #include "core/smoothed_param.h"
 #include "core/spsc_ring.h"
 #include "core/worker.h"
+#include "fx/fx_rack.h"
 #include "fx/peak_limiter.h"
 #include "io/audio_backend.h"
 #include "latency/latency_probe.h"
@@ -32,7 +33,8 @@ struct EngineConfig {
 // Lõi engine.
 //
 // Chuỗi xử lý (mỗi block, trong audio thread):
-//   mic (kênh 0) → VoicePitchNode (HPF, dò cao độ, tự chỉnh giọng) ─× monitorGain × monitorMix ─┐
+//   mic (kênh 0) → VoicePitchNode (HPF, gate, dò cao độ, tự chỉnh giọng) → FxRack (EQ, nén,
+//   de-esser, delay, reverb → stereo) ─× monitorGain × monitorMix ─┐
 //   beat (stereo) ─× beatGain ────────────────┼─ cộng → × masterGain → limiter (nhìn trước 1 ms) →
 //   ra (khi đang đo độ trễ: chỉ phát tín hiệu MLS, tắt mọi nguồn khác)
 //
@@ -70,6 +72,12 @@ class Engine : public BackendHost {
   // Đổi tone beat −6…+6 nửa cung (render nền; nghe sau ~0,1 s). 0 = beat gốc.
   tc_result setTranspose(int32_t semitones);
   int32_t transpose() const noexcept { return requestedSemis_.load(std::memory_order_relaxed); }
+
+  // FX giọng (từ v0.6, ADR-005). Gọi từ luồng điều khiển.
+  void applyFxPreset(const FxPreset& p) { fxRack_.apply(p); }
+  FxPreset fxPreset() const { return fxRack_.preset(); }
+  void setTempo(float bpm) { fxRack_.setTempo(bpm); }
+  float tempo() const { return fxRack_.tempo(); }
   void fillPlayback(tc_playback_state& s) const noexcept;
 
   tc_result setRouteHint(int32_t route);
@@ -164,6 +172,7 @@ class Engine : public BackendHost {
   // Limiter đầu ra (từ M5): nhìn trước 1 ms, trần 0,98 (−0,18 dBFS), hai kênh chung một hệ số;
   // dưới trần đi thẳng (chỉ trễ 1 ms). Thay chỗ kẹp ±1.
   PeakLimiter limiter_;
+  FxRack fxRack_;
   bool probeWasActive_ = false;  // audio thread: vừa đo độ trễ xong → xoá limiter (bỏ âm cũ)
   std::unique_ptr<AudioBackend> backend_;
   EventQueue events_;
@@ -172,6 +181,8 @@ class Engine : public BackendHost {
   std::vector<float> micBuf_;
   std::vector<float> beatBuf_;
   std::vector<float> stimBuf_;
+  std::vector<float> voiceL_;  // giọng sau chuỗi FX (khô + ướt), trái / phải
+  std::vector<float> voiceR_;
   std::vector<float> mixBuf_;  // stereo interleaved trước limiter
   std::vector<float> outBuf_;  // stereo interleaved sau limiter
 
@@ -186,6 +197,7 @@ class Engine : public BackendHost {
   std::atomic<uint64_t> callbacks_{0};
   std::atomic<float> cpuLoad_{0.0f};
   std::atomic<float> cpuPeak_{0.0f};  // đỉnh của cửa sổ 1 giây gần nhất đã xong
+  std::atomic<float> fxLoad_{0.0f};   // phần thời gian block dành cho chuỗi FX
   float cpuPeakAccum_ = 0.0f;         // audio thread
   uint64_t cpuPeakFrames_ = 0;        // audio thread
   std::atomic<uint32_t> inputChannelsSeen_{0};

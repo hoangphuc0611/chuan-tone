@@ -28,6 +28,7 @@ PsolaConfig psolaConfig(double sampleRate) {
 
 VoicePitchNode::VoicePitchNode(double sampleRate, uint32_t maxBlockFrames)
     : sampleRate_(sampleRate),
+      gate_(sampleRate),
       analyzer_(analyzerConfig(sampleRate)),
       corrector_(1000.0 / analyzerConfig(sampleRate).hopMs),
       psola_(psolaConfig(sampleRate)),
@@ -103,6 +104,38 @@ uint16_t VoicePitchNode::activeKeyMask() const noexcept {
 }
 
 // [RT]
+void VoicePitchNode::setGateThresholdDb(float db) noexcept {
+  gateThresholdDb_.store(std::clamp(db, -80.0f, 0.0f), std::memory_order_relaxed);
+}
+
+// [RT] Bật: coi như đang mở rồi theo ngưỡng (không cắt cụt câu đang hát). Tắt: ngưỡng −200 dB để
+// gate mở hẳn (hệ số → 1 theo attack), xong mới bỏ qua → không có bước nhảy.
+void VoicePitchNode::syncGate() noexcept {
+  const bool want = gateWanted_.load(std::memory_order_relaxed);
+  if (want) {
+    const float db = gateThresholdDb_.load(std::memory_order_relaxed);
+    if (!gateActive_) {
+      gate_.forceOpen();
+      gateActive_ = true;
+      gateAppliedDb_ = 1.0f;
+    }
+    if (db != gateAppliedDb_) {
+      GateParams g;
+      g.thresholdDb = db;
+      gate_.setParams(g);
+      gateAppliedDb_ = db;
+    }
+  } else if (gateActive_) {
+    if (gateAppliedDb_ != -200.0f) {
+      GateParams g;
+      g.thresholdDb = -200.0f;
+      gate_.setParams(g);
+      gateAppliedDb_ = -200.0f;
+    }
+    if (gate_.gain() >= 0.9999f) gateActive_ = false;
+  }
+}
+
 void VoicePitchNode::syncParams() noexcept {
   const uint32_t v = paramVersion_.load(std::memory_order_acquire);
   if (v == seenVersion_) return;
@@ -149,6 +182,7 @@ void VoicePitchNode::onFrame(const PitchFrame& f) noexcept {
 // [RT]
 void VoicePitchNode::processSlice(float* io, uint32_t n) noexcept {
   hpf_.process(io, io, n);
+  if (gateActive_) gate_.process(io, n);
   analyzer_.process(io, n, [this](const PitchFrame& f) { onFrame(f); });
   float* wet = wet_.data();
   psola_.process(io, wet, n);
@@ -167,6 +201,7 @@ void VoicePitchNode::processSlice(float* io, uint32_t n) noexcept {
 // [RT]
 void VoicePitchNode::process(float* io, uint32_t n) noexcept {
   syncParams();
+  syncGate();
   uint32_t done = 0;
   while (done < n) {
     const uint32_t len = std::min(slice_, n - done);
