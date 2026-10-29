@@ -1,6 +1,7 @@
 import 'package:tonecore_flutter/tonecore_flutter.dart';
 
 import 'genre_rules.dart';
+import 'separation_client.dart';
 
 /// Nhãn tiếng Việt cho UI.
 String routeLabel(AudioRoute r) => switch (r) {
@@ -198,3 +199,27 @@ String genreSourceLabel(GenreSource s, {double? bpm}) => switch (s) {
   GenreSource.bpm =>
     bpm == null ? 'Gợi ý theo nhịp bài' : 'Gợi ý theo nhịp ${bpm.round()} BPM',
 };
+
+// ---- Tách giọng ca sĩ ----
+
+String _secs(Duration d) => '${(d.inMilliseconds / 1000).round()} s';
+
+/// "Đang gửi bài 3/12… (5 s)", "Đang tách giọng… 45% (20 s)"…
+String separationStageLabel(SeparationProgress p) {
+  final what = switch (p.stage) {
+    SeparationStage.preparing => 'Đang chuẩn bị bài…',
+    SeparationStage.uploading => 'Đang gửi bài ${p.uploaded}/${p.chunks}…',
+    SeparationStage.separating =>
+      'Đang tách giọng… ${(p.fraction * 100).round()}%',
+    SeparationStage.downloading =>
+      'Đang tải giọng về ${p.downloaded}/${p.chunks}…',
+    SeparationStage.done => 'Xong',
+  };
+  return '$what (${_secs(p.elapsed)})';
+}
+
+/// "Tách xong sau 43 s (máy chủ tách 38 s)".
+String separationDoneLabel(SeparationResult r) => [
+  'Tách xong sau ${_secs(r.elapsed)}',
+  if (r.serverSeconds != null) '(máy chủ tách ${r.serverSeconds!.round()} s)',
+].join(' ');

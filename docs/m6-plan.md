@@ -68,7 +68,29 @@
     - audio thread không cấp phát khi đổi k / đổi tone.
   - Test: 7 mới (`Stems`, `EngineVocalStem`, `AnalyzerVocalStem`, `RealTime.VocalStemDoesNotAllocate`);
     engine 282/282.
-- [ ] B5 … B7: xem mục 7.
+- [x] **B5** (2026-10-29): binding 0.7 + client trong app.
+  - Binding: `FlacExporter` (xuất FLAC theo đoạn, `chunkPath`), `ExportStatus`,
+    `engine.loadBeatWithVocals(AndWait)`, `engine.vocalGain`, `PlaybackState.hasVocal`,
+    `SongAnalyzer.analyze(path, vocals: …)`.
+  - App:
+    - `engine/separation_client.dart` (chỉ `dart:io`): tạo job → upload từng đoạn ngay khi máy xuất
+      xong → hỏi trạng thái → tải giọng từng đoạn → xoá job; thử lại lỗi mạng / 5xx; huỷ; câu báo
+      lỗi tiếng Việt (413, 429, 404, mất kết nối);
+    - `engine/native_chunk_source.dart`: nguồn đoạn = `FlacExporter` (44,1 kHz, đoạn 20 s, ≤ 10 phút);
+    - `data/stem_store.dart` (giọng đã tách theo bài, chỉ dùng khi đủ đoạn + meta),
+      `data/app_settings.dart` (địa chỉ máy chủ, "không hỏi lại", mã máy ngẫu nhiên);
+    - Phòng thử: khu "Giọng ca sĩ" (nút "Tách giọng ca sĩ" → hộp xin đồng ý → tiến độ từng bước +
+      huỷ → nạp lại bài kèm giọng, giữ tone beat, phân tích lại trên phần nhạc; đã tách thì có thanh
+      "Giữ giọng ca sĩ gốc" 0–100% và "Xoá bản tách"); ô "Máy chủ tách giọng" (lưu + kiểm tra);
+      mở lại bài đã tách là nạp kèm giọng ngay;
+    - iOS: `NSLocalNetworkUsageDescription` + `NSAllowsLocalNetworking` (bản phát triển); Android:
+      quyền INTERNET.
+  - Số đo: app thật trên Mac (FlacExporter native + client Dart) với server htdemucs, bài 4 phút:
+    **43,1 s** từ lúc bấm tới khi tải xong giọng (server tách 39,6 s); nạp lại kèm giọng được.
+  - Test: binding 23 (2 mới), app 58 (14 mới: client với server giả — đủ đường đi, thử lại 5xx,
+    lỗi tách, 413 / 429, huỷ, mất kết nối; cài đặt; nơi lưu stem; khu tách giọng ở bề ngang 320 px)
+    + `test/separation_e2e_test.dart` chạy khi có server thật.
+- [ ] B6 … B7: xem mục 7.
 
 ---
 

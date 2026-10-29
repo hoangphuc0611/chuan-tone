@@ -52,3 +52,9 @@ Server chạy trên cùng Mac M1 (htdemucs, MPS, autocast 16-bit, chồng đoạ
 - Upload chạy gối với tách → mạng chậm chỉ thêm ~2 s. Phần tách (~40 s, gồm 7% chồng giữa các cửa
   sổ) là phần chính.
 - Chưa gồm: thời gian iPhone giải mã + nén (B7 đo trên máy thật) và tải giọng qua Wi-Fi thật.
+
+## B5 — app thật trên Mac (2026-10-29)
+
+`app/test/separation_e2e_test.dart`: `FlacExporter` của engine (native) + `SeparationClient` (Dart)
+với server htdemucs trên cùng Mac, bài 4 phút: **43,1 s** từ lúc bắt đầu tới khi tải xong đoạn giọng
+cuối (server tách 39,6 s, nhận đủ bài sau 8,7 s); `loadBeatWithVocals` nạp lại được.

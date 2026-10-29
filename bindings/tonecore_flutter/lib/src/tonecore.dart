@@ -32,6 +32,7 @@ abstract final class TcNode {
   static const int pitch = tc_node_id.TC_NODE_PITCH;
   static const int gate = tc_node_id.TC_NODE_GATE;
   static const int fx = tc_node_id.TC_NODE_FX;
+  static const int vocal = tc_node_id.TC_NODE_VOCAL;
 }
 
 abstract final class TcParam {
@@ -264,6 +265,15 @@ void _check(String operation, int code) {
   if (code != TcResult.ok) throw ToneCoreException(operation, code);
 }
 
+/// Mảng `const char*` (UTF-8) trong [arena].
+Pointer<Pointer<Char>> _cStrings(List<String> items, Arena arena) {
+  final list = arena<Pointer<Char>>(items.length);
+  for (var i = 0; i < items.length; i++) {
+    list[i] = items[i].toNativeUtf8(allocator: arena).cast();
+  }
+  return list;
+}
+
 /// Thông tin thư viện.
 abstract final class ToneCore {
   /// (major << 16) | (minor << 8) | patch
@@ -436,6 +446,7 @@ class PlaybackState {
     this.transpose = 0,
     this.audibleTranspose = 0,
     this.transposeProgress = 1.0,
+    this.hasVocal = false,
   });
 
   final bool hasBeat;
@@ -451,6 +462,9 @@ class PlaybackState {
 
   /// 0..1: phần bài đã render ở tone yêu cầu (1 khi [transpose] = 0).
   final double transposeProgress;
+
+  /// (từ v0.7) Beat nạp kèm stem giọng ca sĩ ([ToneCoreEngine.loadBeatWithVocals]).
+  final bool hasVocal;
 
   /// Đã đổi tone nhưng bản mới chưa nghe được (đang render đoạn tại vị trí phát).
   bool get transposePending => transpose != audibleTranspose;
@@ -810,6 +824,52 @@ class ToneCoreEngine implements Finalizable {
     return Duration(microseconds: (e.value * 1000).round());
   }
 
+  /// (từ v0.7) Nạp bài gốc kèm stem giọng đã tách ([vocalPaths]: các đoạn FLAC theo thứ tự, như
+  /// server trả về). Phát phần nhạc (bài − giọng) + [vocalGain] · giọng; đổi tone đổi cả hai.
+  /// Kết quả qua [ToneCoreEventType.beatLoaded] (giọng lệch độ dài → [TcResult.invalidArg]).
+  void loadBeatWithVocals(String path, List<String> vocalPaths) {
+    if (vocalPaths.isEmpty) {
+      throw ArgumentError.value(
+        vocalPaths,
+        'vocalPaths',
+        'cần ít nhất một đoạn',
+      );
+    }
+    using((arena) {
+      final p = path.toNativeUtf8(allocator: arena);
+      final list = _cStrings(vocalPaths, arena);
+      _check(
+        'tc_load_beat_with_vocals',
+        _bindings.tc_load_beat_with_vocals(
+          _h,
+          p.cast(),
+          list,
+          vocalPaths.length,
+        ),
+      );
+    });
+  }
+
+  /// Như [loadBeatWithVocals] và chờ kết quả.
+  Future<Duration> loadBeatWithVocalsAndWait(
+    String path,
+    List<String> vocalPaths, {
+    Duration timeout = const Duration(seconds: 60),
+  }) async {
+    final done = events
+        .firstWhere((e) => e.type == ToneCoreEventType.beatLoaded)
+        .timeout(timeout);
+    loadBeatWithVocals(path, vocalPaths);
+    final e = await done;
+    if (!e.ok) throw ToneCoreException('tc_load_beat_with_vocals', e.code);
+    return Duration(microseconds: (e.value * 1000).round());
+  }
+
+  /// (từ v0.7) "Giữ giọng ca sĩ gốc" 0..1 (0 = karaoke, 1 = như bài gốc), trượt 20 ms. Chỉ có tác
+  /// dụng khi beat có stem giọng ([PlaybackState.hasVocal]).
+  set vocalGain(double k) => setParam(TcNode.vocal, TcParam.gain, k);
+  double get vocalGain => getParam(TcNode.vocal, TcParam.gain);
+
   void play() => _check('tc_play', _bindings.tc_play(_h));
 
   void pause() => _check('tc_pause', _bindings.tc_pause(_h));
@@ -832,6 +892,7 @@ class ToneCoreEngine implements Finalizable {
         transpose: s.ref.transpose,
         audibleTranspose: s.ref.audible_transpose,
         transposeProgress: s.ref.transpose_progress,
+        hasVocal: s.ref.has_vocal != 0,
       );
     });
   }
@@ -1017,11 +1078,24 @@ class SongAnalyzer implements Finalizable {
     return _handle;
   }
 
-  /// Bắt đầu phân tích (lỗi đọc file báo qua [status], không ném ở đây).
-  void start(String path) {
+  /// Bắt đầu phân tích (lỗi đọc file báo qua [status], không ném ở đây). (từ v0.7) Có [vocals]
+  /// (các đoạn stem giọng): phân tích phần nhạc = bài − giọng.
+  void start(String path, {List<String> vocals = const []}) {
     using((arena) {
       final p = path.toNativeUtf8(allocator: arena);
-      _check('tc_analyzer_start', _bindings.tc_analyzer_start(_h, p.cast()));
+      if (vocals.isEmpty) {
+        _check('tc_analyzer_start', _bindings.tc_analyzer_start(_h, p.cast()));
+      } else {
+        _check(
+          'tc_analyzer_start_with_vocals',
+          _bindings.tc_analyzer_start_with_vocals(
+            _h,
+            p.cast(),
+            _cStrings(vocals, arena),
+            vocals.length,
+          ),
+        );
+      }
     });
   }
 
@@ -1088,11 +1162,12 @@ class SongAnalyzer implements Finalizable {
   /// Bị huỷ → [ToneCoreException] mã [TcResult.cancelled]; lỗi file → mã lỗi tương ứng.
   Future<SongAnalysis> analyze(
     String path, {
+    List<String> vocals = const [],
     void Function(AnalysisStatus status)? onProgress,
     Duration pollInterval = const Duration(milliseconds: 100),
     Duration timeout = const Duration(minutes: 5),
   }) async {
-    start(path);
+    start(path, vocals: vocals);
     final deadline = DateTime.now().add(timeout);
     while (true) {
       final s = status;
@@ -1122,5 +1197,131 @@ class SongAnalyzer implements Finalizable {
     _disposed = true;
     _finalizer.detach(this);
     _bindings.tc_analyzer_destroy(_handle);
+  }
+}
+
+/// Trạng thái xuất FLAC ([FlacExporter]).
+class ExportStatus {
+  const ExportStatus({
+    required this.state,
+    required this.progress,
+    required this.result,
+    required this.chunksDone,
+    required this.chunksTotal,
+    required this.sampleRate,
+    required this.channels,
+    required this.frames,
+    required this.chunkFrames,
+  });
+
+  final AnalysisState state;
+
+  /// 0..1
+  final double progress;
+
+  /// Mã `tc_result` (lý do khi [AnalysisState.failed]).
+  final int result;
+
+  /// Số đoạn đã ghi xong — đọc / upload được ngay.
+  final int chunksDone;
+
+  /// Biết sau khi giải mã xong (0 trước đó), cùng lúc với [sampleRate] / [channels] / [frames].
+  final int chunksTotal;
+  final int sampleRate;
+  final int channels;
+
+  /// Tổng số mẫu mỗi kênh; đoạn i bắt đầu ở i · [chunkFrames].
+  final int frames;
+  final int chunkFrames;
+}
+
+/// (từ v0.7) Giải mã bài bằng codec của máy → FLAC 16-bit theo đoạn, ở luồng nền (gửi lên server
+/// tách giọng, docs/adr/006-vocal-separation.md). Gọi [dispose] khi xong.
+class FlacExporter implements Finalizable {
+  FlacExporter._(this._handle) {
+    _finalizer.attach(this, _handle.cast(), detach: this);
+  }
+
+  factory FlacExporter.create() {
+    return using((arena) {
+      final out = arena<Pointer<tc_exporter>>();
+      _check('tc_exporter_create', _bindings.tc_exporter_create(out));
+      return FlacExporter._(out.value);
+    });
+  }
+
+  static final _finalizer = NativeFinalizer(
+    _bindings.addresses.tc_exporter_destroy.cast(),
+  );
+
+  final Pointer<tc_exporter> _handle;
+  bool _disposed = false;
+
+  Pointer<tc_exporter> get _h {
+    if (_disposed) throw StateError('FlacExporter đã bị dispose');
+    return _handle;
+  }
+
+  /// File của đoạn [index] khi xuất theo đoạn với tiền tố [prefix].
+  static String chunkPath(String prefix, int index) =>
+      '${prefix}_${index.toString().padLeft(3, '0')}.flac';
+
+  /// [outPrefix]: đường dẫn không đuôi (thư mục phải có sẵn). [chunkSeconds] = 0 → một file
+  /// `<outPrefix>.flac`; [sampleRate] = 0 → giữ tần số của file.
+  void start(
+    String inPath,
+    String outPrefix, {
+    int sampleRate = 0,
+    double chunkSeconds = 0,
+    double maxSeconds = 0,
+  }) {
+    using((arena) {
+      final cfg = arena<tc_export_config>();
+      _bindings.tc_export_config_init(cfg);
+      cfg.ref
+        ..sample_rate = sampleRate
+        ..chunk_seconds = chunkSeconds
+        ..max_seconds = maxSeconds;
+      _check(
+        'tc_exporter_start',
+        _bindings.tc_exporter_start(
+          _h,
+          inPath.toNativeUtf8(allocator: arena).cast(),
+          outPrefix.toNativeUtf8(allocator: arena).cast(),
+          cfg,
+        ),
+      );
+    });
+  }
+
+  ExportStatus get status {
+    return using((arena) {
+      final s = arena<tc_export_status>();
+      s.ref.struct_size = sizeOf<tc_export_status>();
+      _check('tc_exporter_get_status', _bindings.tc_exporter_get_status(_h, s));
+      final v = s.ref;
+      return ExportStatus(
+        state: _enumAt(AnalysisState.values, v.state, AnalysisState.idle),
+        progress: v.progress,
+        result: v.result,
+        chunksDone: v.chunks_done,
+        chunksTotal: v.chunks_total,
+        sampleRate: v.sample_rate,
+        channels: v.channels,
+        frames: v.frames,
+        chunkFrames: v.chunk_frames,
+      );
+    });
+  }
+
+  /// Yêu cầu dừng (không chờ); các đoạn đã ghi vẫn giữ.
+  void cancel() =>
+      _check('tc_exporter_cancel', _bindings.tc_exporter_cancel(_h));
+
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _finalizer.detach(this);
+    _bindings.tc_exporter_destroy(_handle);
   }
 }

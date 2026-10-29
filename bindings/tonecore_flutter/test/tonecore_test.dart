@@ -579,6 +579,99 @@ void main() {
     });
   });
 
+  group('tách giọng (v0.7)', () {
+    late Directory dir;
+    setUp(() => dir = Directory.systemTemp.createTempSync('tonecore_v07'));
+    tearDown(() => dir.deleteSync(recursive: true));
+
+    Future<ExportStatus> export(String path, String prefix) async {
+      final x = FlacExporter.create();
+      addTearDown(x.dispose);
+      x.start(path, prefix, sampleRate: 44100, chunkSeconds: 2);
+      var s = x.status;
+      while (s.state == AnalysisState.running) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+        s = x.status;
+      }
+      return s;
+    }
+
+    test('xuất FLAC theo đoạn; nạp lại làm stem giọng của chính bài', () async {
+      final mix = '${dir.path}/mix.wav';
+      _writeSineWav(mix, seconds: 5, sampleRate: 44100);
+      final prefix = '${dir.path}/up';
+      final st = await export(mix, prefix);
+      expect(st.state, AnalysisState.done);
+      expect(st.chunksTotal, 3);
+      expect(st.chunksDone, 3);
+      expect(st.sampleRate, 44100);
+      expect(st.channels, 2);
+      expect(st.frames, 5 * 44100);
+      expect(st.chunkFrames, 2 * 44100);
+      final chunks = [
+        for (var i = 0; i < st.chunksTotal; i++)
+          FlacExporter.chunkPath(prefix, i),
+      ];
+      expect(chunks.first, endsWith('up_000.flac'));
+      expect(chunks.every((p) => File(p).existsSync()), isTrue);
+
+      final x = FlacExporter.create();
+      addTearDown(x.dispose);
+      x.start('${dir.path}/khong-co.wav', prefix);
+      var bad = x.status;
+      while (bad.state == AnalysisState.running) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+        bad = x.status;
+      }
+      expect(bad.state, AnalysisState.failed);
+
+      // Giọng = cả bài → phần nhạc im lặng; k = 1 → nghe lại như bài gốc.
+      final engine = ToneCoreEngine.create(maxBlockFrames: 256);
+      addTearDown(engine.dispose);
+      engine.start();
+      expect(() => engine.loadBeatWithVocals(mix, []), throwsArgumentError);
+      await engine.loadBeatWithVocalsAndWait(mix, chunks);
+      expect(engine.playback.hasVocal, isTrue);
+      expect(engine.vocalGain, 0.0);
+      engine.play();
+      double peakOf(int blocks) {
+        var p = 0.0;
+        for (var b = 0; b < blocks; b++) {
+          for (final v in engine.processOffline(null, 256)) {
+            p = math.max(p, v.abs());
+          }
+        }
+        return p;
+      }
+
+      expect(peakOf(40), lessThan(1e-3));
+      engine.vocalGain = 1.0;
+      expect(engine.vocalGain, 1.0);
+      peakOf(10); // trượt 20 ms
+      expect(peakOf(40), closeTo(16000 / 32768, 0.02));
+
+      await engine.loadBeatAndWait(mix);
+      expect(engine.playback.hasVocal, isFalse);
+    });
+
+    test('phân tích trên phần nhạc = bài − giọng', () async {
+      final song = '${dir.path}/cadence.wav';
+      _writeCadenceWav(song);
+      final st = await export(song, '${dir.path}/v');
+      final chunks = [
+        for (var i = 0; i < st.chunksTotal; i++)
+          FlacExporter.chunkPath('${dir.path}/v', i),
+      ];
+      final analyzer = SongAnalyzer.create();
+      addTearDown(analyzer.dispose);
+      final whole = await analyzer.analyze(song);
+      expect(whole.key, const MusicKey(2, MusicScale.major));
+      // "Giọng" là cả bài → phần nhạc im lặng → không còn tone nào.
+      final rest = await analyzer.analyze(song, vocals: chunks);
+      expect(rest.key, isNull);
+    });
+  });
+
   test('block quá lớn bị từ chối ở phía Dart', () {
     final engine = ToneCoreEngine.create(maxBlockFrames: 64);
     addTearDown(engine.dispose);

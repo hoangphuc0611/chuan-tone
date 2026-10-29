@@ -4,6 +4,15 @@
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>ChuẩnTone cần micro để bạn nghe lại giọng hát và thu âm.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>ChuẩnTone kết nối máy chủ tách giọng ca sĩ trong mạng Wi-Fi của bạn.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<!-- Bản phát triển M6: server tách giọng chạy trên Mac cùng Wi-Fi (http). Máy chủ thật dùng
+		     HTTPS (M9). -->
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>

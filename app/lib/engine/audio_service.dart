@@ -49,6 +49,9 @@ class AudioService extends ChangeNotifier {
   /// Cổng chặn tiếng ồn micro.
   bool gateOn = false;
 
+  /// "Giữ giọng ca sĩ gốc" 0..1 khi beat có stem giọng (0 = karaoke).
+  double vocalGain = 0.0;
+
   final _presets = <Genre, FxPreset>{};
 
   /// Thông số của preset thể loại (lấy từ engine một lần).
@@ -184,6 +187,12 @@ class AudioService extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setVocalGain(double v) {
+    vocalGain = v.clamp(0.0, 1.0);
+    _engine?.vocalGain = vocalGain;
+    notifyListeners();
+  }
+
   void setGate(bool on) {
     gateOn = on;
     _engine?.gateEnabled = on;
@@ -196,6 +205,7 @@ class AudioService extends ChangeNotifier {
     e.applyFxPreset(presetOf(genre));
     e.fxMix = fxMix;
     e.gateEnabled = gateOn;
+    e.vocalGain = vocalGain;
   }
 
   Future<void> shutdown() async {
