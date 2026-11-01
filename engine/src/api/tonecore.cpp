@@ -529,6 +529,49 @@ tc_result tc_get_latency_result(tc_engine* engine, tc_latency_result* out_result
   }
 }
 
+void tc_record_config_init(tc_record_config* config) {
+  if (config == nullptr) return;
+  *config = tc_record_config{};
+  config->struct_size = sizeof(tc_record_config);
+}
+
+tc_result tc_record_start(tc_engine* engine, const char* dir_utf8, const tc_record_config* config) {
+  if (engine == nullptr || dir_utf8 == nullptr || dir_utf8[0] == '\0') return TC_ERR_INVALID_ARG;
+  tc_record_config cfg;
+  tc_record_config_init(&cfg);
+  if (config != nullptr) {
+    if (config->struct_size != sizeof(tc_record_config)) return TC_ERR_INVALID_ARG;
+    cfg = *config;
+  }
+  if (!std::isfinite(cfg.max_seconds) || cfg.max_seconds < 0.0f) return TC_ERR_INVALID_ARG;
+  try {
+    return engine->impl.startRecording(dir_utf8, static_cast<double>(cfg.max_seconds));
+  } catch (const std::bad_alloc&) {
+    return TC_ERR_OUT_OF_MEMORY;
+  } catch (...) {
+    return TC_ERR_INTERNAL;
+  }
+}
+
+tc_result tc_record_stop(tc_engine* engine) {
+  if (engine == nullptr) return TC_ERR_INVALID_ARG;
+  try {
+    return engine->impl.stopRecording();
+  } catch (...) {
+    return TC_ERR_INTERNAL;
+  }
+}
+
+tc_result tc_record_get_status(tc_engine* engine, tc_record_status* out_status) {
+  if (engine == nullptr || out_status == nullptr) return TC_ERR_INVALID_ARG;
+  if (out_status->struct_size != sizeof(tc_record_status)) return TC_ERR_INVALID_ARG;
+  tc_record_status s{};
+  s.struct_size = sizeof(tc_record_status);
+  engine->impl.fillRecordStatus(s);
+  *out_status = s;
+  return TC_OK;
+}
+
 int32_t tc_poll_events(tc_engine* engine, tc_event* out_events, uint32_t max_events) {
   if (engine == nullptr || (out_events == nullptr && max_events > 0)) return TC_ERR_INVALID_ARG;
   try {

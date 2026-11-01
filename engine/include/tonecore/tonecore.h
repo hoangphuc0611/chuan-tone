@@ -31,7 +31,7 @@ extern "C" {
 /* Phiên bản API: (major << 16) | (minor << 8) | patch.
  * Tăng major khi phá vỡ ABI; tăng minor khi thêm hàm. */
 #define TC_API_VERSION_MAJOR 0
-#define TC_API_VERSION_MINOR 7
+#define TC_API_VERSION_MINOR 8
 #define TC_API_VERSION_PATCH 0
 #define TC_API_VERSION \
   ((TC_API_VERSION_MAJOR << 16) | (TC_API_VERSION_MINOR << 8) | TC_API_VERSION_PATCH)
@@ -323,6 +323,40 @@ typedef struct tc_export_status {
 
 typedef struct tc_exporter tc_exporter;
 
+/* ---- Thu âm (từ v0.8, docs/m7-plan.md) ---- */
+
+typedef enum tc_record_state {
+  TC_RECORD_IDLE = 0,
+  TC_RECORD_RECORDING = 1,
+  TC_RECORD_FINISHING = 2, /* đã dừng, đang ghi nốt phần còn trong bộ đệm */
+  TC_RECORD_DONE = 3,      /* 3 file đã ghi xong, đọc được */
+  TC_RECORD_FAILED = 4     /* lỗi ghi file (đầy bộ nhớ…) — các file đã bị xoá */
+} tc_record_state;
+
+typedef struct tc_record_config {
+  uint32_t struct_size; /* = sizeof(tc_record_config); tc_record_config_init tự điền */
+  float max_seconds;    /* đủ thì tự dừng; 0 = 15 phút (tối đa 60 phút) */
+} tc_record_config;
+
+typedef struct tc_record_status {
+  uint32_t struct_size;    /* = sizeof(tc_record_status) */
+  int32_t state;           /* tc_record_state */
+  int32_t result;          /* tc_result: lỗi khi TC_RECORD_FAILED */
+  uint32_t sample_rate;    /* của 3 file (= tần số engine) */
+  uint64_t frames;         /* số frame đã thu (DONE: số frame trong file) */
+  uint64_t dropped_frames; /* frame bị bỏ vì luồng ghi không kịp — > 0 là bản thu có chỗ hụt */
+  /* Mốc của frame đầu tiên trong file: */
+  uint64_t start_beat_frame;  /* vị trí beat (frame, tần số engine) */
+  int64_t start_host_time_ns; /* đồng hồ máy (iOS: mach_absolute_time ra ns) lúc frame đó ra
+                                 thiết bị, chưa gồm output_latency_ms; 0 = nền tảng không báo */
+  /* Độ trễ lúc bắt đầu thu (để căn giọng với beat khi nghe lại / render — ADR-007): */
+  double input_latency_ms;          /* hệ điều hành báo */
+  double output_latency_ms;         /* hệ điều hành báo */
+  uint32_t pitch_latency_frames;    /* giọng đã xử lý trễ hơn giọng khô (chỉnh giọng bật) */
+  uint32_t output_lookahead_frames; /* limiter đầu ra: beat nghe trễ hơn beat ghi */
+  int32_t route;                    /* tc_route */
+} tc_record_status;
+
 /* ---- Thông tin thư viện ---- */
 TC_EXPORT uint32_t tc_get_api_version(void);
 TC_EXPORT const char* tc_get_version_string(void);
@@ -557,6 +591,28 @@ TC_EXPORT tc_result tc_exporter_get_status(tc_exporter* exporter, tc_export_stat
 TC_EXPORT tc_result tc_exporter_cancel(tc_exporter* exporter);
 /* Huỷ việc đang chạy và chờ luồng nền dừng. Cho phép exporter == NULL. */
 TC_EXPORT void tc_exporter_destroy(tc_exporter* exporter);
+
+/* ---- Thu âm (từ v0.8) ----
+ * Ghi 3 file WAV vào thư mục `dir_utf8` (phải có sẵn; file cũ cùng tên bị ghi đè):
+ *  - dry.wav: giọng khô — micro thô trước mọi xử lý, mono 32-bit float;
+ *  - wet.wav: giọng đã chỉnh + FX (đúng như nghe lại, trước khi trộn), stereo 16-bit;
+ *  - beat.wav: beat đang phát (đã đổi tone, kèm giọng ca sĩ theo TC_NODE_VOCAL; trước gain
+ *    TC_NODE_BEAT và limiter), stereo 16-bit.
+ * Ba file bắt đầu cùng một frame, dài bằng nhau, ghi thô (CHƯA bù độ trễ): giọng khô ở frame n
+ * khớp beat ở frame n − (độ trễ khứ hồi + output_lookahead_frames); giọng đã xử lý thêm
+ * pitch_latency_frames. Thu liên tục cả khi beat dừng / tua.
+ * Engine phải RUNNING, không đang đo độ trễ. Audio thread không cấp phát, không chờ: chỉ chép
+ * vào bộ đệm ~4 s, luồng ghi riêng viết file. File ghi qua tên tạm `.part`, đổi tên khi xong. */
+TC_EXPORT void tc_record_config_init(tc_record_config* config);
+/* config = NULL → mặc định. Đang thu → TC_ERR_INVALID_STATE; không mở được file →
+ * TC_ERR_INVALID_ARG. */
+TC_EXPORT tc_result tc_record_start(tc_engine* engine, const char* dir_utf8,
+                                    const tc_record_config* config);
+/* Dừng và chờ ghi xong (thường < 50 ms). Trả TC_OK nếu 3 file đã ghi xong, mã lỗi nếu ghi lỗi;
+ * chưa từng thu → TC_ERR_INVALID_STATE. tc_engine_stop / tc_engine_destroy cũng tự dừng và chốt
+ * file. */
+TC_EXPORT tc_result tc_record_stop(tc_engine* engine);
+TC_EXPORT tc_result tc_record_get_status(tc_engine* engine, tc_record_status* out_status);
 
 /* ---- Đo lường ---- */
 TC_EXPORT tc_result tc_get_metrics(tc_engine* engine, tc_metrics* out_metrics);

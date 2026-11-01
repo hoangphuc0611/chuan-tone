@@ -7,7 +7,20 @@
 
 ## Tiến độ
 
-- [ ] B1: engine 0.8 — bộ thu 3 track, đồng hồ máy, `tc_record_*`.
+- [x] **B1** (2026-11-02): engine 0.8 — bộ thu đa track (ADR-007).
+  - `record/recorder.*`: ring SPSC ~4 s (5 kênh float, cấp phát ở lần thu đầu) + luồng ghi riêng;
+    ring đầy thì bỏ nguyên khối, đếm frame rơi, không chờ; tự dừng khi đủ `max_seconds` (mặc định
+    15 phút); dừng an toàn cả khi không còn callback; `tc_engine_stop / destroy` chốt file.
+  - `record/wav_file.*`: ghi WAV qua tên tạm (float32 / PCM 16-bit), đọc WAV float / 16 / 24 /
+    32-bit (để Nghe lại / render giữ nguyên giọng khô float).
+  - C API 0.8: `tc_record_config_init / tc_record_start / tc_record_stop / tc_record_get_status`
+    (frame đã thu, frame rơi, vị trí beat + đồng hồ máy lúc bắt đầu, độ trễ vào / ra hệ điều hành
+    báo, P, L, route). App tự ghi `take.json` (thông tin bài nằm ở app).
+  - Backend chuyển đồng hồ máy vào engine (iOS `mHostTime` → ns; Android 0 ở M7).
+  - Test 6 mới: giọng khô = micro từng bit, beat = file beat từ vị trí bắt đầu, đầu ra = (beat +
+    giọng đã xử lý) chậm đúng L frame; tự dừng; `tc_engine_stop / destroy` chốt file; lỗi gọi sai;
+    ring đầy; không cấp phát trên audio thread (kể cả lúc dừng từ luồng khác). Engine 289 / 289;
+    TSan / ASan / UBSan sạch.
 - [ ] B2: bù trễ theo đường ra + đo click trên iPhone.
 - [ ] B3: Nghe lại (`tc_load_take`), render offline, −14 LUFS, AAC.
 - [ ] B4: binding 0.8 + app (nút Thu, kho bản thu, Nghe lại & chỉnh, xuất M4A, chia sẻ / lưu).

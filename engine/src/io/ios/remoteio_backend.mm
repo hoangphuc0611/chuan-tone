@@ -13,6 +13,7 @@
 #import <AVFAudio/AVFAudio.h>
 #import <AudioToolbox/AudioToolbox.h>
 #import <Foundation/Foundation.h>
+#include <mach/mach_time.h>
 
 #include <algorithm>
 #include <atomic>
@@ -65,7 +66,13 @@ AudioStreamBasicDescription floatFormat(double rate, UInt32 channels) {
 class RemoteIOBackend final : public AudioBackend {
  public:
   RemoteIOBackend(BackendHost& host, const EngineConfig& config)
-      : host_(host), sampleRate_(config.sampleRate), inBuf_(kMaxFramesPerSlice, 0.0f) {}
+      : host_(host), sampleRate_(config.sampleRate), inBuf_(kMaxFramesPerSlice, 0.0f) {
+    mach_timebase_info_data_t tb{};
+    if (mach_timebase_info(&tb) == KERN_SUCCESS) {
+      timebaseNumer_ = tb.numer;
+      timebaseDenom_ = tb.denom;
+    }
+  }
 
   ~RemoteIOBackend() override { stop(); }
 
@@ -228,7 +235,15 @@ class RemoteIOBackend final : public AudioBackend {
     }
     if (!haveInput) std::fill(in, in + frames, 0.0f);
 
-    self->host_.processAudio(in, 1, out, 2, frames);
+    // Đồng hồ máy (mach_absolute_time) lúc buffer này ra thiết bị → ns, để căn video camera.
+    int64_t hostNs = 0;
+    if ((ts->mFlags & kAudioTimeStampHostTimeValid) != 0 && self->timebaseDenom_ != 0) {
+      const uint64_t t = ts->mHostTime;
+      const uint64_t n = self->timebaseNumer_;
+      const uint64_t d = self->timebaseDenom_;
+      hostNs = static_cast<int64_t>(t / d * n + t % d * n / d);
+    }
+    self->host_.processAudio(in, 1, out, 2, frames, hostNs);
     return noErr;
   }
 
@@ -297,6 +312,8 @@ class RemoteIOBackend final : public AudioBackend {
   std::vector<float> inBuf_;
   std::atomic<bool> micAllowed_{true};
   double lastSampleTime_ = -1.0;  // chỉ audio thread
+  uint32_t timebaseNumer_ = 0;    // mach_absolute_time → ns (đặt một lần lúc tạo)
+  uint32_t timebaseDenom_ = 0;
   std::atomic<uint32_t> xruns_{0};
   id routeObserver_ = nil;
   id interruptObserver_ = nil;

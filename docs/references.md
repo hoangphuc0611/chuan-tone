@@ -103,6 +103,12 @@ Mọi thuật toán trong ToneCore được viết từ các nguồn công khai 
 | R. F. Rice, *Some practical universal noiseless coding techniques*, JPL Publication 79-22, 1979 | Mã Rice cho phần dư (chọn tham số theo tổng phần dư) | `engine/src/codec/flac_encoder.cpp` |
 | E. Vincent, R. Gribonval, C. Févotte, *Performance measurement in blind audio source separation*, IEEE TASLP 2006 | Chỉ số SDR (bản đơn giản: 10·log10(Σ s² / Σ (s − ŝ)²)) | `server/tools/bench_separate.py` |
 
+## Thu âm, căn tiếng – hình (M7)
+
+- IBM, Microsoft, *Multimedia Programming Interface and Data Specifications 1.0* (1991) và Microsoft, *New Multimedia Data Types and Data Techniques* (1994) — định dạng RIFF/WAVE, PCM 16-bit và IEEE float (`fmt ` 18 byte + chunk `fact`) (`record/wav_file.cpp`).
+- Apple, *Core Audio Data Types — AudioTimeStamp* (`mHostTime`, `kAudioTimeStampHostTimeValid`) và *mach_absolute_time / mach_timebase_info* — đồng hồ máy của buffer âm thanh, để căn với mốc thời gian khung hình camera (`io/ios/remoteio_backend.mm`, ADR-007).
+- ITU-R BT.1359-1, *Relative timing of sound and vision for broadcasting* (1998) — ngưỡng nhận ra lệch tiếng – hình: tiếng sớm 45 ms, muộn 125 ms (chỉ tiêu ≤ 40 ms, `docs/m7-plan.md`).
+
 ## Fingerprint
 
 - A. Wang, *An Industrial-Strength Audio Search Algorithm*, ISMIR 2003 — cần ghi vào `patent-review.md`.

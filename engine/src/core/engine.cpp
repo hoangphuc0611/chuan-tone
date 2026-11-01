@@ -27,7 +27,9 @@ Engine::Engine(const EngineConfig& config)
       probe_(config.sampleRate),
       limiter_(2, config.sampleRate, kLimiterCeiling, kLimiterLookaheadMs, kLimiterReleaseMs),
       fxRack_(config.sampleRate, config.maxBlockFrames),
+      recorder_(config.sampleRate, config.maxBlockFrames),
       micBuf_(config.maxBlockFrames, 0.0f),
+      dryBuf_(config.maxBlockFrames, 0.0f),
       beatBuf_(2 * static_cast<std::size_t>(config.maxBlockFrames), 0.0f),
       stimBuf_(config.maxBlockFrames, 0.0f),
       voiceL_(config.maxBlockFrames, 0.0f),
@@ -80,6 +82,7 @@ tc_result Engine::stop() {
     backend_.reset();
   }
   probe_.cancel();
+  if (recorder_.busy()) recorder_.stop(/*audioStopped=*/true);  // chốt file đang thu
   return TC_OK;
 }
 
@@ -499,6 +502,7 @@ void Engine::onStreamRestarted(tc_result result) {
 
 tc_result Engine::startLatencyMeasurement() {
   if (state() != TC_STATE_RUNNING) return TC_ERR_INVALID_STATE;
+  if (recorder_.busy()) return TC_ERR_INVALID_STATE;  // lúc đo không có tiếng beat / giọng
   std::lock_guard<std::mutex> lock(latencyMutex_);
   if (probe_.isActive() || latencyAnalyzing_) return TC_ERR_INVALID_STATE;
   latencyInfo_ = backend_ ? backend_->info() : BackendInfo{};
@@ -546,6 +550,31 @@ tc_result Engine::latencyResult(tc_latency_result& out) const {
   return TC_OK;
 }
 
+// ---------------------------------------------------------------------------
+// Thu âm (từ v0.8)
+
+tc_result Engine::startRecording(const std::string& dir, double maxSeconds) {
+  if (state() != TC_STATE_RUNNING) return TC_ERR_INVALID_STATE;
+  {
+    std::lock_guard<std::mutex> lock(latencyMutex_);
+    if (probe_.isActive()) return TC_ERR_INVALID_STATE;  // đang đo độ trễ: không có beat / giọng
+  }
+  RecordStartInfo info;
+  if (backend_) {
+    const BackendInfo b = backend_->info();
+    info.inputLatencyMs = b.inputLatencyMs;
+    info.outputLatencyMs = b.outputLatencyMs;
+  }
+  info.pitchLatencyFrames = static_cast<uint32_t>(pitch_.algorithmLatency());
+  info.outputLookaheadFrames = static_cast<uint32_t>(limiter_.lookahead());
+  info.route = route_.load(std::memory_order_relaxed);
+  return recorder_.start(dir, maxSeconds, info);
+}
+
+tc_result Engine::stopRecording() {
+  return recorder_.stop(/*audioStopped=*/state() != TC_STATE_RUNNING);
+}
+
 std::size_t Engine::pollEvents(tc_event* out, std::size_t max) {
   if (player_.consumeEnded()) events_.push(TC_EVENT_BEAT_ENDED);
   // Key áp dụng đổi: theo timeline (audio thread tăng bộ đếm) hoặc beat bắt đầu nghe ở tone mới.
@@ -571,12 +600,12 @@ std::size_t Engine::pollEvents(tc_event* out, std::size_t max) {
 // Audio thread
 
 void Engine::process(const float* input, float* output, uint32_t frames) noexcept {
-  processAudio(input, config_.inputChannels, output, config_.outputChannels, frames);
+  processAudio(input, config_.inputChannels, output, config_.outputChannels, frames, 0);
 }
 
 // [RT] Không cấp phát, không khóa, không I/O.
 void Engine::processAudio(const float* in, uint32_t inChannels, float* out, uint32_t outChannels,
-                          uint32_t frames) noexcept {
+                          uint32_t frames, int64_t hostTimeNs) noexcept {
   ScopedFlushDenormals ftz;
   const auto t0 = std::chrono::steady_clock::now();
   inputChannelsSeen_.store(inChannels, std::memory_order_relaxed);
@@ -585,8 +614,13 @@ void Engine::processAudio(const float* in, uint32_t inChannels, float* out, uint
   uint32_t done = 0;
   while (done < frames) {
     const uint32_t n = std::min(frames - done, config_.maxBlockFrames);
+    const int64_t host = hostTimeNs == 0
+                             ? 0
+                             : hostTimeNs + static_cast<int64_t>(static_cast<double>(done) * 1e9 /
+                                                                 config_.sampleRate);
     processChunk(in != nullptr ? in + static_cast<std::size_t>(done) * inChannels : nullptr,
-                 inChannels, out + static_cast<std::size_t>(done) * outChannels, outChannels, n);
+                 inChannels, out + static_cast<std::size_t>(done) * outChannels, outChannels, n,
+                 host);
     done += n;
   }
 
@@ -650,7 +684,7 @@ void Engine::applyKeyTimeline() noexcept {
 
 // [RT]
 void Engine::processChunk(const float* in, uint32_t inChannels, float* out, uint32_t outChannels,
-                          uint32_t frames) noexcept {
+                          uint32_t frames, int64_t hostTimeNs) noexcept {
   float* mic = micBuf_.data();
   for (uint32_t i = 0; i < frames; ++i) mic[i] = in != nullptr ? in[i * inChannels] : 0.0f;
 
@@ -669,11 +703,16 @@ void Engine::processChunk(const float* in, uint32_t inChannels, float* out, uint
     probeWasActive_ = false;
   }
 
+  // Đang thu: giữ bản micro thô (giọng khô) trước khi chỉnh giọng sửa tại chỗ.
+  const bool recording = recorder_.wantsAudio();
+  if (recording) std::copy(mic, mic + frames, dryBuf_.data());
+
   // Giọng: lọc thông cao, dò cao độ, tự chỉnh giọng (tại chỗ) — key theo timeline nếu có.
   applyKeyTimeline();
   pitch_.process(mic, frames);
 
   float* beat = beatBuf_.data();
+  const uint64_t beatFrame = player_.positionFrames();
   player_.render(beat, frames);
   // Beat bắt đầu nghe ở tone mới → key chỉnh giọng theo (từ block sau).
   const int audible = player_.audibleSemitones();
@@ -692,6 +731,9 @@ void Engine::processChunk(const float* in, uint32_t inChannels, float* out, uint
       std::chrono::duration<double>(std::chrono::steady_clock::now() - fx0).count();
   fxLoad_.store(static_cast<float>(fxSec * config_.sampleRate / static_cast<double>(frames)),
                 std::memory_order_relaxed);
+
+  // Thu: giọng khô, giọng đã xử lý (trước gain nghe lại), beat (trước gain beat và limiter).
+  if (recording) recorder_.capture(dryBuf_.data(), vl, vr, beat, frames, beatFrame, hostTimeNs);
 
   float* mix = mixBuf_.data();
   for (uint32_t i = 0; i < frames; ++i) {

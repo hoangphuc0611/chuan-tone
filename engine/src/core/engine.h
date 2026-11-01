@@ -18,6 +18,7 @@
 #include "pitch/voice_pitch_node.h"
 #include "player/beat_player.h"
 #include "player/beat_renderer.h"
+#include "record/recorder.h"
 #include "tonecore/tonecore.h"
 
 namespace tonecore {
@@ -96,6 +97,11 @@ class Engine : public BackendHost {
   tc_result startLatencyMeasurement();
   tc_result latencyResult(tc_latency_result& out) const;
 
+  // Thu âm (từ v0.8): dry.wav / wet.wav / beat.wav trong `dir`.
+  tc_result startRecording(const std::string& dir, double maxSeconds);
+  tc_result stopRecording();
+  void fillRecordStatus(tc_record_status& s) const noexcept { recorder_.fillStatus(s); }
+
   // Lấy sự kiện; đồng thời chuyển các cờ từ audio thread thành sự kiện.
   std::size_t pollEvents(tc_event* out, std::size_t max);
 
@@ -110,14 +116,14 @@ class Engine : public BackendHost {
 
   // BackendHost
   void processAudio(const float* in, uint32_t inChannels, float* out, uint32_t outChannels,
-                    uint32_t frames) noexcept override;
+                    uint32_t frames, int64_t hostTimeNs) noexcept override;
   void onRouteChanged(int32_t route) override;
   void onInterruption(bool began) override;
   void onStreamRestarted(tc_result result) override;
 
  private:
   void processChunk(const float* in, uint32_t inChannels, float* out, uint32_t outChannels,
-                    uint32_t frames) noexcept;
+                    uint32_t frames, int64_t hostTimeNs) noexcept;
   void updateMonitorTarget() noexcept;
   void applyKeyTimeline() noexcept;
   void collectTimelineGarbage();
@@ -174,12 +180,15 @@ class Engine : public BackendHost {
   // dưới trần đi thẳng (chỉ trễ 1 ms). Thay chỗ kẹp ±1.
   PeakLimiter limiter_;
   FxRack fxRack_;
+  // Thu âm (từ v0.8): audio thread chép giọng khô / đã xử lý / beat vào ring, luồng ghi riêng.
+  Recorder recorder_;
   bool probeWasActive_ = false;  // audio thread: vừa đo độ trễ xong → xoá limiter (bỏ âm cũ)
   std::unique_ptr<AudioBackend> backend_;
   EventQueue events_;
 
   // Buffer cấp phát trước cho audio thread
   std::vector<float> micBuf_;
+  std::vector<float> dryBuf_;  // micro thô trước chỉnh giọng (chỉ chép khi đang thu)
   std::vector<float> beatBuf_;
   std::vector<float> stimBuf_;
   std::vector<float> voiceL_;  // giọng sau chuỗi FX (khô + ướt), trái / phải

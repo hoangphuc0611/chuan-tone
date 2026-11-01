@@ -27,8 +27,10 @@ class BackendHost {
  public:
   virtual ~BackendHost() = default;
   // [RT] Gọi từ audio thread. in/out interleaved với số kênh thực tế của thiết bị.
+  // hostTimeNs: đồng hồ máy (ns) lúc frame đầu của `out` ra thiết bị, chưa gồm độ trễ ra mà hệ
+  // điều hành báo; 0 = nền tảng không báo (từ v0.8, dùng căn video camera với tiếng).
   virtual void processAudio(const float* in, uint32_t inChannels, float* out, uint32_t outChannels,
-                            uint32_t frames) noexcept = 0;
+                            uint32_t frames, int64_t hostTimeNs) noexcept = 0;
   // Gọi từ luồng của hệ điều hành (không phải audio thread).
   virtual void onRouteChanged(int32_t route) = 0;
   virtual void onInterruption(bool began) = 0;

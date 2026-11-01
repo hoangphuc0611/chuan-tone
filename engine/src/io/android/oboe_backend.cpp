@@ -118,7 +118,8 @@ class OboeBackend final : public AudioBackend, public oboe::AudioStreamErrorCall
     std::copy(src, src + got, in);
     std::fill(in + got, in + frames, 0.0f);
 
-    host_.processAudio(in, 1, static_cast<float*>(outputData), kOutputChannels, frames);
+    // Đồng hồ máy chưa cần trên Android ở M7 (chưa xuất video camera Android).
+    host_.processAudio(in, 1, static_cast<float*>(outputData), kOutputChannels, frames, 0);
     tuneBufferOnXrun();
     return oboe::DataCallbackResult::Continue;
   }
