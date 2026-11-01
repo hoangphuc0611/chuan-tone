@@ -5,9 +5,49 @@
 > ≤ 60 giây**. Spec liên quan: mục 4 (tách vocal), mục 5 màn 2 (Phân tích bài), mục 7 (quyền riêng
 > tư), mục 11 (upload FLAC).
 
+## Báo cáo M6 (2026-11-01 — xong)
+
+**Đã xong**
+- Server tách giọng (`server/`, FastAPI + htdemucs, ADR-006): upload từng đoạn FLAC và tách gối
+  nhau (cửa sổ 30 s chồng 2 s), chỉ trả stem giọng; xoá sau khi tải / 24 giờ / bỏ dở 15 phút;
+  mã máy + 50 job / ngày, ≤ 10 phút / bài; lớp bộ tách thay được. Trọng số htdemucs **chỉ dùng
+  phát triển nội bộ** (server trên Mac).
+- Engine 0.7: bộ nén FLAC tự viết theo RFC 9639 (61,8% PCM, ngang Apple), `tc_exporter_*`; phát
+  bài gốc + stem giọng (phần nhạc = bài − giọng), `TC_NODE_VOCAL` gain trượt 20 ms, đổi tone render
+  cả hai làn, dò tone trên phần nhạc.
+- App: client tách giọng (gửi / theo dõi / tải / huỷ / thử lại, báo lỗi tiếng Việt), hỏi đồng ý
+  trước khi gửi bài, lưu bản tách theo bài, thanh **"Giữ giọng ca sĩ gốc"**; màn **Phân tích bài**
+  (Trang chủ → "Thêm bài hát" → tách → dò tone → dò nhịp, "Tone: … – BPM", sửa tone tay, "Hát").
+
+**Số đo**
+| Mục | Chỉ tiêu | Mac M1 | iPhone 13 Pro + server trên Mac |
+|---|---|---|---|
+| Bài 4 phút: bấm "Tách" → có giọng trên máy | ≤ 60 s | 42–45 s (client giả lập), 43,1 s (app thật) | bài 5:32: 64 s (server 56 s) → **4 phút ≈ 46–48 s** |
+| Tách htdemucs bài 4 phút | — | 31,8–41,8 s (MPS + autocast 16-bit); 54–84 s khi thiếu RAM | — |
+| Chất lượng tách | — | SDR giọng 11,5 dB (vocadito trộn beat); beat không lời còn −53 dBFS | 0% không lọt giọng, 100% như bài gốc (nghe) |
+| Đổi tone khi có giọng | giọng và nhạc cùng lên | k = 0 không lọt giọng sau +2 (test) | +2 vẫn khớp (nghe) |
+| Dò tone trên phần nhạc | — | phần nhạc = file nhạc (test) | Lạc Trôi Am / 68 BPM, Duyên Phận Gm / 85 BPM — khớp beat karaoke |
+| FLAC upload | — | 61,8–61,9% PCM; bài 5–6 phút xuất 1,8–2,2 s | — |
+| Test | xanh | engine 282 + binding 23 + app 64 + server 18; CI xanh | IPA build từ CI |
+
+**Vấn đề còn lại**
+- **Giấy phép trọng số htdemucs** ("chỉ cho mục đích khoa học"): trước khi phát hành phải chọn API
+  tách trả phí / giấy phép của Meta / model tự huấn luyện (M9).
+- Server mới chạy trên Mac 8 GB: thiếu RAM thì tách chậm (54–84 s) và có lần tiến trình bị hệ thống
+  dừng; máy chủ GPU thật, HTTPS, tên miền, Dockerfile (chưa build thử) → M9.
+- Job lưu trong bộ nhớ: server khởi động lại là mất job đang chạy (app báo lỗi, bấm tách lại).
+- Chưa upload nền: phải giữ màn hình mở trong lúc tách (M8).
+- Mới đo trên 1 iPhone, qua Wi-Fi nhà; chưa đo 4G thật.
+- Hai đoạn B♭ trưởng của Duyên Phận (bài gốc có giọng) chưa nghe kiểm.
+- Từ M3 / M4 còn: nhãn BPM bộ test Việt, nâng tone +4…+6 hơi phơ.
+
+**Cách tự kiểm tra**: mục "Cách bạn tự kiểm tra khi xong M6" ở phần 7.
+
+---
+
 ## Tiến độ
 
-- [~] **B1** (2026-10-29, chờ bạn quyết đi tiếp):
+- [x] **B1** (2026-10-29):
   - `server/` (uv, Python 3.13): lớp bộ tách (`fake` cho test, `htdemucs` qua API của gói demucs).
   - Gói demucs / openunmix cài không kéo phụ thuộc; tqdm / dora.log / omegaconf thay bằng mô-đun
     rỗng; mọi gói còn lại MIT / BSD / Apache-2.0 (+ PSF-2.0, CC0, BSL-1.0 — đều thoáng).
@@ -101,7 +141,13 @@
     giọng, có thanh "Giữ giọng ca sĩ gốc".
   - Dùng chung `engine/song_jobs.dart` (phân tích có bộ nhớ, tách giọng) giữa hai màn.
   - Test app 63 (5 mới: các bước, thẻ kết quả, hộp sửa tone, nhớ tone sửa tay).
-- [ ] B7: đo trên iPhone, nghe chất lượng tách, báo cáo M6 (xem mục 7).
+- [x] **B7** (2026-10-31): iPhone 13 Pro + server trên Mac M1 → `docs/separation-results.md`.
+  - Duyên Phận (5:32): **tách xong sau 64 s** (server 56 s) → bài 4 phút ≈ 46–48 s.
+  - Dò tone sau khi tách khớp beat karaoke (Lạc Trôi Am 68 BPM — bài gốc có giọng bị báo nhầm một
+    đoạn G trưởng 50 s; Duyên Phận Gm 85 BPM).
+  - Nghe: 0% không lọt giọng ca sĩ, 100% như bài gốc, đổi tone +2 giọng và nhạc vẫn khớp.
+  - Sửa sau khi thử: lưu thời gian tách theo bài (mở lại vẫn thấy "Tách xong sau … s"); đoạn ngắn
+    < 20 s ở đầu / cuối bài không hiện là chuyển tone. Test app 64.
 
 ---
 

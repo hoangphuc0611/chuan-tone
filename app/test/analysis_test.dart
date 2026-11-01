@@ -69,6 +69,41 @@ void main() {
       expect(modulationSummary(single), isNull);
     });
 
+    test('chuyển tone: bỏ đoạn ngắn ở đầu / cuối bài', () {
+      const f = MusicKey(5, MusicScale.major);
+      const bm = MusicKey(11, MusicScale.naturalMinor);
+      KeySegment seg(int a, int b, MusicKey k) => KeySegment(
+        start: Duration(seconds: a),
+        end: Duration(seconds: b),
+        key: k,
+      );
+      // Lạc Trôi trên iPhone: dạo đầu 18 s, phần kết 12 s → không chuyển tone.
+      expect(
+        modulationSummary(
+          _analysis(
+            timeline: [seg(0, 18, f), seg(18, 260, _am), seg(260, 272, bm)],
+          ),
+        ),
+        isNull,
+      );
+      // Còn chuyển tone thật ở giữa: đoạn đầu ngắn gộp vào, bắt đầu từ 0:00.
+      expect(
+        modulationSummary(
+          _analysis(
+            timeline: [seg(0, 15, f), seg(15, 95, _am), seg(95, 210, _a)],
+          ),
+        ),
+        '0:00 Am → 1:35 A',
+      );
+      // Đoạn cuối đủ dài vẫn kể.
+      expect(
+        modulationSummary(
+          _analysis(timeline: [seg(0, 180, _am), seg(180, 210, _a)]),
+        ),
+        '0:00 Am → 3:00 A',
+      );
+    });
+
     test('tuning chỉ nhắc khi lệch rõ', () {
       expect(tuningNote(_analysis()), contains('+18 cent'));
       expect(tuningNote(_analysis(tuning: -7.6)), contains('−8 cent'));

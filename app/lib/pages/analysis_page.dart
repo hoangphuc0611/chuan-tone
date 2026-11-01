@@ -60,11 +60,15 @@ class _AnalysisPageState extends State<AnalysisPage> {
   Future<void> _init() async {
     final server = await _settings.separationServer();
     final vocals = await _stems.vocalsFor(name: _song.name, size: _song.size);
+    final last = vocals == null
+        ? null
+        : await _stems.resultFor(name: _song.name, size: _song.size);
     final manual = await _prefs.keyFor(name: _song.name, size: _song.size);
     if (!mounted) return;
     setState(() {
       _server = server;
       _vocals = vocals;
+      _sepResult = last;
       _manualKey = manual;
     });
     await _analyze();

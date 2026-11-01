@@ -302,6 +302,21 @@ void main() {
       await store.markDone(name: 'a.m4a', size: 1, chunks: 3);
       final v = await store.vocalsFor(name: 'a.m4a', size: 1);
       expect(v, hasLength(3));
+      expect(
+        await store.resultFor(name: 'a.m4a', size: 1),
+        isNull,
+      ); // không có số đo
+      await store.markDone(
+        name: 'a.m4a',
+        size: 1,
+        chunks: 3,
+        elapsed: const Duration(milliseconds: 64200),
+        serverSeconds: 56.4,
+      );
+      final last = (await store.resultFor(name: 'a.m4a', size: 1))!;
+      expect(last.elapsed, const Duration(milliseconds: 64200));
+      expect(last.serverSeconds, 56.4);
+      expect(last.vocals.map((f) => f.path), v);
       expect(v!.last, endsWith('vocals_002.flac'));
       expect(await store.vocalsFor(name: 'a.m4a', size: 2), isNull);
       File(v[1]).deleteSync();

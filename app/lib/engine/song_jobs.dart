@@ -68,6 +68,8 @@ Future<SeparationResult> separateSong(
       name: song.name,
       size: song.size,
       chunks: r.vocals.length,
+      elapsed: r.elapsed,
+      serverSeconds: r.serverSeconds,
     );
     return r;
   } catch (_) {

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../engine/separation_client.dart';
 import 'app_dirs.dart';
 
 /// Stem giọng ca sĩ đã tách của từng bài (các đoạn FLAC server trả về), trong
@@ -27,16 +28,25 @@ class StemStore {
   static String chunkName(int index) =>
       'vocals_${index.toString().padLeft(3, '0')}.flac';
 
-  /// Ghi sau khi đã tải đủ [chunks] đoạn.
+  /// Ghi sau khi đã tải đủ [chunks] đoạn. [elapsed], [serverSeconds]: số đo của lần tách, để mở
+  /// lại bài vẫn thấy "Tách xong sau … s".
   Future<void> markDone({
     required String name,
     required int size,
     required int chunks,
+    Duration? elapsed,
+    double? serverSeconds,
   }) async {
     final d = dirFor(name: name, size: size);
     await writeFileAtomic(
       File('${d.path}/meta.json'),
-      jsonEncode({'name': name, 'size': size, 'chunks': chunks}),
+      jsonEncode({
+        'name': name,
+        'size': size,
+        'chunks': chunks,
+        'elapsed_ms': ?elapsed?.inMilliseconds,
+        'server_seconds': ?serverSeconds,
+      }),
     );
   }
 
@@ -60,6 +70,31 @@ class StemStore {
         }
       }
       return paths;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Lần tách đã lưu (các đoạn giọng + số đo), hoặc null nếu chưa tách / không có số đo
+  /// (bản tách cũ).
+  Future<SeparationResult?> resultFor({
+    required String name,
+    required int size,
+  }) async {
+    final vocals = await vocalsFor(name: name, size: size);
+    if (vocals == null) return null;
+    try {
+      final d = dirFor(name: name, size: size);
+      final meta =
+          jsonDecode(await File('${d.path}/meta.json').readAsString()) as Map;
+      final ms = meta['elapsed_ms'];
+      if (ms is! int) return null;
+      final server = meta['server_seconds'];
+      return SeparationResult(
+        vocals: [for (final p in vocals) File(p)],
+        elapsed: Duration(milliseconds: ms),
+        serverSeconds: server is num ? server.toDouble() : null,
+      );
     } catch (_) {
       return null;
     }

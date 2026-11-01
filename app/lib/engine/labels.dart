@@ -127,12 +127,24 @@ String? tuningNote(SongAnalysis a) {
   return 'Beat lệch $sign${c.abs().round()} cent so với chuẩn — chỉnh giọng đã theo đúng beat.';
 }
 
-/// "0:00 Am → 1:35 A → 2:40 Am"; null nếu bài không chuyển tone.
+/// Đoạn đầu / cuối bài ngắn hơn mức này (dạo đầu, phần kết của MV…) không kể là chuyển tone.
+const _edgeSegmentMin = Duration(seconds: 20);
+
+/// "0:00 Am → 1:35 A → 2:40 Am"; null nếu bài không chuyển tone. Đoạn ngắn ở đầu / cuối bài
+/// chỉ bỏ khi hiển thị (bài gốc Lạc Trôi: dạo đầu 18 s, phần kết MV 12 s).
 String? modulationSummary(SongAnalysis a) {
   if (!a.hasModulation) return null;
+  var segs = a.timeline;
+  if (segs.length > 1 && segs.first.end - segs.first.start < _edgeSegmentMin) {
+    segs = segs.sublist(1);
+  }
+  if (segs.length > 1 && segs.last.end - segs.last.start < _edgeSegmentMin) {
+    segs = segs.sublist(0, segs.length - 1);
+  }
+  if (segs.length < 2) return null;
   return [
-    for (final s in a.timeline)
-      '${formatDuration(s.start)} ${keySymbol(s.key)}',
+    for (final (i, s) in segs.indexed)
+      '${formatDuration(i == 0 ? Duration.zero : s.start)} ${keySymbol(s.key)}',
   ].join(' → ');
 }
 

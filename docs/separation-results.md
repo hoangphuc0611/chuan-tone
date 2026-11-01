@@ -58,3 +58,42 @@ Server chạy trên cùng Mac M1 (htdemucs, MPS, autocast 16-bit, chồng đoạ
 `app/test/separation_e2e_test.dart`: `FlacExporter` của engine (native) + `SeparationClient` (Dart)
 với server htdemucs trên cùng Mac, bài 4 phút: **43,1 s** từ lúc bắt đầu tới khi tải xong đoạn giọng
 cuối (server tách 39,6 s, nhận đủ bài sau 8,7 s); `loadBeatWithVocals` nạp lại được.
+
+## B7 — trên iPhone (2026-10-31)
+
+iPhone 13 Pro (`iPhone14,2`, iOS 26.6.2) qua Wi-Fi tới server htdemucs trên Mac M1 (cùng cấu hình
+B1–B3). Bài gốc có giọng ca sĩ, tải từ kênh chính thức, chỉ để thử trong `testdata/vocal-songs/`
+(không commit). Đường đi: Trang chủ → "Thêm bài hát" → "Tách" → đồng ý → tiến độ → phân tích lại
+trên phần nhạc.
+
+| Bài | Độ dài | **Tách xong** (iPhone) | Server tách | Quy về bài 4 phút |
+|---|---|---|---|---|
+| Duyên Phận – Lệ Quyên | 5:32 | **64 s** | 56 s | **≈ 46–48 s** ✅ (≤ 60 s) |
+| Lạc Trôi – Sơn Tùng M-TP (MV) | 4:32 | tách được, chưa ghi số | — | — |
+
+- Quy đổi: thời gian tách tỉ lệ với độ dài bài (56 s / 332 s → 40 s / 240 s), phần còn lại
+  (iPhone giải mã + nén FLAC, upload, tải giọng về) ≈ 8 s và gần như không đổi theo bài → 46–48 s.
+  Khớp số đo trên Mac (42–45 s).
+- Lạc Trôi: dòng "Tách xong sau … s" chỉ hiện ngay lúc tách xong, mở lại bài thì mất → đã sửa
+  (B7: lưu số đo vào `meta.json` của bản tách, mở lại bài vẫn thấy).
+
+**Dò tone trước / sau khi tách** (trước = `keylab` trên bài gốc có giọng; sau = app trên iPhone,
+phân tích phần nhạc):
+
+| Bài | Đối chiếu | Trước khi tách | Sau khi tách |
+|---|---|---|---|
+| Lạc Trôi | beat karaoke trong bộ dev: Am, 67,5 BPM, không chuyển tone | Am, 67,5 BPM; timeline **sai**: B♭ (0:00–0:32) → Am → **G (0:50–1:40)** → Am | **Am, 68 BPM**; F (0:00–0:18, dạo đầu MV) → Am → Bm (4:20–hết, phần kết MV) |
+| Duyên Phận | beat tone nam trong bộ dev: Cm (tone nữ thường cách một quãng 5 → Gm) | Gm, 84,9 BPM; B♭ (1:24–2:03, 3:22–4:01) | **Gm, 85 BPM**, không chuyển tone |
+
+- Tách giọng bỏ được đoạn chuyển tone sai 50 s ở Lạc Trôi; tone + BPM sau tách khớp beat karaoke.
+- Hai đoạn B♭ trưởng (tương đối) của Duyên Phận trước khi tách: chưa nghe kiểm là thật hay do giọng.
+- Đoạn ngắn ở đầu / cuối bài (< 20 s: dạo đầu, phần kết MV) không còn hiện là "chuyển tone" trên
+  màn Phân tích bài / Phòng thử (B7); timeline engine giữ nguyên.
+
+**Nghe trên iPhone** (chủ dự án, 2026-10-31):
+
+| Thử | Kết quả |
+|---|---|
+| "Giữ giọng ca sĩ gốc" 0% — còn lọt giọng ca sĩ? | **Không** |
+| Kéo lên 100% — giống bài gốc? | **Có** |
+| Đổi tone +2 — giọng và nhạc cùng lên, khớp nhịp? | **Vẫn khớp** |

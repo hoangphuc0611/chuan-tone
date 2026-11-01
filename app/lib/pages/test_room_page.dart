@@ -207,7 +207,9 @@ class _TestRoomPageState extends State<TestRoomPage> {
       _beatPath = song.path;
       _vocals = vocals;
       _sepError = null;
-      _sepResult = null;
+      _sepResult = vocals == null
+          ? null
+          : await _stemStore.resultFor(name: song.name, size: song.size);
       _service.setVocalGain(0); // bài mới: karaoke
       // Nạp beat mới → engine về tone gốc; đặt lại tone người dùng đã chọn cho bài này.
       final saved = await _prefs.transposeFor(name: song.name, size: song.size);
