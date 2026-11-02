@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:chuantone_media/chuantone_media.dart';
 import 'package:tonecore_flutter/tonecore_flutter.dart';
 
 import '../data/latency_history.dart';
@@ -73,6 +74,7 @@ TakeInfo takeInfoFor({
   required RecordStatus status,
   required TakeSnapshot snap,
   required List<LatencyEntry> latencyHistory,
+  CameraClip? camera,
   DateTime? now,
 }) {
   final rt = roundTripFor(
@@ -115,7 +117,27 @@ TakeInfo takeInfoFor({
     transpose: snap.transpose,
     voiceGain: snap.voiceGain,
     beatGain: snap.beatGain,
+    videoFile: camera?.path.split('/').last,
+    videoFirstFrameNs: camera?.firstFrameNs ?? 0,
+    videoDroppedFrames: camera?.dropped ?? 0,
   );
+}
+
+/// Hiệu chỉnh hình ↔ tiếng còn thiếu (đo bằng vỗ tay trước camera, B6); dương = hình muộn hơn.
+const cameraSyncNs = 0;
+
+/// Thời điểm (ns, trên trục của file tiếng đã xuất — bắt đầu ở điểm cắt đầu) mà khung hình camera
+/// đầu tiên khớp (ADR-007 điểm 5): khung hình ở mốc P (đồng hồ máy) cho thấy người hát lúc P, lúc đó
+/// họ nghe beat frame (P − mốc beat frame đầu được nghe); mốc đó = đồng hồ máy của frame đầu bản thu
+/// + độ trễ ra hệ điều hành báo + limiter nhìn trước.
+int cameraOffsetNs(TakeInfo i) {
+  if (i.sampleRate == 0) return 0;
+  final heardNs =
+      i.startHostTimeNs +
+      (i.outputLatencyMs * 1e6).round() +
+      (i.outputLookaheadFrames * 1e9 / i.sampleRate).round();
+  final trimNs = (i.trimStartFrame * 1e9 / i.sampleRate).round();
+  return i.videoFirstFrameNs - heardNs - trimNs + cameraSyncNs;
 }
 
 /// Thông số render bản thu theo lựa chọn hiện tại (preset lấy theo thể loại).
@@ -156,7 +178,8 @@ class TakeSession {
 
   bool get active => _dir != null;
 
-  Future<void> start(ToneCoreEngine e, TakeSnapshot snap) async {
+  /// Mở thư mục bản thu + bắt đầu thu; trả thư mục (để ghi hình camera vào cùng chỗ).
+  Future<Directory> start(ToneCoreEngine e, TakeSnapshot snap) async {
     final dir = await _store.newTakeDir();
     try {
       e.startRecording(dir.path);
@@ -166,10 +189,15 @@ class TakeSession {
     }
     _dir = dir;
     _snap = snap;
+    return dir;
   }
 
   /// Dừng và lưu bản thu. Lỗi ghi file → [ToneCoreException] (thư mục bị xoá).
-  Future<Take> stop(ToneCoreEngine e, SongRef song) async {
+  Future<Take> stop(
+    ToneCoreEngine e,
+    SongRef song, {
+    CameraClip? camera,
+  }) async {
     final dir = _dir!;
     final snap = _snap!;
     _dir = null;
@@ -185,6 +213,7 @@ class TakeSession {
       status: e.recordStatus,
       snap: snap,
       latencyHistory: parseLatencyHistory(await _latency.load()),
+      camera: camera,
     );
     await _store.save(dir, info);
     return Take(dir, info);

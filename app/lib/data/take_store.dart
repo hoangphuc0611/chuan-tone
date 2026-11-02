@@ -41,6 +41,9 @@ class TakeInfo {
     this.beatGain = 1,
     this.trimStartFrame = 0,
     this.trimEndFrame = 0,
+    this.videoFile,
+    this.videoFirstFrameNs = 0,
+    this.videoDroppedFrames = 0,
   });
 
   final String songName;
@@ -87,6 +90,13 @@ class TakeInfo {
 
   /// 0 = hết bài.
   final int trimEndFrame;
+
+  /// Video camera trước quay cùng lúc (tên file trong thư mục bản thu; null = không quay).
+  final String? videoFile;
+
+  /// Mốc khung hình đầu theo đồng hồ máy (ns, cùng gốc với [startHostTimeNs]).
+  final int videoFirstFrameNs;
+  final int videoDroppedFrames;
 
   Duration get duration => sampleRate == 0
       ? Duration.zero
@@ -141,6 +151,9 @@ class TakeInfo {
     beatGain: beatGain ?? this.beatGain,
     trimStartFrame: trimStartFrame ?? this.trimStartFrame,
     trimEndFrame: trimEndFrame ?? this.trimEndFrame,
+    videoFile: videoFile,
+    videoFirstFrameNs: videoFirstFrameNs,
+    videoDroppedFrames: videoDroppedFrames,
   );
 
   Map<String, dynamic> toJson() => {
@@ -181,6 +194,13 @@ class TakeInfo {
     'beatGain': beatGain,
     'trimStartFrame': trimStartFrame,
     'trimEndFrame': trimEndFrame,
+    'video': videoFile == null
+        ? null
+        : {
+            'file': videoFile,
+            'firstFrameNs': videoFirstFrameNs,
+            'droppedFrames': videoDroppedFrames,
+          },
   };
 
   /// Đọc lại; thiếu / hỏng trường bắt buộc → [FormatException].
@@ -252,6 +272,18 @@ class TakeInfo {
       beatGain: d(j['beatGain'], 1),
       trimStartFrame: i(j['trimStartFrame'], 0),
       trimEndFrame: i(j['trimEndFrame'], 0),
+      videoFile: switch (j['video']) {
+        {'file': final String f} => f,
+        _ => null,
+      },
+      videoFirstFrameNs: switch (j['video']) {
+        {'firstFrameNs': final int t} => t,
+        _ => 0,
+      },
+      videoDroppedFrames: switch (j['video']) {
+        {'droppedFrames': final int n} => n,
+        _ => 0,
+      },
     );
   }
 
@@ -302,6 +334,14 @@ class Take {
   String get dryPath => '${dir.path}/dry.wav';
   String get wetPath => '${dir.path}/wet.wav';
   String get beatPath => '${dir.path}/beat.wav';
+
+  /// Video camera (null nếu không quay / file đã mất).
+  String? get videoPath {
+    final f = info.videoFile;
+    if (f == null) return null;
+    final path = '${dir.path}/$f';
+    return File(path).existsSync() ? path : null;
+  }
 
   /// Tổng dung lượng thư mục (byte).
   int sizeBytes() {

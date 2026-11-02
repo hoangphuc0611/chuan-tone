@@ -1,3 +1,4 @@
+import AVFoundation
 import Flutter
 import Photos
 import UIKit
@@ -11,6 +12,7 @@ public class ChuanToneMediaPlugin: NSObject, FlutterPlugin {
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(name: "chuantone/media", binaryMessenger: registrar.messenger())
     registrar.addMethodCallDelegate(ChuanToneMediaPlugin(), channel: channel)
+    registrar.register(CameraPreviewFactory(), withId: "chuantone/camera-preview")
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -54,12 +56,72 @@ public class ChuanToneMediaPlugin: NSObject, FlutterPlugin {
     case "cancel":
       waveform?.cancel()
       result(nil)
+    case "cameraStart":
+      CameraRecorder.shared.start { error in
+        DispatchQueue.main.async {
+          if let error = error {
+            result(FlutterError(code: "camera", message: Self.message(error), details: nil))
+          } else {
+            result(true)
+          }
+        }
+      }
+    case "cameraStop":
+      CameraRecorder.shared.stop()
+      result(nil)
+    case "cameraRecordStart":
+      guard let path = args["path"] as? String else { return result(Self.argError("path")) }
+      CameraRecorder.shared.startRecording(to: URL(fileURLWithPath: path)) { error in
+        DispatchQueue.main.async {
+          if let error = error {
+            result(FlutterError(code: "camera", message: Self.message(error), details: nil))
+          } else {
+            result(true)
+          }
+        }
+      }
+    case "cameraRecordStop":
+      CameraRecorder.shared.stopRecording { r in
+        DispatchQueue.main.async {
+          switch r {
+          case .success(let clip):
+            result([
+              "path": clip.path, "firstFrameNs": NSNumber(value: clip.firstFrameNs),
+              "durationSec": clip.durationSec, "frames": clip.frames, "dropped": clip.dropped,
+            ])
+          case .failure(let error):
+            result(FlutterError(code: "camera", message: Self.message(error), details: nil))
+          }
+        }
+      }
+    case "muxVideo":
+      guard let video = args["video"] as? String, let audio = args["audio"] as? String,
+        let output = args["output"] as? String
+      else { return result(Self.argError("video / audio / output")) }
+      let offsetNs = (args["offsetNs"] as? NSNumber)?.int64Value ?? 0
+      DispatchQueue.global(qos: .userInitiated).async {
+        do {
+          try MediaMux.mux(
+            video: URL(fileURLWithPath: video),
+            videoOffset: CMTime(value: offsetNs, timescale: 1_000_000_000),
+            audio: URL(fileURLWithPath: audio), trim: nil, output: URL(fileURLWithPath: output))
+          DispatchQueue.main.async { result(true) }
+        } catch {
+          DispatchQueue.main.async {
+            result(FlutterError(code: "video", message: Self.message(error), details: nil))
+          }
+        }
+      }
     case "saveVideoToPhotos":
       guard let path = args["path"] as? String else { return result(Self.argError("path")) }
       saveVideo(URL(fileURLWithPath: path), result: result)
     default:
       result(FlutterMethodNotImplemented)
     }
+  }
+
+  private static func message(_ error: Error) -> String {
+    (error as? MediaError)?.message ?? error.localizedDescription
   }
 
   private static func argError(_ what: String) -> FlutterError {

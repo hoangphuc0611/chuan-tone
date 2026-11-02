@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:chuantone_media/chuantone_media.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:tonecore_flutter/tonecore_flutter.dart';
 
@@ -88,6 +90,8 @@ class _TestRoomPageState extends State<TestRoomPage> {
   bool _recording = false;
   int? _countdown; // đếm ngược 3…1 trước khi thu khi beat đang dừng
   RecordStatus? _recStatus;
+  bool _camera = false; // quay video camera trước cùng lúc (iOS)
+  bool _cameraRecording = false;
 
   @override
   void initState() {
@@ -218,7 +222,7 @@ class _TestRoomPageState extends State<TestRoomPage> {
       setState(() => _countdown = null);
     }
     try {
-      await _session.start(
+      final dir = await _session.start(
         e,
         TakeSnapshot.of(
           _service,
@@ -227,6 +231,16 @@ class _TestRoomPageState extends State<TestRoomPage> {
           beatGain: _beatGain,
         ),
       );
+      if (_camera) {
+        try {
+          await ChuanToneMedia.cameraRecordStart('${dir.path}/camera.mp4');
+          _cameraRecording = true;
+        } on PlatformException catch (err) {
+          _show(
+            'Không quay được video: ${err.message ?? err.code}. Vẫn thu âm.',
+          );
+        }
+      }
     } on ToneCoreException catch (err) {
       _show('Không thu được (${err.codeName}).');
       return;
@@ -238,6 +252,20 @@ class _TestRoomPageState extends State<TestRoomPage> {
     });
   }
 
+  Future<void> _toggleCamera(bool on) async {
+    if (!on) {
+      setState(() => _camera = false);
+      await ChuanToneMedia.cameraStop();
+      return;
+    }
+    try {
+      final ok = await ChuanToneMedia.cameraStart();
+      if (ok == true && mounted) setState(() => _camera = true);
+    } on PlatformException catch (err) {
+      _show('Không mở được camera: ${err.message ?? err.code}');
+    }
+  }
+
   /// Dừng thu → lưu bản thu → màn Nghe lại & chỉnh; quay về thì nạp lại bài.
   Future<void> _stopRecording() async {
     final e = _service.engine;
@@ -245,8 +273,17 @@ class _TestRoomPageState extends State<TestRoomPage> {
     if (e == null || song == null || !_recording) return;
     setState(() => _recording = false);
     e.pause();
+    CameraClip? clip;
+    if (_cameraRecording) {
+      _cameraRecording = false;
+      try {
+        clip = await ChuanToneMedia.cameraRecordStop();
+      } on PlatformException catch (err) {
+        _show('Video camera lỗi: ${err.message ?? err.code}');
+      }
+    }
     try {
-      final take = await _session.stop(e, song);
+      final take = await _session.stop(e, song, camera: clip);
       if (!mounted) return;
       await Navigator.of(
         context,
@@ -527,12 +564,18 @@ class _TestRoomPageState extends State<TestRoomPage> {
     _sepCancel?.cancel();
     if (_recording) {
       try {
-        _service.engine
-            ?.stopRecording(); // rời màn khi đang thu: vẫn giữ file đã ghi
+        // Rời màn khi đang thu: vẫn giữ file đã ghi.
+        _service.engine?.stopRecording();
       } on ToneCoreException {
         // bỏ qua
       }
     }
+    if (_cameraRecording) {
+      unawaited(
+        ChuanToneMedia.cameraRecordStop().then((_) {}, onError: (_) {}),
+      );
+    }
+    if (_camera) unawaited(ChuanToneMedia.cameraStop());
     _service.engine?.pause();
     super.dispose();
   }
@@ -617,6 +660,28 @@ class _TestRoomPageState extends State<TestRoomPage> {
               icon: Icon(p.playing ? Icons.pause : Icons.play_arrow),
             ),
           ),
+          const SizedBox(height: 8),
+          if (Platform.isIOS)
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Quay video (camera trước)'),
+              subtitle: const Text('Xuất video 9:16 có mặt bạn, khớp tiếng'),
+              value: _camera,
+              onChanged: _recording ? null : _toggleCamera,
+            ),
+          if (_camera)
+            Center(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: const SizedBox(
+                  height: 220,
+                  child: AspectRatio(
+                    aspectRatio: 9 / 16,
+                    child: CameraPreviewView(),
+                  ),
+                ),
+              ),
+            ),
           const SizedBox(height: 8),
           _RecordRow(
             recording: _recording,

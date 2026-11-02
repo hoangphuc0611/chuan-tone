@@ -86,7 +86,19 @@
     `NSPhotoLibraryAddUsageDescription`).
   - Màn Nghe lại: **Xuất video sóng nhạc (9:16)** (dùng lại file M4A nếu thông số chưa đổi), tiến độ
     hai bước (trộn âm thanh → dựng video), huỷ; kết quả có **Lưu vào Ảnh** + **Chia sẻ**.
-- [ ] B6: iOS camera trước + đo vỗ tay.
+- [~] **B6** (2026-11-02, chờ thử + đo vỗ tay trên iPhone): camera trước.
+  - `CameraRecorder.swift`: AVCaptureSession chỉ có hình (không micro,
+    `automaticallyConfiguresApplicationAudioSession = false` — không đụng session của engine), camera
+    trước 1080×1920 dọc, lật gương, 30 fps cố định; ghi H.264 8 Mbit/s bằng AVAssetWriter, phiên bắt
+    đầu ở mốc khung đầu (đồng hồ máy); xem trước bằng platform view `chuantone/camera-preview`.
+  - Kênh: `cameraStart / cameraStop / cameraRecordStart / cameraRecordStop` (đường dẫn, mốc khung đầu
+    ns, thời lượng, số khung, khung rơi), `muxVideo` (MediaMux với độ lệch). `NSCameraUsageDescription`.
+  - Phòng thử: công tắc **Quay video (camera trước)** + khung xem trước 9:16; bấm Thu thì ghi hình
+    cùng lúc vào thư mục bản thu (`camera.mp4`), lỗi camera vẫn thu âm.
+  - `cameraOffsetNs`: khung đầu khớp beat ở (mốc khung đầu) − (`start_host_time_ns` + độ trễ ra +
+    limiter) − phần cắt đầu; `cameraSyncNs` (hằng hiệu chỉnh) chốt sau khi đo vỗ tay.
+  - Màn Nghe lại: **Xuất video camera (9:16)** (ghép nguyên dạng với file M4A).
+  - Test app 81 (độ lệch hình ↔ tiếng, cắt đầu, JSON video).
 - [ ] B7: nghiệm thu iPhone, đăng TikTok, báo cáo M7.
 
 ## Các điểm cần quyết (2026-11-02: duyệt theo đề nghị)

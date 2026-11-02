@@ -4,6 +4,8 @@
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>ChuẩnTone cần micro để bạn nghe lại giọng hát và thu âm.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>ChuẩnTone dùng camera trước để quay video khi bạn hát.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>ChuẩnTone lưu video bài hát của bạn vào Ảnh.</string>
 	<key>NSLocalNetworkUsageDescription</key>

@@ -197,6 +197,45 @@ class _ReviewPageState extends State<ReviewPage> {
     if (mounted) setState(() {});
   }
 
+  /// Video camera trước (B6): ghép hình đã quay với file M4A theo mốc đồng hồ máy.
+  Future<void> _exportCameraVideo() async {
+    final video = _take.videoPath;
+    if (video == null) return;
+    final audio = await _ensureAudio();
+    if (audio == null || !mounted) return;
+    final out = '${_take.dir.path}/video-${_stamp()}.mp4';
+    setState(() {
+      _videoBusy = true;
+      _busyLabel = 'Đang ghép video…';
+      _progress = null;
+      _exportError = null;
+    });
+    try {
+      await ChuanToneMedia.muxVideo(
+        video: video,
+        audio: audio,
+        output: out,
+        offsetNs: cameraOffsetNs(_info),
+      );
+      final old = _videoPath;
+      if (old != null) {
+        unawaited(File(old).delete().then((_) {}, onError: (_) {}));
+      }
+      _videoPath = out;
+    } on PlatformException catch (err) {
+      _exportError = 'Ghép video lỗi: ${err.message ?? err.code}';
+    } on MissingPluginException {
+      _exportError = 'Máy này chưa ghép được video.';
+    } finally {
+      if (mounted) {
+        setState(() {
+          _videoBusy = false;
+          _busyLabel = null;
+        });
+      }
+    }
+  }
+
   /// Video 9:16 nền sóng nhạc + tên bài (iOS, B5): dựng từ chính file M4A nên khớp tiếng.
   Future<void> _exportVideo() async {
     final audio = await _ensureAudio();
@@ -526,6 +565,17 @@ class _ReviewPageState extends State<ReviewPage> {
         // ---- Xuất ----
         Text('Xuất', style: theme.textTheme.titleLarge),
         const SizedBox(height: 8),
+        if (_take.videoPath != null) ...[
+          FilledButton.icon(
+            onPressed: busy || _loading ? null : _exportCameraVideo,
+            icon: const Icon(Icons.videocam),
+            label: const Text('Xuất video camera (9:16)'),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(56),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
         FilledButton.icon(
           onPressed: busy || _loading ? null : _exportVideo,
           icon: const Icon(Icons.movie),

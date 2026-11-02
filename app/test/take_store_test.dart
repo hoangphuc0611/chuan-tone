@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:chuantone/data/take_store.dart';
+import 'package:chuantone_media/chuantone_media.dart';
 import 'package:chuantone/engine/labels.dart';
 import 'package:chuantone/engine/take_alignment.dart';
 import 'package:chuantone/engine/takes.dart';
@@ -190,6 +191,70 @@ void main() {
       expect(rs.voiceGain, 1.2);
       expect(rs.format, RenderFormat.m4a);
       expect(rs.keyTimeline, hasLength(1));
+    });
+  });
+
+  group('video camera', () {
+    test('độ lệch hình ↔ tiếng theo đồng hồ máy, trừ phần cắt đầu', () {
+      const status = RecordStatus(
+        state: RecordState.done,
+        result: 0,
+        sampleRate: 48000,
+        frames: 480000,
+        droppedFrames: 0,
+        startBeatFrame: 0,
+        startHostTimeNs: 1000000000000,
+        inputLatencyMs: 2,
+        outputLatencyMs: 5,
+        pitchLatencyFrames: 0,
+        outputLookaheadFrames: 48,
+        route: AudioRoute.wired,
+      );
+      const snap = TakeSnapshot(
+        genre: Genre.dry,
+        correction: null,
+        retuneMs: null,
+        key: _am,
+        songTimeline: [],
+        tuningCents: 0,
+        tempoBpm: 100,
+        fxMix: 1,
+        gateOn: false,
+        transpose: 0,
+        voiceGain: 1,
+        beatGain: 1,
+      );
+      // Khung hình đầu chụp 120 ms sau lúc frame đầu bản thu ra thiết bị.
+      const clip = CameraClip(
+        path: '/x/20261102-210500/camera.mp4',
+        firstFrameNs: 1000120000000,
+        duration: Duration(seconds: 10),
+        frames: 300,
+        dropped: 1,
+      );
+      final info = takeInfoFor(
+        song: const SongRef(path: '/a.m4a', name: 'a.m4a', size: 1),
+        status: status,
+        snap: snap,
+        latencyHistory: const [],
+        camera: clip,
+      );
+      expect(info.videoFile, 'camera.mp4');
+      expect(info.videoDroppedFrames, 1);
+      // 120 ms − (độ trễ ra 5 ms + limiter 1 ms) = 114 ms.
+      expect(cameraOffsetNs(info), 114000000);
+      // Cắt đầu 0,5 s: hình bắt đầu sớm hơn 0,5 s trên trục file xuất.
+      expect(
+        cameraOffsetNs(info.copyWith(trimStartFrame: 24000)),
+        114000000 - 500000000,
+      );
+      final back = TakeInfo.fromJson(
+        jsonDecode(jsonEncode(info.toJson())) as Map<String, dynamic>,
+      );
+      expect(back.videoFile, 'camera.mp4');
+      expect(back.videoFirstFrameNs, 1000120000000);
+      expect(_info().toJson()['video'], isNull);
+      expect(TakeInfo.fromJson(_info().toJson()).videoFile, isNull);
     });
   });
 

@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 
 /// Phần native của ChuẩnTone (M7, docs/m7-plan.md) qua kênh `chuantone/media`. Chỉ có trên iOS ở
 /// M7; nền tảng khác → [ChuanToneMedia.supported] = false.
@@ -50,6 +52,53 @@ abstract final class ChuanToneMedia {
     }
   }
 
+  // ---- Camera trước (B6) ----
+
+  /// Xin quyền + bật camera trước (xem trước bằng [CameraPreviewView]). Lỗi / không được phép →
+  /// [PlatformException]; null = nền tảng chưa hỗ trợ.
+  static Future<bool?> cameraStart() async {
+    try {
+      return await _channel.invokeMethod<bool>('cameraStart');
+    } on MissingPluginException {
+      supported = false;
+      return null;
+    }
+  }
+
+  static Future<void> cameraStop() async {
+    try {
+      await _channel.invokeMethod<void>('cameraStop');
+    } on MissingPluginException {
+      // không có camera để tắt
+    }
+  }
+
+  /// Bắt đầu ghi hình (không tiếng) vào [path] từ khung hình kế tiếp.
+  static Future<void> cameraRecordStart(String path) =>
+      _channel.invokeMethod<void>('cameraRecordStart', {'path': path});
+
+  /// Dừng ghi hình; trả đoạn đã ghi (mốc khung đầu theo đồng hồ máy).
+  static Future<CameraClip> cameraRecordStop() async {
+    final m = await _channel.invokeMapMethod<String, Object?>(
+      'cameraRecordStop',
+    );
+    return CameraClip.fromMap(m ?? const {});
+  }
+
+  /// Ghép hình [video] (không tiếng) + tiếng [audio] → MP4 [output]. [offsetNs]: thời điểm (trên
+  /// trục của file tiếng) khung hình đầu tiên khớp; âm = hình bắt đầu trước tiếng (bị cắt).
+  static Future<void> muxVideo({
+    required String video,
+    required String audio,
+    required String output,
+    required int offsetNs,
+  }) => _channel.invokeMethod<void>('muxVideo', {
+    'video': video,
+    'audio': audio,
+    'output': output,
+    'offsetNs': offsetNs,
+  });
+
   /// Lưu video vào Ảnh. true = đã lưu, false = người dùng không cho phép; null = chưa hỗ trợ.
   static Future<bool?> saveVideoToPhotos(String path) async {
     try {
@@ -71,5 +120,47 @@ abstract final class ChuanToneMedia {
       supported = false;
       return null;
     }
+  }
+}
+
+/// Đoạn hình camera đã ghi.
+class CameraClip {
+  const CameraClip({
+    required this.path,
+    required this.firstFrameNs,
+    required this.duration,
+    required this.frames,
+    required this.dropped,
+  });
+
+  factory CameraClip.fromMap(Map<String, Object?> m) => CameraClip(
+    path: m['path'] as String? ?? '',
+    firstFrameNs: (m['firstFrameNs'] as num?)?.toInt() ?? 0,
+    duration: Duration(
+      microseconds: (((m['durationSec'] as num?) ?? 0) * 1e6).round(),
+    ),
+    frames: (m['frames'] as num?)?.toInt() ?? 0,
+    dropped: (m['dropped'] as num?)?.toInt() ?? 0,
+  );
+
+  final String path;
+
+  /// Mốc khung hình đầu theo đồng hồ máy (ns, cùng gốc với `RecordStatus.startHostTimeNs`).
+  final int firstFrameNs;
+  final Duration duration;
+  final int frames;
+  final int dropped;
+}
+
+/// Khung xem trước camera trước (iOS). Nền tảng khác: ô đen.
+class CameraPreviewView extends StatelessWidget {
+  const CameraPreviewView({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    if (defaultTargetPlatform != TargetPlatform.iOS) {
+      return const ColoredBox(color: Color(0xFF000000));
+    }
+    return const UiKitView(viewType: 'chuantone/camera-preview');
   }
 }
