@@ -2,6 +2,7 @@ import 'package:tonecore_flutter/tonecore_flutter.dart';
 
 import 'genre_rules.dart';
 import 'separation_client.dart';
+import 'take_alignment.dart';
 
 /// Nhãn tiếng Việt cho UI.
 String routeLabel(AudioRoute r) => switch (r) {
@@ -235,3 +236,30 @@ String separationDoneLabel(SeparationResult r) => [
   'Tách xong sau ${_secs(r.elapsed)}',
   if (r.serverSeconds != null) '(máy chủ tách ${r.serverSeconds!.round()} s)',
 ].join(' ');
+
+// ---- Thu âm (M7) ----
+
+String formatBytes(int bytes) {
+  if (bytes < 1024 * 1024) return '${(bytes / 1024).round()} KB';
+  return '${(bytes / (1024 * 1024)).toStringAsFixed(1).replaceAll('.', ',')} MB';
+}
+
+/// "31/10 22:05".
+String formatTakeDate(DateTime t) {
+  String two(int v) => v.toString().padLeft(2, '0');
+  return '${two(t.day)}/${two(t.month)} ${two(t.hour)}:${two(t.minute)}';
+}
+
+/// "Bù 13,6 ms (đã đo, loa ngoài)".
+String latencySourceLabel(LatencySource s) => switch (s) {
+  LatencySource.measured => 'đã đo',
+  LatencySource.corrected => 'ước theo số đo loa ngoài',
+  LatencySource.reported => 'hệ điều hành báo',
+};
+
+/// "Giọng sớm hơn 10 ms" / "Khớp như lúc thu" / "Giọng muộn hơn 5 ms".
+String nudgeLabel(double ms) {
+  final v = ms.round();
+  if (v == 0) return 'Như lúc thu';
+  return v > 0 ? 'Giọng sớm hơn $v ms' : 'Giọng muộn hơn ${-v} ms';
+}

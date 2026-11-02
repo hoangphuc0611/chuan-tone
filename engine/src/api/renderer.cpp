@@ -38,7 +38,7 @@ bool toSettings(const tc_render_config& c, tonecore::TakeRenderSettings& s) {
   if (c.struct_size != sizeof(tc_render_config) || !capi::allFinite(c.fx)) return false;
   if (!finite(c.fx_wet) || !finite(c.tempo_bpm) || !finite(c.tuning_cents) ||
       !finite(c.gate_threshold_db) || !finite(c.voice_gain) || !finite(c.beat_gain) ||
-      !finite(c.target_lufs) || !finite(c.true_peak_db)) {
+      !finite(c.target_lufs) || !finite(c.true_peak_db) || !finite(c.correction_retune_ms)) {
     return false;
   }
   if (c.key_root < 0 || c.key_root > 11 || c.key_scale < 0 || c.key_scale >= kScaleCount ||
@@ -53,10 +53,11 @@ bool toSettings(const tc_render_config& c, tonecore::TakeRenderSettings& s) {
   s.endFrame = c.end_frame;
   s.fx = capi::toFx(c.fx);
   s.fxEnabled = c.fx_enabled != 0;
-  s.fxWet = std::clamp(c.fx_wet, 0.0f, 1.0f);
+  s.fxWet = std::clamp(c.fx_wet, 0.0f, 2.0f);
   s.tempoBpm = c.tempo_bpm > 0.0f ? std::clamp(c.tempo_bpm, 30.0f, 300.0f) : 100.0f;
   s.correctionEnabled = c.correction_enabled != 0;
   s.correction = static_cast<CorrectionPreset>(c.correction_preset);
+  s.retuneMs = c.correction_retune_ms < 0.0f ? -1.0f : std::min(c.correction_retune_ms, 200.0f);
   s.keyRoot = c.key_root;
   s.keyScale = static_cast<Scale>(c.key_scale);
   s.tuningCents = std::clamp(c.tuning_cents, -100.0f, 100.0f);
@@ -113,6 +114,7 @@ void tc_render_config_init(tc_render_config* config) {
   config->fx_wet = 1.0f;
   config->tempo_bpm = 100.0f;
   config->correction_preset = TC_PRESET_NATURAL;
+  config->correction_retune_ms = -1.0f;
   config->key_root = 9;
   config->key_scale = TC_SCALE_NATURAL_MINOR;
   config->gate_threshold_db = -50.0f;

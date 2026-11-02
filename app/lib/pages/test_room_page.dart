@@ -16,12 +16,14 @@ import '../engine/labels.dart';
 import '../engine/playback_watch.dart';
 import '../engine/separation_client.dart';
 import '../engine/song_jobs.dart';
+import '../engine/takes.dart';
 import '../engine/transpose_timing.dart';
 import '../widgets/fx_panel.dart';
 import '../widgets/gain_slider.dart';
 import '../widgets/pitch_meter.dart';
 import '../widgets/separation_panel.dart';
 import '../widgets/transpose_control.dart';
+import 'review_page.dart';
 
 /// Màn thử M1–M6: phát beat, đổi tone beat (nhớ theo bài), tự dò tone / BPM khi nạp bài, tách giọng
 /// ca sĩ qua máy chủ (nhớ theo bài, "Giữ giọng ca sĩ gốc"), nghe lại giọng, hiệu ứng giọng theo thể
@@ -81,6 +83,11 @@ class _TestRoomPageState extends State<TestRoomPage> {
   SeparationCancel? _sepCancel;
   String? _sepError;
   SeparationResult? _sepResult;
+  // Thu âm (M7).
+  final _session = TakeSession();
+  bool _recording = false;
+  int? _countdown; // đếm ngược 3…1 trước khi thu khi beat đang dừng
+  RecordStatus? _recStatus;
 
   @override
   void initState() {
@@ -129,7 +136,15 @@ class _TestRoomPageState extends State<TestRoomPage> {
   void _refresh() {
     final e = _service.engine;
     if (e == null || !mounted) return;
+    if (_recording) {
+      final r = e.recordStatus;
+      // Đủ thời lượng tối đa → engine tự dừng thu.
+      if (r.state == RecordState.done || r.state == RecordState.failed) {
+        unawaited(_stopRecording());
+      }
+    }
     setState(() {
+      if (_recording) _recStatus = e.recordStatus;
       _playback = e.playback;
       _metrics = e.metrics;
       _currentKey = _service.currentKey;
@@ -176,6 +191,72 @@ class _TestRoomPageState extends State<TestRoomPage> {
       unawaited(
         _prefs.setTranspose(name: name, size: size, semitones: semitones),
       );
+    }
+  }
+
+  SongRef? get _currentSong {
+    final path = _beatPath;
+    final name = _beatFile;
+    final size = _beatSize;
+    if (path == null || name == null || size == null) return null;
+    return SongRef(path: path, name: name, size: size);
+  }
+
+  /// Thu âm: beat đang dừng thì đếm ngược 3 giây rồi phát từ vị trí hiện tại.
+  Future<void> _startRecording() async {
+    final e = _service.engine;
+    if (e == null || _currentSong == null || _recording || _countdown != null) {
+      return;
+    }
+    final wasPlaying = e.playback.playing;
+    if (!wasPlaying) {
+      for (var n = 3; n > 0; n--) {
+        setState(() => _countdown = n);
+        await Future<void>.delayed(const Duration(seconds: 1));
+        if (!mounted) return;
+      }
+      setState(() => _countdown = null);
+    }
+    try {
+      await _session.start(
+        e,
+        TakeSnapshot.of(
+          _service,
+          e,
+          voiceGain: _monitorGain,
+          beatGain: _beatGain,
+        ),
+      );
+    } on ToneCoreException catch (err) {
+      _show('Không thu được (${err.codeName}).');
+      return;
+    }
+    if (!wasPlaying) e.play();
+    setState(() {
+      _recording = true;
+      _recStatus = e.recordStatus;
+    });
+  }
+
+  /// Dừng thu → lưu bản thu → màn Nghe lại & chỉnh; quay về thì nạp lại bài.
+  Future<void> _stopRecording() async {
+    final e = _service.engine;
+    final song = _currentSong;
+    if (e == null || song == null || !_recording) return;
+    setState(() => _recording = false);
+    e.pause();
+    try {
+      final take = await _session.stop(e, song);
+      if (!mounted) return;
+      await Navigator.of(
+        context,
+      ).push(MaterialPageRoute<void>(builder: (_) => ReviewPage(take: take)));
+      if (!mounted) return;
+      e.beatGain = _beatGain;
+      e.monitorGain = _monitorGain;
+      await _openSong(song);
+    } on ToneCoreException catch (err) {
+      _show('Không lưu được bản thu (${err.codeName}).');
     }
   }
 
@@ -444,6 +525,14 @@ class _TestRoomPageState extends State<TestRoomPage> {
     _sub?.cancel();
     _analyzer?.dispose();
     _sepCancel?.cancel();
+    if (_recording) {
+      try {
+        _service.engine
+            ?.stopRecording(); // rời màn khi đang thu: vẫn giữ file đã ghi
+      } on ToneCoreException {
+        // bỏ qua
+      }
+    }
     _service.engine?.pause();
     super.dispose();
   }
@@ -489,7 +578,7 @@ class _TestRoomPageState extends State<TestRoomPage> {
         Text('Nhạc beat', style: theme.textTheme.titleLarge),
         const SizedBox(height: 8),
         FilledButton.icon(
-          onPressed: _loading ? null : _pickBeat,
+          onPressed: _loading || _recording ? null : _pickBeat,
           icon: _loading
               ? const SizedBox(
                   width: 20,
@@ -529,11 +618,22 @@ class _TestRoomPageState extends State<TestRoomPage> {
             ),
           ),
           const SizedBox(height: 8),
+          _RecordRow(
+            recording: _recording,
+            countdown: _countdown,
+            elapsed: _recStatus?.duration ?? Duration.zero,
+            bluetooth: m?.route == AudioRoute.bluetooth,
+            enabled: !_loading && _sepProgress == null,
+            onStart: _startRecording,
+            onStop: _stopRecording,
+          ),
+          const SizedBox(height: 8),
           TransposeControl(
             value: p.transpose,
             audible: p.audibleTranspose,
             progress: p.transposeProgress,
             onChanged: _setTranspose,
+            enabled: !_recording,
           ),
         ],
         if (pb case final p? when p.hasBeat) ...[
@@ -670,6 +770,67 @@ class _TestRoomPageState extends State<TestRoomPage> {
             analysisTime: _analysisTime,
             rssMb: _rssMb,
             maxRssMb: _maxRssMb,
+          ),
+      ],
+    );
+  }
+}
+
+/// Nút Thu âm / Dừng + đồng hồ (M7).
+class _RecordRow extends StatelessWidget {
+  const _RecordRow({
+    required this.recording,
+    required this.countdown,
+    required this.elapsed,
+    required this.bluetooth,
+    required this.enabled,
+    required this.onStart,
+    required this.onStop,
+  });
+
+  final bool recording;
+  final int? countdown;
+  final Duration elapsed;
+  final bool bluetooth;
+  final bool enabled;
+  final VoidCallback onStart;
+  final VoidCallback onStop;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final red = theme.colorScheme.error;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (recording)
+          FilledButton.icon(
+            onPressed: onStop,
+            icon: const Icon(Icons.stop),
+            label: Text('Dừng · ${formatDuration(elapsed)}'),
+            style: FilledButton.styleFrom(
+              backgroundColor: red,
+              foregroundColor: theme.colorScheme.onError,
+              minimumSize: const Size.fromHeight(56),
+            ),
+          )
+        else
+          OutlinedButton.icon(
+            onPressed: enabled && countdown == null ? onStart : null,
+            icon: Icon(Icons.fiber_manual_record, color: red),
+            label: Text(countdown != null ? 'Chuẩn bị… $countdown' : 'Thu âm'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(56),
+            ),
+          ),
+        if (bluetooth)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'Tai nghe Bluetooth trễ nhiều: giọng thu có thể lệch nhạc. Dùng tai nghe có dây để '
+              'khớp nhất.',
+              style: theme.textTheme.bodySmall?.copyWith(color: red),
+            ),
           ),
       ],
     );

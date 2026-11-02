@@ -24,11 +24,12 @@ struct TakeRenderSettings {
 
   FxPreset fx;
   bool fxEnabled = true;
-  float fxWet = 1.0f;  // "Vang"
+  float fxWet = 1.0f;  // "Vang" 0..2
   float tempoBpm = 100.0f;
 
   bool correctionEnabled = false;
   CorrectionPreset correction = CorrectionPreset::Natural;
+  float retuneMs = -1.0f;  // ≥ 0: thay thời gian kéo về nốt của mức
   int keyRoot = 9;
   Scale keyScale = Scale::NaturalMinor;
   float tuningCents = 0.0f;

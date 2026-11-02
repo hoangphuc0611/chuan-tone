@@ -1488,6 +1488,7 @@ class RenderSettings {
     this.fxWet = 1.0,
     this.tempoBpm = 100,
     this.correction,
+    this.retuneMs,
     this.key = const MusicKey(9, MusicScale.naturalMinor),
     this.tuningCents = 0,
     this.keyTimeline = const [],
@@ -1509,11 +1510,16 @@ class RenderSettings {
   final int endFrame;
   final FxPreset fx;
   final bool fxEnabled;
+
+  /// "Vang" 0..2 (1 = đúng preset), như [ToneCoreEngine.fxMix].
   final double fxWet;
   final double tempoBpm;
 
   /// null = tắt chỉnh giọng.
   final CorrectionPreset? correction;
+
+  /// Thời gian kéo về nốt thay cho giá trị của [correction] (preset thể loại); null = theo mức.
+  final double? retuneMs;
   final MusicKey key;
   final double tuningCents;
   final List<KeySegment> keyTimeline;
@@ -1620,6 +1626,7 @@ class TakeRenderer implements Finalizable {
         ..tempo_bpm = s.tempoBpm
         ..correction_enabled = s.correction == null ? 0 : 1
         ..correction_preset = (s.correction ?? CorrectionPreset.natural).index
+        ..correction_retune_ms = s.retuneMs ?? -1
         ..key_root = s.key.root
         ..key_scale = s.key.scale.index
         ..tuning_cents = s.tuningCents

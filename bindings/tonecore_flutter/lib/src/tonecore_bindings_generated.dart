@@ -2190,7 +2190,7 @@ final class tc_render_config extends ffi.Struct {
   @ffi.Int32()
   external int fx_enabled;
 
-  /// "Vang" 0..1 (TC_NODE_FX / TC_PARAM_MIX)
+  /// "Vang" 0..2 (như TC_NODE_FX / TC_PARAM_MIX, 1 = đúng preset)
   @ffi.Float()
   external double fx_wet;
 
@@ -2204,6 +2204,11 @@ final class tc_render_config extends ffi.Struct {
   /// tc_correction_preset
   @ffi.Int32()
   external int correction_preset;
+
+  /// ≥ 0: thay thời gian kéo về nốt của mức (preset thể loại); < 0 =
+  /// theo mức
+  @ffi.Float()
+  external double correction_retune_ms;
 
   /// key ĐANG NGHE lúc hát (đã cộng tone đổi)
   @ffi.Int32()

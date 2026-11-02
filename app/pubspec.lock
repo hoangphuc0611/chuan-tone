@@ -41,6 +41,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.4.1"
+  chuantone_media:
+    dependency: "direct main"
+    description:
+      path: "packages/chuantone_media"
+      relative: true
+    source: path
+    version: "0.1.0"
   clock:
     dependency: transitive
     description:
@@ -331,7 +338,7 @@ packages:
       path: "../bindings/tonecore_flutter"
       relative: true
     source: path
-    version: "0.4.0"
+    version: "0.8.0"
   vector_math:
     dependency: transitive
     description:

@@ -189,6 +189,25 @@ class AudioService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Đặt cả chuỗi giọng theo một bản thu (màn Nghe lại, M7): thể loại, mức chỉnh giọng (kèm thời
+  /// gian kéo về nốt của thể loại), "Vang", cổng — không lấy mức chỉnh giọng mặc định của thể loại.
+  void applyVoiceSettings({
+    required Genre genre,
+    required CorrectionPreset? correction,
+    required double? retuneMs,
+    required double fxMix,
+    required bool gateOn,
+  }) {
+    this.genre = genre;
+    this.correction = correction;
+    correctionRetuneMs = retuneMs;
+    this.fxMix = fxMix.clamp(0.0, 2.0);
+    this.gateOn = gateOn;
+    _syncCorrection();
+    _syncFx();
+    notifyListeners();
+  }
+
   void setFxMix(double v) {
     fxMix = v.clamp(0.0, 2.0);
     _engine?.fxMix = fxMix;

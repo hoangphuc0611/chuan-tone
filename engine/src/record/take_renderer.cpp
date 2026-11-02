@@ -88,6 +88,7 @@ tc_result renderTake(const TakeRenderSettings& s, TakeRenderProgress& prog) {
   VoicePitchNode pitch(rate, kBlock);
   pitch.setEnabled(s.correctionEnabled);
   pitch.applyPreset(s.correction);
+  if (s.retuneMs >= 0.0f) pitch.setRetuneMs(s.retuneMs);
   pitch.setTuningCents(s.tuningCents);
   pitch.setKey(s.keyRoot, s.keyScale);
   pitch.setGateEnabled(s.gateEnabled);

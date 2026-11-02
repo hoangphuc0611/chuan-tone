@@ -650,12 +650,14 @@ typedef struct tc_render_config {
   /* Chuỗi giọng — như khi hát */
   tc_fx_preset fx;
   int32_t fx_enabled; /* 0 = "Khô" */
-  float fx_wet;       /* "Vang" 0..1 (TC_NODE_FX / TC_PARAM_MIX) */
+  float fx_wet;       /* "Vang" 0..2 (như TC_NODE_FX / TC_PARAM_MIX, 1 = đúng preset) */
   float tempo_bpm;    /* delay theo nhịp; ≤ 0 = 100 */
   int32_t correction_enabled;
-  int32_t correction_preset; /* tc_correction_preset */
-  int32_t key_root;          /* key ĐANG NGHE lúc hát (đã cộng tone đổi) */
-  int32_t key_scale;         /* tc_scale */
+  int32_t correction_preset;  /* tc_correction_preset */
+  float correction_retune_ms; /* ≥ 0: thay thời gian kéo về nốt của mức (preset thể loại); < 0 =
+                                 theo mức */
+  int32_t key_root;           /* key ĐANG NGHE lúc hát (đã cộng tone đổi) */
+  int32_t key_scale;          /* tc_scale */
   float tuning_cents;
   /* Key theo thời gian bản thu (start_ms tính từ đầu bản thu, đã cộng tone đổi); NULL / 0 = dùng
    * key_root / key_scale. Mảng chỉ cần sống tới khi tc_renderer_start trả về. */

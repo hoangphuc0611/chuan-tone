@@ -5,6 +5,7 @@ import 'data/song_ref.dart';
 import 'engine_info.dart';
 import 'pages/analysis_page.dart';
 import 'pages/latency_page.dart';
+import 'pages/takes_page.dart';
 import 'pages/test_room_page.dart';
 
 class ChuanToneApp extends StatelessWidget {
@@ -36,53 +37,79 @@ class HomePage extends StatelessWidget {
     final theme = Theme.of(context);
     return Scaffold(
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 32),
-              Text(
-                'ChuẩnTone',
-                style: theme.textTheme.displaySmall?.copyWith(
-                  fontWeight: FontWeight.bold,
+        // Cuộn được khi màn hình thấp; đủ cao thì nút vẫn dồn xuống dưới (Spacer).
+        child: LayoutBuilder(
+          builder: (context, box) => SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: (box.maxHeight - 48).clamp(0, double.infinity),
+              ),
+              child: IntrinsicHeight(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: 32),
+                    Text(
+                      'ChuẩnTone',
+                      style: theme.textTheme.displaySmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text('Bấm bài là hát', style: theme.textTheme.titleLarge),
+                    const Spacer(),
+                    _BigButton(
+                      icon: Icons.library_add,
+                      label: 'Thêm bài hát',
+                      subtitle: 'Dò tone, nhịp — tách giọng ca sĩ nếu cần',
+                      enabled: engineInfo.ok,
+                      primary: true,
+                      onTap: () => _addSong(context),
+                    ),
+                    const SizedBox(height: 12),
+                    _BigButton(
+                      icon: Icons.mic_external_on,
+                      label: 'Phòng thử',
+                      subtitle: 'Phát nhạc, nghe lại giọng',
+                      enabled: engineInfo.ok,
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const TestRoomPage(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _BigButton(
+                      icon: Icons.graphic_eq,
+                      label: 'Bản thu của tôi',
+                      subtitle: 'Nghe lại, chỉnh, xuất, chia sẻ',
+                      enabled: engineInfo.ok,
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const TakesPage(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _BigButton(
+                      icon: Icons.speed,
+                      label: 'Đo độ trễ',
+                      subtitle: 'Kiểm tra máy có hát mượt không',
+                      enabled: engineInfo.ok,
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const LatencyPage(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    _EngineStatusCard(info: engineInfo),
+                    const SizedBox(height: 24),
+                  ],
                 ),
               ),
-              const SizedBox(height: 8),
-              Text('Bấm bài là hát', style: theme.textTheme.titleLarge),
-              const Spacer(),
-              _BigButton(
-                icon: Icons.library_add,
-                label: 'Thêm bài hát',
-                subtitle: 'Dò tone, nhịp — tách giọng ca sĩ nếu cần',
-                enabled: engineInfo.ok,
-                primary: true,
-                onTap: () => _addSong(context),
-              ),
-              const SizedBox(height: 12),
-              _BigButton(
-                icon: Icons.mic_external_on,
-                label: 'Phòng thử',
-                subtitle: 'Phát nhạc, nghe lại giọng',
-                enabled: engineInfo.ok,
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => const TestRoomPage()),
-                ),
-              ),
-              const SizedBox(height: 12),
-              _BigButton(
-                icon: Icons.speed,
-                label: 'Đo độ trễ',
-                subtitle: 'Kiểm tra máy có hát mượt không',
-                enabled: engineInfo.ok,
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => const LatencyPage()),
-                ),
-              ),
-              const SizedBox(height: 24),
-              _EngineStatusCard(info: engineInfo),
-              const SizedBox(height: 24),
-            ],
+            ),
           ),
         ),
       ),

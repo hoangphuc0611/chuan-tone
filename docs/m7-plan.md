@@ -55,7 +55,25 @@
     `AMediaCodec` + `AMediaMuxer` (build trong CI, chưa thử máy thật), Linux báo không hỗ trợ;
     `TC_RENDER_M4A` trong `tc_renderer_*`. Test: bản thu 2 s → M4A 192 kbit/s giải mã lại đúng độ
     dài (± 2048), −14 ± 1 LUFS.
-- [ ] B4: binding 0.8 + app (nút Thu, kho bản thu, Nghe lại & chỉnh, xuất M4A, chia sẻ / lưu).
+- [~] **B4** (2026-11-02, chờ thử trên iPhone): app thu âm → nghe lại → xuất M4A → chia sẻ.
+  - Phòng thử: nút **Thu âm** (beat đang dừng thì đếm ngược 3 giây rồi phát), đồng hồ, khoá tone khi
+    thu, cảnh báo Bluetooth; tự dừng khi đủ thời lượng tối đa; rời màn khi đang thu vẫn giữ file.
+  - `data/take_store.dart`: `TakeInfo` (`take.json`: số đo engine, độ trễ chọn theo đường ra, chỉnh
+    tay "giọng sớm / muộn", chuỗi giọng lúc hát, key + chuyển tone theo thời gian bản thu, trộn, cắt),
+    `TakeStore` (`takes/<thời điểm>/`, liệt kê mới nhất trước, bỏ bản thu thiếu file, xoá).
+  - `engine/takes.dart`: chụp thông số lúc bấm Thu, ghép thành `TakeInfo` khi dừng, đổi bản thu →
+    `RenderSettings`.
+  - Màn **Nghe lại & chỉnh** (`pages/review_page.dart`): phát bản thu qua chuỗi giọng real-time, đổi
+    thể loại / "Vang" / cổng / mức chỉnh giọng nghe ngay, âm lượng giọng / nhạc, "Giọng sớm / muộn"
+    bước 5 ms, cắt đầu / đuôi, **Xuất âm thanh (M4A)** có tiến độ / huỷ, kết quả (thời lượng, dung
+    lượng, LUFS) + **Chia sẻ**; mọi thay đổi lưu vào `take.json`; xoá bản thu.
+  - Trang chủ: **"Bản thu của tôi"** (`pages/takes_page.dart`). Trang chủ cuộn được trên máy thấp.
+  - Plugin nội bộ `app/packages/chuantone_media` (Swift, kênh `chuantone/media`): bảng chia sẻ iOS
+    (`UIActivityViewController`); Android chưa có.
+  - Engine / binding: `tc_render_config.correction_retune_ms` (thời gian kéo về nốt theo thể loại),
+    "Vang" 0..2 như real-time; `AudioService.applyVoiceSettings`.
+  - Test app 79 (7 mới: JSON bản thu, độ lệch + chỉnh tay, chuyển tone theo bản thu, ghép phiên thu
+    → bản thu → thông số render, kho bản thu, màn "Bản thu của tôi").
 - [ ] B5: iOS video sóng nhạc.
 - [ ] B6: iOS camera trước + đo vỗ tay.
 - [ ] B7: nghiệm thu iPhone, đăng TikTok, báo cáo M7.

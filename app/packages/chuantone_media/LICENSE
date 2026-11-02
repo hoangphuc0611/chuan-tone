@@ -1,0 +1,2 @@
+Mã nguồn nội bộ của dự án ChuẩnTone (không phân phối riêng). Chỉ dùng framework của Apple
+(UIKit, AVFoundation, Photos) — không có thư viện bên thứ ba.
