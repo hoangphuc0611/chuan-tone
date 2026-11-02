@@ -7,6 +7,7 @@
 #include <limits>
 #include <memory>
 
+#include "codec/aac_writer.h"
 #include "decode/decoder.h"
 #include "fx/fx_rack.h"
 #include "fx/true_peak.h"
@@ -35,20 +36,30 @@ float gainToDb(float g) {
   return g > 0.0f ? 20.0f * std::log10(g) : -200.0f;
 }
 
-// File đích: WAV (B3b); M4A thêm ở B3c.
+// File đích: WAV hoặc M4A (bộ nén AAC của hệ điều hành).
 class OutputFile {
  public:
-  tc_result open(const std::string& path, int32_t format, uint32_t rate) {
-    if (format != TC_RENDER_WAV16 && format != TC_RENDER_WAV_FLOAT) return TC_ERR_NOT_SUPPORTED;
+  tc_result open(const std::string& path, int32_t format, uint32_t rate, int32_t bitrate) {
+    if (format == TC_RENDER_M4A) {
+      tc_result err = TC_OK;
+      aac_ = createAacWriter(path, rate, 2, bitrate, err);
+      return err;
+    }
     return wav_.open(path, 2, rate,
                      format == TC_RENDER_WAV_FLOAT ? WavFormat::Float32 : WavFormat::Int16);
   }
-  bool write(const float* stereo, std::size_t frames) { return wav_.write(stereo, frames); }
-  bool finish() { return wav_.finish(); }
-  void abort() { wav_.abort(); }
+  bool write(const float* stereo, std::size_t frames) {
+    return aac_ ? aac_->write(stereo, frames) : wav_.write(stereo, frames);
+  }
+  bool finish() { return aac_ ? aac_->finish() : wav_.finish(); }
+  void abort() {
+    if (aac_) aac_->abort();
+    wav_.abort();
+  }
 
  private:
   WavWriter wav_;
+  std::unique_ptr<AacWriter> aac_;
 };
 
 }  // namespace
@@ -175,7 +186,7 @@ tc_result renderTake(const TakeRenderSettings& s, TakeRenderProgress& prog) {
 
   // ---- Lượt 2: gain → limiter đỉnh thật → file đích ----
   OutputFile outFile;
-  r = outFile.open(s.outPath, s.format, rate);
+  r = outFile.open(s.outPath, s.format, rate, s.aacBitrate);
   if (r != TC_OK) {
     removeTmp();
     return r;

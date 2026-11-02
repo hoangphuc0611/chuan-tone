@@ -97,14 +97,16 @@ add_library(tonecore_core STATIC
 if(ANDROID)
   target_sources(tonecore_core PRIVATE
     src/io/android/oboe_backend.cpp
-    src/decode/decoder_android.cpp)
+    src/decode/decoder_android.cpp
+    src/codec/aac_writer_android.cpp)
   find_package(oboe REQUIRED CONFIG)  # Oboe qua Gradle prefab (Apache-2.0)
   target_link_libraries(tonecore_core PUBLIC oboe::oboe mediandk log)
 elseif(IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS")
   enable_language(OBJCXX)
   target_sources(tonecore_core PRIVATE
     src/io/ios/remoteio_backend.mm
-    src/decode/decoder_apple.cpp)
+    src/decode/decoder_apple.cpp
+    src/codec/aac_writer_apple.cpp)
   set_source_files_properties(src/io/ios/remoteio_backend.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
   target_link_libraries(tonecore_core PUBLIC
     "-framework AudioToolbox" "-framework AVFAudio" "-framework CoreFoundation" "-framework Foundation")
@@ -119,12 +121,14 @@ elseif(APPLE)
   target_sources(tonecore_core PRIVATE
     src/io/host_backend.cpp
     src/decode/decoder_apple.cpp
-    src/decode/decoder_drlibs.cpp)
+    src/decode/decoder_drlibs.cpp
+    src/codec/aac_writer_apple.cpp)
   target_link_libraries(tonecore_core PUBLIC "-framework AudioToolbox" "-framework CoreFoundation")
 else()
   target_sources(tonecore_core PRIVATE
     src/io/host_backend.cpp
-    src/decode/decoder_drlibs.cpp)
+    src/decode/decoder_drlibs.cpp
+    src/codec/aac_writer_none.cpp)
 endif()
 
 if(NOT ANDROID AND NOT (IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS"))

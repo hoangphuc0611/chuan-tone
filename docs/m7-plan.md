@@ -33,7 +33,7 @@
   - Test: binding 24 (1 mới), app 72 (8 mới: đọc CSV, chọn độ trễ, số frame dịch, đo độ chậm trên
     micro giả có vang + ồn, WAV) + `test/sync_e2e_test.dart` (engine thật, micro = đầu ra trễ
     600 frame → bản thu đo đúng 600 + 48 frame, lệch ≤ 2 frame).
-- [~] **B3**: Nghe lại (`tc_load_take`), render offline, −14 LUFS, AAC.
+- [x] **B3** (2026-11-02): Nghe lại (`tc_load_take`), render offline, −14 LUFS, AAC.
   - [x] B3a (2026-11-02) — chế độ Nghe lại: `tc_take_config_init / tc_load_take` (beat.wav làm beat,
     giọng khô dịch sớm `voice_offset_frames` vào "làn giọng" của Track, đọc sớm thêm đúng độ trễ
     khối chỉnh giọng, thay micro trước cổng / chỉnh giọng / FX); giọng luôn nghe được (kể cả
@@ -50,7 +50,11 @@
     −30…+24 dB) → limiter đỉnh thật (`TruePeakDetector` ×4 + PeakLimiter điều khiển theo đỉnh thật)
     → WAV 16-bit / float. Binding: `TakeRenderer`, `RenderSettings`, `RenderStatus`. Bài 4 phút trên
     Mac M1: 4,2 s → `docs/record-results.md`. Test engine 298 (+6), binding 26.
-  - [ ] B3c — AAC (Apple / Android).
+  - [x] B3c (2026-11-02) — M4A AAC-LC bằng bộ nén của hệ điều hành (`codec/aac_writer_*`): iOS /
+    macOS `ExtAudioFile` (float vào, tốc độ bit qua `kAudioConverterEncodeBitRate`), Android NDK
+    `AMediaCodec` + `AMediaMuxer` (build trong CI, chưa thử máy thật), Linux báo không hỗ trợ;
+    `TC_RENDER_M4A` trong `tc_renderer_*`. Test: bản thu 2 s → M4A 192 kbit/s giải mã lại đúng độ
+    dài (± 2048), −14 ± 1 LUFS.
 - [ ] B4: binding 0.8 + app (nút Thu, kho bản thu, Nghe lại & chỉnh, xuất M4A, chia sẻ / lưu).
 - [ ] B5: iOS video sóng nhạc.
 - [ ] B6: iOS camera trước + đo vỗ tay.

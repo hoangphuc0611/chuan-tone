@@ -291,6 +291,36 @@ TEST(RenderApi, ChainOptionsCancelAndErrors) {
   tc_renderer_destroy(nullptr);
 }
 
+// M4A bằng bộ nén AAC của hệ điều hành: macOS / iOS (ExtAudioFile), Android (AMediaCodec);
+// Linux báo không hỗ trợ.
+TEST(RenderApi, M4aUsesOsEncoder) {
+  std::vector<float> mic(2 * kRate);
+  for (std::size_t i = 0; i < mic.size(); ++i) {
+    mic[i] = static_cast<float>(0.2 * std::sin(2.0 * kPi * 330.0 * static_cast<double>(i) / kRate));
+  }
+  TakeFixture take("render_m4a", mic, true);
+  tc_render_config cfg;
+  tc_render_config_init(&cfg);
+  cfg.format = TC_RENDER_M4A;
+  const std::string out = take.dir + "/mix.m4a";
+  const tc_render_status s = render(take.beat(), take.dry(), out, cfg);
+#if defined(__APPLE__)
+  ASSERT_EQ(s.state, TC_ANALYSIS_DONE) << s.result;
+  EXPECT_FALSE(fs::exists(out + ".part"));
+  tonecore::DecodedAudio a;
+  ASSERT_EQ(tonecore::decodeFile(out, a), TC_OK);
+  EXPECT_EQ(a.sampleRate, kRate);
+  EXPECT_EQ(a.channels, 2u);
+  EXPECT_NEAR(static_cast<double>(a.frames), static_cast<double>(take.frames), 2048.0);
+  EXPECT_NEAR(*tonecore::measureLoudness(a).integratedLufs, -14.0, 1.0);
+  EXPECT_GT(fs::file_size(out), 20000u);  // ~192 kbit/s × 2 s ≈ 48 kB
+  EXPECT_LT(fs::file_size(out), 120000u);
+#else
+  EXPECT_EQ(s.state, TC_ANALYSIS_FAILED);
+  EXPECT_EQ(s.result, TC_ERR_NOT_SUPPORTED);
+#endif
+}
+
 // Đo tốc độ render bản thu 4 phút (Bolero + chỉnh giọng Ca sĩ + chuẩn hoá). Chỉ chạy khi đặt
 // TC_BENCH_RENDER=1 (bản Release): docs/record-results.md.
 TEST(RenderBench, FourMinuteTake) {
