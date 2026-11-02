@@ -337,6 +337,59 @@ TEST(RealTime, RecordingDoesNotAllocate) {
 #endif
 }
 
+// Nghe lại bản thu (M7): giọng bản thu thay micro, đổi preset / chỉnh giọng khi đang phát.
+TEST(RealTime, TakeReviewDoesNotAllocate) {
+#ifdef TC_SANITIZED
+  GTEST_SKIP() << "Sanitizer tự thay operator new – chạy ở bản build thường.";
+#else
+  tc_engine* e = nullptr;
+  ASSERT_EQ(tc_engine_create(nullptr, &e), TC_OK);
+  ASSERT_EQ(tc_engine_start(e), TC_OK);
+  const std::string dir = tonecore::test::tempPath("rt_take_dir");
+  std::filesystem::create_directories(dir);
+  std::vector<float> in(512, 0.1f);
+  std::vector<float> out(2 * 512);
+  ASSERT_EQ(tc_record_start(e, dir.c_str(), nullptr), TC_OK);
+  for (int round = 0; round < 200; ++round)
+    tc_engine_process_offline(e, in.data(), out.data(), 512);
+  ASSERT_EQ(tc_record_stop(e), TC_OK);
+  tc_take_config cfg;
+  tc_take_config_init(&cfg);
+  cfg.voice_offset_frames = 600;
+  ASSERT_EQ(tc_load_take(e, (dir + "/beat.wav").c_str(), (dir + "/dry.wav").c_str(), &cfg), TC_OK);
+  bool loaded = false;
+  for (int i = 0; i < 5000 && !loaded; ++i) {
+    tc_event ev[8];
+    const int32_t n = tc_poll_events(e, ev, 8);
+    for (int32_t k = 0; k < n; ++k) loaded = loaded || ev[k].type == TC_EVENT_BEAT_LOADED;
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  ASSERT_TRUE(loaded);
+  ASSERT_EQ(tc_play(e), TC_OK);
+  tc_fx_preset bolero;
+  tc_fx_preset_init(&bolero, TC_GENRE_BOLERO);
+  tc_fx_preset pop;
+  tc_fx_preset_init(&pop, TC_GENRE_POP);
+  g_allocs.store(0);
+  for (int round = 0; round < 180; ++round) {
+    g_counting = true;
+    const tc_result r = tc_engine_process_offline(e, in.data(), out.data(), 512);
+    g_counting = false;
+    ASSERT_EQ(r, TC_OK);
+    if (round == 30) ASSERT_EQ(tc_set_param(e, TC_NODE_PITCH, TC_PARAM_ENABLED, 1.0f), TC_OK);
+    if (round == 60) ASSERT_EQ(tc_apply_fx_preset(e, &bolero), TC_OK);
+    if (round == 120) ASSERT_EQ(tc_apply_fx_preset(e, &pop), TC_OK);
+    if (round == 150) ASSERT_EQ(tc_seek(e, 100.0), TC_OK);
+    if (round % 4 == 0) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    tc_event ev[8];
+    tc_poll_events(e, ev, 8);
+  }
+  EXPECT_EQ(g_allocs.load(), 0);
+  tc_engine_destroy(e);
+  std::filesystem::remove_all(dir);
+#endif
+}
+
 // Khối FX giọng (M5): xử lý và đặt thông số (kể cả đang trượt) không cấp phát.
 TEST(RealTime, FxBlocksDoNotAllocate) {
 #ifdef TC_SANITIZED

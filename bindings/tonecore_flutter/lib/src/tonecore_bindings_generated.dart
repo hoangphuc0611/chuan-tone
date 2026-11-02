@@ -1055,6 +1055,54 @@ class ToneCoreBindings {
         int Function(ffi.Pointer<tc_engine>, ffi.Pointer<tc_record_status>)
       >();
 
+  /// ---- Nghe lại bản thu (từ v0.8) ----
+  /// Nạp beat_path (beat.wav) làm beat và giọng khô voice_path (dry.wav) đã dịch sớm
+  /// voice_offset_frames. Khi phát, giọng khô đi vào chuỗi giọng (cổng, chỉnh giọng, FX) THAY CHO
+  /// micro — đổi preset / mức chỉnh giọng / key là nghe ngay; giọng luôn nghe được (kể cả Bluetooth,
+  /// tắt nghe lại), TC_NODE_MONITOR / TC_PARAM_GAIN là âm lượng giọng, TC_NODE_BEAT là âm lượng nhạc.
+  /// Chạy nền như tc_load_beat (kết quả qua TC_EVENT_BEAT_LOADED). Không đổi tone được
+  /// (tc_set_transpose → TC_ERR_INVALID_STATE) cho tới khi nạp beat khác.
+  void tc_take_config_init(ffi.Pointer<tc_take_config> config) {
+    return _tc_take_config_init(config);
+  }
+
+  late final _tc_take_config_initPtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Void Function(ffi.Pointer<tc_take_config>)>
+      >('tc_take_config_init');
+  late final _tc_take_config_init = _tc_take_config_initPtr
+      .asFunction<void Function(ffi.Pointer<tc_take_config>)>();
+
+  int tc_load_take(
+    ffi.Pointer<tc_engine> engine,
+    ffi.Pointer<ffi.Char> beat_path_utf8,
+    ffi.Pointer<ffi.Char> voice_path_utf8,
+    ffi.Pointer<tc_take_config> config,
+  ) {
+    return _tc_load_take(engine, beat_path_utf8, voice_path_utf8, config);
+  }
+
+  late final _tc_load_takePtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(
+            ffi.Pointer<tc_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<tc_take_config>,
+          )
+        >
+      >('tc_load_take');
+  late final _tc_load_take = _tc_load_takePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<tc_engine>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<tc_take_config>,
+        )
+      >();
+
   /// ---- Đo lường ----
   int tc_get_metrics(
     ffi.Pointer<tc_engine> engine,
@@ -1411,6 +1459,10 @@ final class tc_playback_state extends ffi.Struct {
   /// 1 nếu beat nạp kèm stem giọng (tc_load_beat_with_vocals)
   @ffi.Int32()
   external int has_vocal;
+
+  /// 1 nếu đang nạp bản thu để nghe lại (tc_load_take)
+  @ffi.Int32()
+  external int has_take;
 }
 
 final class tc_latency_result extends ffi.Struct {
@@ -1747,6 +1799,18 @@ final class tc_record_config extends ffi.Struct {
   /// đủ thì tự dừng; 0 = 15 phút (tối đa 60 phút)
   @ffi.Float()
   external double max_seconds;
+}
+
+/// Nghe lại bản thu (tc_load_take).
+final class tc_take_config extends ffi.Struct {
+  /// = sizeof(tc_take_config); tc_take_config_init tự điền
+  @ffi.Uint32()
+  external int struct_size;
+
+  /// Giọng khô dịch sớm bao nhiêu frame (tần số của dry.wav) để khớp beat: độ trễ khứ hồi +
+  /// output_lookahead_frames (docs/adr/007-recording-sync.md), cộng / trừ phần chỉnh tay.
+  @ffi.Int64()
+  external int voice_offset_frames;
 }
 
 final class tc_record_status extends ffi.Struct {

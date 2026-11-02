@@ -146,7 +146,7 @@ void BeatPlayer::sampleAt(const TransposedTrack* src, uint64_t frame, float g, f
 }
 
 // [RT] Không cấp phát, không khóa.
-void BeatPlayer::render(float* outStereo, uint32_t frames) noexcept {
+void BeatPlayer::render(float* outStereo, float* voiceOut, uint32_t frames) noexcept {
   adoptCommands();
 
   const int64_t seek = seekRequest_.exchange(-1, std::memory_order_relaxed);
@@ -179,6 +179,8 @@ void BeatPlayer::render(float* outStereo, uint32_t frames) noexcept {
   }
 
   const bool wantPlay = playing_.load(std::memory_order_relaxed) && track_ != nullptr;
+  const float* voice = track_ != nullptr && track_->hasVoice() ? track_->voice.data() : nullptr;
+  if (voiceOut != nullptr) std::fill(voiceOut, voiceOut + frames, 0.0f);
   if (track_ == nullptr || (!wantPlay && fade_ <= 0.0f)) {
     std::fill(outStereo, outStereo + 2 * static_cast<std::size_t>(frames), 0.0f);
     starved_.store(false, std::memory_order_relaxed);
@@ -234,6 +236,9 @@ void BeatPlayer::render(float* outStereo, uint32_t frames) noexcept {
     }
     outL = l * fade_;
     outR = r * fade_;
+    if (voiceOut != nullptr && voice != nullptr && cursor_ + voiceLead_ < total) {
+      voiceOut[i] = voice[cursor_ + voiceLead_] * fade_;
+    }
     ++cursor_;
   }
   starved_.store(starved, std::memory_order_relaxed);

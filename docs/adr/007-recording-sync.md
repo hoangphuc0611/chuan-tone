@@ -47,6 +47,12 @@ Ràng buộc: audio thread không cấp phát / khoá / I/O (mục 0.4). Độ t
    theo cùng đồng hồ máy → lúc ghép video: lệch = (mốc khung đầu) − (mốc beat frame đầu được nghe =
    `start_host_time_ns` + độ trễ ra + L). Hằng số còn thiếu (nếu có) đo bằng vỗ tay ở B6.
 
+6. **Nghe lại bằng chính chuỗi real-time** (`tc_load_take`, B3a): beat.wav làm beat, giọng khô đã
+   dịch sớm (R + L, ± chỉnh tay) nằm trong Track như một "làn giọng"; mỗi block BeatPlayer xuất
+   giọng (đọc sớm thêm P để bù khối chỉnh giọng) và engine đưa nó vào chuỗi giọng thay cho micro.
+   Đổi preset / mức chỉnh giọng dùng lại đường đổi không click của M5 → nghe ngay, không chờ render.
+   Không đổi tone (beat.wav đã ở tone lúc hát).
+
 ## Hệ quả
 
 - Bản thu 4 phút ≈ 140 MB (WAV như spec); app hiện dung lượng và cho xoá; FLAC để sau nếu cần.

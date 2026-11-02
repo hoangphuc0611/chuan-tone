@@ -53,4 +53,24 @@ std::unique_ptr<Track> prepareTrackWithVocal(DecodedAudio&& instrumental, Decode
   return track;
 }
 
+std::unique_ptr<Track> prepareTake(DecodedAudio&& beat, const WavData& dry,
+                                   int64_t voiceOffsetFrames, uint32_t engineRate) {
+  auto track = prepareTrack(std::move(beat), engineRate);
+  if (!track || dry.frames == 0 || dry.channels == 0 || dry.sampleRate == 0) return nullptr;
+  // Kênh đầu, dịch sớm ở tần số gốc của bản thu (độ lệch đo ở tần số đó).
+  const auto n = static_cast<int64_t>(dry.frames);
+  std::vector<float> mono(static_cast<std::size_t>(n), 0.0f);
+  for (int64_t i = 0; i < n; ++i) {
+    const int64_t src = i + voiceOffsetFrames;
+    if (src >= 0 && src < n) mono[i] = dry.samples[static_cast<std::size_t>(src) * dry.channels];
+  }
+  if (dry.sampleRate != engineRate) {
+    Resampler rs(dry.sampleRate, engineRate);
+    mono = rs.process(mono.data(), mono.size(), 1);
+  }
+  mono.resize(static_cast<std::size_t>(track->frames), 0.0f);  // dài bằng beat
+  track->voice = std::move(mono);
+  return track;
+}
+
 }  // namespace tonecore

@@ -418,8 +418,13 @@ void main() {
       );
       expect(ready.single.code, 3);
 
+      // Về tone 0: luồng nền chuyển lệnh, audio thread đổi ngay ở block nhận được lệnh.
       engine.transpose = 0;
-      engine.processOffline(null, 256);
+      while (engine.playback.audibleTranspose != 0) {
+        expect(DateTime.now().isBefore(deadline), isTrue);
+        engine.processOffline(null, 256);
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
       expect(engine.playback.audibleTranspose, 0);
       expect(engine.appliedKey, const MusicKey(0, MusicScale.major));
       expect(() => engine.transpose = 9, throwsA(isA<ToneCoreException>()));
@@ -716,6 +721,36 @@ void main() {
       engine.stopRecording();
       expect(engine.recordStatus.frames, 480);
     });
+
+    test(
+      'nghe lại bản thu: hasTake, không đổi tone, nạp beat khác thì hết',
+      () async {
+        final engine = ToneCoreEngine.create(maxBlockFrames: 256);
+        addTearDown(engine.dispose);
+        engine.start();
+        engine.startRecording(dir.path);
+        final mic = Float32List(256)..fillRange(0, 256, 0.1);
+        for (var i = 0; i < 100; i++) {
+          engine.processOffline(mic, 256);
+        }
+        engine.stopRecording();
+        final d = await engine.loadTakeAndWait(
+          '${dir.path}/beat.wav',
+          '${dir.path}/dry.wav',
+          voiceOffsetFrames: 600,
+        );
+        expect(d.inMilliseconds, 533);
+        expect(engine.playback.hasTake, isTrue);
+        expect(() => engine.transpose = 2, throwsA(isA<ToneCoreException>()));
+        await expectLater(
+          engine.loadTakeAndWait(
+            '${dir.path}/khong.wav',
+            '${dir.path}/dry.wav',
+          ),
+          throwsA(isA<ToneCoreException>()),
+        );
+      },
+    );
   });
 
   test('block quá lớn bị từ chối ở phía Dart', () {

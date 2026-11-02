@@ -311,3 +311,100 @@ TEST(Recorder, FullRingDropsWholeBlocks) {
   EXPECT_NEAR(w.samples[1], -0.1, 1e-4);
   fs::remove_all(dir);
 }
+
+// Nghe lại bản thu: giọng khô (dịch sớm voice_offset_frames) đi vào chuỗi giọng thay micro, ra
+// khớp beat; micro thật bị bỏ qua; không đổi tone được cho tới khi nạp beat khác.
+TEST(TakeApi, ReviewFeedsShiftedVoiceInsteadOfMic) {
+  Engine en;
+  tc_engine* e = en.e;
+  const std::string dir = makeDir("take_review");
+  // Thu: không có beat (beat.wav im), micro = 3 xung.
+  constexpr int kBlocks = 40;
+  const int clicks[] = {3000, 6000, 9000};
+  std::vector<float> mic(kBlocks * kBlock, 0.0f);
+  for (const int c : clicks) mic[c] = 0.5f;
+  std::vector<float> out(2 * kBlock);
+  ASSERT_EQ(tc_record_start(e, dir.c_str(), nullptr), TC_OK);
+  for (int b = 0; b < kBlocks; ++b) {
+    ASSERT_EQ(tc_engine_process_offline(e, mic.data() + b * kBlock, out.data(), kBlock), TC_OK);
+  }
+  ASSERT_EQ(tc_record_stop(e), TC_OK);
+
+  // Nghe lại: tắt nghe lại micro và FX để thấy rõ đường đi của giọng bản thu.
+  ASSERT_EQ(tc_set_param(e, TC_NODE_MONITOR, TC_PARAM_ENABLED, 0.0f), TC_OK);
+  ASSERT_EQ(tc_set_param(e, TC_NODE_FX, TC_PARAM_ENABLED, 0.0f), TC_OK);
+  tc_take_config cfg;
+  tc_take_config_init(&cfg);
+  cfg.voice_offset_frames = 100;
+  ASSERT_EQ(tc_load_take(e, (dir + "/beat.wav").c_str(), (dir + "/dry.wav").c_str(), &cfg), TC_OK);
+  tc_event buf[16];
+  int32_t loaded = -999;
+  for (int i = 0; i < 5000 && loaded == -999; ++i) {
+    const int32_t n = tc_poll_events(e, buf, 16);
+    for (int32_t k = 0; k < n; ++k) {
+      if (buf[k].type == TC_EVENT_BEAT_LOADED) loaded = buf[k].code;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  ASSERT_EQ(loaded, TC_OK);
+  tc_playback_state ps{};
+  ps.struct_size = sizeof(ps);
+  ASSERT_EQ(tc_get_playback_state(e, &ps), TC_OK);
+  EXPECT_EQ(ps.has_take, 1);
+  EXPECT_NEAR(ps.duration_ms, kBlocks * kBlock * 1000.0 / kRate, 0.01);
+  EXPECT_EQ(tc_set_transpose(e, 2), TC_ERR_INVALID_STATE);
+
+  ASSERT_EQ(tc_play(e), TC_OK);
+  const auto realMic = micSignal(kBlocks * kBlock);  // micro thật đang có tiếng: phải bị bỏ qua
+  std::vector<float> all;
+  for (int b = 0; b < kBlocks; ++b) {
+    ASSERT_EQ(tc_engine_process_offline(e, realMic.data() + b * kBlock, out.data(), kBlock), TC_OK);
+    all.insert(all.end(), out.begin(), out.end());
+  }
+  const int L = 48;  // limiter đầu ra
+  for (const int c : clicks) {
+    const int want = c - 100 + L;
+    int best = 0;
+    for (int i = want - 50; i < want + 50; ++i) {
+      if (std::fabs(all[2 * i]) > std::fabs(all[2 * best])) best = i;
+    }
+    EXPECT_EQ(best, want) << c;
+    EXPECT_NEAR(all[2 * best], 0.5, 0.05);
+    EXPECT_EQ(all[2 * best], all[2 * best + 1]);
+  }
+  // Giữa hai xung (xa đuôi lọc thông cao) gần như im: không lọt micro thật.
+  for (int i = 4000; i < 5500; ++i) ASSERT_LT(std::fabs(all[2 * i]), 0.01) << i;
+
+  // Nạp beat thường → hết chế độ nghe lại.
+  const std::string beatPath = tonecore::test::tempPath("take_beat.wav");
+  ASSERT_TRUE(tonecore::test::writeWav16(
+      beatPath, tonecore::test::sineInt16(440.0, kRate, kRate, 2, 0.25), kRate, 2));
+  ASSERT_EQ(en.load(beatPath), TC_OK);
+  ASSERT_EQ(tc_get_playback_state(e, &ps), TC_OK);
+  EXPECT_EQ(ps.has_take, 0);
+  EXPECT_EQ(tc_set_transpose(e, 2), TC_OK);
+  std::remove(beatPath.c_str());
+  fs::remove_all(dir);
+}
+
+TEST(TakeApi, RejectsBadTake) {
+  Engine en;
+  tc_take_config cfg;
+  tc_take_config_init(&cfg);
+  EXPECT_EQ(tc_load_take(en.e, nullptr, "x", &cfg), TC_ERR_INVALID_ARG);
+  cfg.struct_size = 3;
+  EXPECT_EQ(tc_load_take(en.e, "a", "b", &cfg), TC_ERR_INVALID_ARG);
+  // File không có → lỗi qua sự kiện.
+  EXPECT_EQ(tc_load_take(en.e, "/khong/co/beat.wav", "/khong/co/dry.wav", nullptr), TC_OK);
+  tc_event buf[16];
+  int32_t loaded = -999;
+  for (int i = 0; i < 5000 && loaded == -999; ++i) {
+    const int32_t n = tc_poll_events(en.e, buf, 16);
+    for (int32_t k = 0; k < n; ++k) {
+      if (buf[k].type == TC_EVENT_BEAT_LOADED) loaded = buf[k].code;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  EXPECT_NE(loaded, TC_OK);
+  EXPECT_NE(loaded, -999);
+}

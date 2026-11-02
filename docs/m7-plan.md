@@ -33,7 +33,17 @@
   - Test: binding 24 (1 mới), app 72 (8 mới: đọc CSV, chọn độ trễ, số frame dịch, đo độ chậm trên
     micro giả có vang + ồn, WAV) + `test/sync_e2e_test.dart` (engine thật, micro = đầu ra trễ
     600 frame → bản thu đo đúng 600 + 48 frame, lệch ≤ 2 frame).
-- [ ] B3: Nghe lại (`tc_load_take`), render offline, −14 LUFS, AAC.
+- [~] **B3**: Nghe lại (`tc_load_take`), render offline, −14 LUFS, AAC.
+  - [x] B3a (2026-11-02) — chế độ Nghe lại: `tc_take_config_init / tc_load_take` (beat.wav làm beat,
+    giọng khô dịch sớm `voice_offset_frames` vào "làn giọng" của Track, đọc sớm thêm đúng độ trễ
+    khối chỉnh giọng, thay micro trước cổng / chỉnh giọng / FX); giọng luôn nghe được (kể cả
+    Bluetooth / tắt nghe lại), `TC_NODE_MONITOR / GAIN` = âm lượng giọng; không đổi tone khi đang
+    nghe bản thu; `tc_playback_state.has_take`. Binding: `loadTake / loadTakeAndWait`,
+    `PlaybackState.hasTake`. Test: giọng ra khớp beat đúng từng frame (xung dịch 100 frame + limiter
+    48), micro thật bị bỏ qua, đổi tone bị chặn, nạp beat thường thì hết; không cấp phát (đổi
+    preset / bật chỉnh giọng / tua khi đang nghe lại). Engine 292 / 292, binding 25.
+  - [ ] B3b — render offline + −14 LUFS + true-peak.
+  - [ ] B3c — AAC (Apple / Android).
 - [ ] B4: binding 0.8 + app (nút Thu, kho bản thu, Nghe lại & chỉnh, xuất M4A, chia sẻ / lưu).
 - [ ] B5: iOS video sóng nhạc.
 - [ ] B6: iOS camera trước + đo vỗ tay.

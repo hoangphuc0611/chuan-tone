@@ -447,6 +447,7 @@ class PlaybackState {
     this.audibleTranspose = 0,
     this.transposeProgress = 1.0,
     this.hasVocal = false,
+    this.hasTake = false,
   });
 
   final bool hasBeat;
@@ -465,6 +466,9 @@ class PlaybackState {
 
   /// (từ v0.7) Beat nạp kèm stem giọng ca sĩ ([ToneCoreEngine.loadBeatWithVocals]).
   final bool hasVocal;
+
+  /// (từ v0.8) Đang nạp bản thu để nghe lại ([ToneCoreEngine.loadTake]).
+  final bool hasTake;
 
   /// Đã đổi tone nhưng bản mới chưa nghe được (đang render đoạn tại vị trí phát).
   bool get transposePending => transpose != audibleTranspose;
@@ -947,6 +951,7 @@ class ToneCoreEngine implements Finalizable {
         audibleTranspose: s.ref.audible_transpose,
         transposeProgress: s.ref.transpose_progress,
         hasVocal: s.ref.has_vocal != 0,
+        hasTake: s.ref.has_take != 0,
       );
     });
   }
@@ -996,6 +1001,45 @@ class ToneCoreEngine implements Finalizable {
     startLatencyMeasurement();
     await done;
     return latencyResult;
+  }
+
+  // ---- Nghe lại bản thu (từ v0.8) ----
+
+  /// Nạp bản thu: [beatPath] (beat.wav) làm beat, giọng khô [voicePath] (dry.wav) dịch sớm
+  /// [voiceOffsetFrames] đi vào chuỗi giọng thay micro — đổi preset / mức chỉnh giọng nghe ngay;
+  /// [monitorGain] là âm lượng giọng, [beatGain] âm lượng nhạc. Không đổi tone được.
+  void loadTake(
+    String beatPath,
+    String voicePath, {
+    int voiceOffsetFrames = 0,
+  }) {
+    using((arena) {
+      final cfg = arena<tc_take_config>();
+      _bindings.tc_take_config_init(cfg);
+      cfg.ref.voice_offset_frames = voiceOffsetFrames;
+      final b = beatPath.toNativeUtf8(allocator: arena);
+      final v = voicePath.toNativeUtf8(allocator: arena);
+      _check(
+        'tc_load_take',
+        _bindings.tc_load_take(_h, b.cast(), v.cast(), cfg),
+      );
+    });
+  }
+
+  /// Nạp bản thu và chờ kết quả.
+  Future<Duration> loadTakeAndWait(
+    String beatPath,
+    String voicePath, {
+    int voiceOffsetFrames = 0,
+    Duration timeout = const Duration(seconds: 60),
+  }) async {
+    final done = events
+        .firstWhere((e) => e.type == ToneCoreEventType.beatLoaded)
+        .timeout(timeout);
+    loadTake(beatPath, voicePath, voiceOffsetFrames: voiceOffsetFrames);
+    final e = await done;
+    if (!e.ok) throw ToneCoreException('tc_load_take', e.code);
+    return Duration(microseconds: (e.value * 1000).round());
   }
 
   // ---- Thu âm (từ v0.8) ----

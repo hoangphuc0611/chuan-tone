@@ -68,6 +68,10 @@ class Engine : public BackendHost {
 
   // vocalPaths không rỗng: bài gốc + stem giọng (M6) — phát phần nhạc + k · giọng.
   tc_result loadBeat(const std::string& path, std::vector<std::string> vocalPaths = {});
+  // (M7) Nghe lại bản thu: beat.wav làm beat, giọng khô (dry.wav, dịch sớm voiceOffsetFrames) đi
+  // vào chuỗi giọng thay cho micro. Không đổi tone được cho tới khi nạp beat khác.
+  tc_result loadTake(const std::string& beatPath, const std::string& voicePath,
+                     int64_t voiceOffsetFrames);
   tc_result play() noexcept;
   tc_result pause() noexcept;
   tc_result seekMs(double ms) noexcept;
@@ -168,6 +172,7 @@ class Engine : public BackendHost {
   std::atomic<int32_t> requestedSemis_{0};
   std::atomic<uint32_t> transposeGen_{0};  // tăng mỗi lần đổi tone / nạp beat
   std::atomic<float> transposeProgress_{1.0f};
+  std::atomic<bool> takeLoaded_{false};  // beat đang nạp là bản thu (loadTake)
   // Chỉ luồng nền (Worker) dùng.
   std::shared_ptr<const Track> currentTrack_;
   std::shared_ptr<TransposedTrack> requestedTrack_;
@@ -188,7 +193,8 @@ class Engine : public BackendHost {
 
   // Buffer cấp phát trước cho audio thread
   std::vector<float> micBuf_;
-  std::vector<float> dryBuf_;  // micro thô trước chỉnh giọng (chỉ chép khi đang thu)
+  std::vector<float> dryBuf_;        // micro thô trước chỉnh giọng (chỉ chép khi đang thu)
+  std::vector<float> takeVoiceBuf_;  // giọng bản thu khi nghe lại (M7)
   std::vector<float> beatBuf_;
   std::vector<float> stimBuf_;
   std::vector<float> voiceL_;  // giọng sau chuỗi FX (khô + ướt), trái / phải

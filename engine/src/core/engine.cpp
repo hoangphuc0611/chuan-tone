@@ -30,6 +30,7 @@ Engine::Engine(const EngineConfig& config)
       recorder_(config.sampleRate, config.maxBlockFrames),
       micBuf_(config.maxBlockFrames, 0.0f),
       dryBuf_(config.maxBlockFrames, 0.0f),
+      takeVoiceBuf_(config.maxBlockFrames, 0.0f),
       beatBuf_(2 * static_cast<std::size_t>(config.maxBlockFrames), 0.0f),
       stimBuf_(config.maxBlockFrames, 0.0f),
       voiceL_(config.maxBlockFrames, 0.0f),
@@ -387,9 +388,44 @@ tc_result Engine::loadBeat(const std::string& path, std::vector<std::string> voc
         transposeProgress_.store(1.0f, std::memory_order_relaxed);
         if (player_.setTrack(track)) {
           currentTrack_ = std::move(track);
+          takeLoaded_.store(false, std::memory_order_relaxed);
         } else {
           r = TC_ERR_INTERNAL;
         }
+      }
+    }
+    events_.push(TC_EVENT_BEAT_LOADED, r, durationMs);
+  });
+  return TC_OK;
+}
+
+tc_result Engine::loadTake(const std::string& beatPath, const std::string& voicePath,
+                           int64_t voiceOffsetFrames) {
+  if (beatPath.empty() || voicePath.empty()) return TC_ERR_INVALID_ARG;
+  const uint32_t rate = config_.sampleRate;
+  worker_.post([this, beatPath, voicePath, voiceOffsetFrames, rate] {
+    std::shared_ptr<const Track> track;
+    DecodedAudio beat;
+    WavData dry;
+    tc_result r = decodeFile(beatPath, beat);
+    if (r == TC_OK) r = readWav(voicePath, dry);
+    if (r == TC_OK) {
+      track = prepareTake(std::move(beat), dry, voiceOffsetFrames, rate);
+      if (!track) r = TC_ERR_NOT_SUPPORTED;
+    }
+    double durationMs = 0.0;
+    if (r == TC_OK) {
+      durationMs = 1000.0 * static_cast<double>(track->frames) / rate;
+      transposeGen_.fetch_add(1, std::memory_order_relaxed);
+      if (requestedTrack_) requestedTrack_->cancelled.store(true, std::memory_order_relaxed);
+      requestedTrack_.reset();
+      requestedSemis_.store(0, std::memory_order_relaxed);
+      transposeProgress_.store(1.0f, std::memory_order_relaxed);
+      if (player_.setTrack(track)) {
+        currentTrack_ = std::move(track);
+        takeLoaded_.store(true, std::memory_order_relaxed);
+      } else {
+        r = TC_ERR_INTERNAL;
       }
     }
     events_.push(TC_EVENT_BEAT_LOADED, r, durationMs);
@@ -427,6 +463,8 @@ tc_result Engine::seekMs(double ms) noexcept {
 tc_result Engine::setTranspose(int32_t semitones) {
   if (semitones < -6 || semitones > 6) return TC_ERR_INVALID_ARG;
   if (!player_.hasTrack()) return TC_ERR_INVALID_STATE;
+  // Bản thu: beat đã ở tone lúc hát, giọng không đổi tone theo được.
+  if (takeLoaded_.load(std::memory_order_relaxed)) return TC_ERR_INVALID_STATE;
   if (requestedSemis_.exchange(semitones, std::memory_order_relaxed) == semitones) return TC_OK;
   const uint32_t gen = transposeGen_.fetch_add(1, std::memory_order_relaxed) + 1;
   transposeProgress_.store(semitones == 0 ? 1.0f : 0.0f, std::memory_order_relaxed);
@@ -468,6 +506,7 @@ void Engine::fillPlayback(tc_playback_state& s) const noexcept {
   s.transpose_progress = transposeProgress_.load(std::memory_order_relaxed);
   s.audible_transpose = player_.audibleSemitones();
   s.has_vocal = player_.hasTrack() && player_.hasVocal() ? 1 : 0;
+  s.has_take = player_.hasTrack() && takeLoaded_.load(std::memory_order_relaxed) ? 1 : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -703,6 +742,16 @@ void Engine::processChunk(const float* in, uint32_t inChannels, float* out, uint
     probeWasActive_ = false;
   }
 
+  // Beat (và giọng bản thu khi đang nghe lại — M7). Giọng bản thu đọc sớm đúng độ trễ khối chỉnh
+  // giọng để ra khớp beat.
+  float* beat = beatBuf_.data();
+  const uint64_t beatFrame = player_.positionFrames();
+  player_.setVoiceLead(static_cast<uint32_t>(pitch_.algorithmLatency()));
+  float* takeVoice = takeVoiceBuf_.data();
+  player_.render(beat, takeVoice, frames);
+  const bool takeMode = player_.hasVoice();
+  if (takeMode) std::copy(takeVoice, takeVoice + frames, mic);  // thay micro
+
   // Đang thu: giữ bản micro thô (giọng khô) trước khi chỉnh giọng sửa tại chỗ.
   const bool recording = recorder_.wantsAudio();
   if (recording) std::copy(mic, mic + frames, dryBuf_.data());
@@ -710,10 +759,6 @@ void Engine::processChunk(const float* in, uint32_t inChannels, float* out, uint
   // Giọng: lọc thông cao, dò cao độ, tự chỉnh giọng (tại chỗ) — key theo timeline nếu có.
   applyKeyTimeline();
   pitch_.process(mic, frames);
-
-  float* beat = beatBuf_.data();
-  const uint64_t beatFrame = player_.positionFrames();
-  player_.render(beat, frames);
   // Beat bắt đầu nghe ở tone mới → key chỉnh giọng theo (từ block sau).
   const int audible = player_.audibleSemitones();
   if (audible != pitchTranspose_) {
@@ -737,7 +782,10 @@ void Engine::processChunk(const float* in, uint32_t inChannels, float* out, uint
 
   float* mix = mixBuf_.data();
   for (uint32_t i = 0; i < frames; ++i) {
-    const float mon = monitorGain_.next() * monitorMix_.next();
+    // Nghe lại bản thu: giọng không phải micro trực tiếp → luôn nghe (kể cả Bluetooth / tắt nghe
+    // lại), TC_NODE_MONITOR / GAIN là âm lượng giọng.
+    const float live = monitorMix_.next();
+    const float mon = monitorGain_.next() * (takeMode ? 1.0f : live);
     const float bg = beatGain_.next();
     const float mg = masterGain_.next();
     mix[2 * i] = (beat[2 * i] * bg + vl[i] * mon) * mg;

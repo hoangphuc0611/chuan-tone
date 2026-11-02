@@ -198,6 +198,8 @@ typedef struct tc_playback_state {
   float transpose_progress;  /* 0..1: phần bài đã render ở tone yêu cầu (1 khi transpose = 0) */
   /* (từ v0.7) */
   int32_t has_vocal; /* 1 nếu beat nạp kèm stem giọng (tc_load_beat_with_vocals) */
+  /* (từ v0.8) */
+  int32_t has_take; /* 1 nếu đang nạp bản thu để nghe lại (tc_load_take) */
 } tc_playback_state;
 
 typedef struct tc_latency_result {
@@ -337,6 +339,14 @@ typedef struct tc_record_config {
   uint32_t struct_size; /* = sizeof(tc_record_config); tc_record_config_init tự điền */
   float max_seconds;    /* đủ thì tự dừng; 0 = 15 phút (tối đa 60 phút) */
 } tc_record_config;
+
+/* Nghe lại bản thu (tc_load_take). */
+typedef struct tc_take_config {
+  uint32_t struct_size; /* = sizeof(tc_take_config); tc_take_config_init tự điền */
+  /* Giọng khô dịch sớm bao nhiêu frame (tần số của dry.wav) để khớp beat: độ trễ khứ hồi +
+   * output_lookahead_frames (docs/adr/007-recording-sync.md), cộng / trừ phần chỉnh tay. */
+  int64_t voice_offset_frames;
+} tc_take_config;
 
 typedef struct tc_record_status {
   uint32_t struct_size;    /* = sizeof(tc_record_status) */
@@ -613,6 +623,17 @@ TC_EXPORT tc_result tc_record_start(tc_engine* engine, const char* dir_utf8,
  * file. */
 TC_EXPORT tc_result tc_record_stop(tc_engine* engine);
 TC_EXPORT tc_result tc_record_get_status(tc_engine* engine, tc_record_status* out_status);
+
+/* ---- Nghe lại bản thu (từ v0.8) ----
+ * Nạp beat_path (beat.wav) làm beat và giọng khô voice_path (dry.wav) đã dịch sớm
+ * voice_offset_frames. Khi phát, giọng khô đi vào chuỗi giọng (cổng, chỉnh giọng, FX) THAY CHO
+ * micro — đổi preset / mức chỉnh giọng / key là nghe ngay; giọng luôn nghe được (kể cả Bluetooth,
+ * tắt nghe lại), TC_NODE_MONITOR / TC_PARAM_GAIN là âm lượng giọng, TC_NODE_BEAT là âm lượng nhạc.
+ * Chạy nền như tc_load_beat (kết quả qua TC_EVENT_BEAT_LOADED). Không đổi tone được
+ * (tc_set_transpose → TC_ERR_INVALID_STATE) cho tới khi nạp beat khác. */
+TC_EXPORT void tc_take_config_init(tc_take_config* config);
+TC_EXPORT tc_result tc_load_take(tc_engine* engine, const char* beat_path_utf8,
+                                 const char* voice_path_utf8, const tc_take_config* config);
 
 /* ---- Đo lường ---- */
 TC_EXPORT tc_result tc_get_metrics(tc_engine* engine, tc_metrics* out_metrics);

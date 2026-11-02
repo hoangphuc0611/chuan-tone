@@ -65,7 +65,13 @@ class BeatPlayer {
 
   // ---- Audio thread ----
   // Ghi beat (stereo interleaved, float −1..1) vào `outStereo`, `frames` frame. [RT]
-  void render(float* outStereo, uint32_t frames) noexcept;
+  void render(float* outStereo, uint32_t frames) noexcept { render(outStereo, nullptr, frames); }
+  // (M7) Như trên; Track có giọng bản thu thì ghi giọng (mono, cùng fade phát / dừng) vào
+  // `voiceOut` (nullptr = bỏ). Giọng đọc sớm voiceLead frame để bù độ trễ khối chỉnh giọng. [RT]
+  void render(float* outStereo, float* voiceOut, uint32_t frames) noexcept;
+  void setVoiceLead(uint32_t frames) noexcept { voiceLead_ = frames; }
+  // Track đang phát có giọng bản thu (audio thread đã nhận). [RT]
+  bool hasVoice() const noexcept { return track_ != nullptr && track_->hasVoice(); }
 
  private:
   struct Command {
@@ -103,6 +109,7 @@ class BeatPlayer {
   Retired deferred_[8]{};  // trả về chưa được (hàng đợi đầy) → thử lại block sau
   uint32_t deferredCount_ = 0;
   uint64_t cursor_ = 0;
+  uint32_t voiceLead_ = 0;
   // Fade phát/dừng tuyến tính đúng 5 ms (đường mũ tiến về 0 quá lâu → vị trí vẫn trôi sau khi
   // dừng). Chỉ audio thread dùng.
   float fade_ = 0.0f;

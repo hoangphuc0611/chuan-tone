@@ -572,6 +572,32 @@ tc_result tc_record_get_status(tc_engine* engine, tc_record_status* out_status) 
   return TC_OK;
 }
 
+void tc_take_config_init(tc_take_config* config) {
+  if (config == nullptr) return;
+  *config = tc_take_config{};
+  config->struct_size = sizeof(tc_take_config);
+}
+
+tc_result tc_load_take(tc_engine* engine, const char* beat_path_utf8, const char* voice_path_utf8,
+                       const tc_take_config* config) {
+  if (engine == nullptr || beat_path_utf8 == nullptr || voice_path_utf8 == nullptr) {
+    return TC_ERR_INVALID_ARG;
+  }
+  tc_take_config cfg;
+  tc_take_config_init(&cfg);
+  if (config != nullptr) {
+    if (config->struct_size != sizeof(tc_take_config)) return TC_ERR_INVALID_ARG;
+    cfg = *config;
+  }
+  try {
+    return engine->impl.loadTake(beat_path_utf8, voice_path_utf8, cfg.voice_offset_frames);
+  } catch (const std::bad_alloc&) {
+    return TC_ERR_OUT_OF_MEMORY;
+  } catch (...) {
+    return TC_ERR_INTERNAL;
+  }
+}
+
 int32_t tc_poll_events(tc_engine* engine, tc_event* out_events, uint32_t max_events) {
   if (engine == nullptr || (out_events == nullptr && max_events > 0)) return TC_ERR_INVALID_ARG;
   try {
