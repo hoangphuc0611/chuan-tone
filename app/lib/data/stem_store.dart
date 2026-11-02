@@ -3,6 +3,7 @@ import 'dart:io';
 
 import '../engine/separation_client.dart';
 import 'app_dirs.dart';
+import 'library_db.dart';
 
 /// Stem giọng ca sĩ đã tách của từng bài (các đoạn FLAC server trả về), trong
 /// `<dữ liệu app>/stems/<băm tên|cỡ>/`. Phần nhạc không lưu: engine tính bài − giọng khi nạp.
@@ -15,7 +16,7 @@ class StemStore {
   final Directory? baseDir;
 
   Directory dirFor({required String name, required int size}) => Directory(
-    '${(baseDir ?? appDataDir()).path}/stems/${_hash('$name|$size')}',
+    '${(baseDir ?? appDataDir()).path}/stems/${stableHash(songKey(name, size))}',
   );
 
   /// Thư mục tạm cho một lần tách (xoá rồi tạo lại).
@@ -103,17 +104,5 @@ class StemStore {
   Future<void> delete({required String name, required int size}) async {
     final d = dirFor(name: name, size: size);
     if (await d.exists()) await d.delete(recursive: true);
-  }
-
-  // FNV-1a 64 bit (không cần thư viện băm; chỉ để đặt tên thư mục). int của Dart 64 bit có dấu:
-  // nhân tràn tự quấn mod 2^64, in hex theo hai nửa 32 bit.
-  static String _hash(String s) {
-    var h = 0xcbf29ce484222325;
-    for (final b in utf8.encode(s)) {
-      h ^= b;
-      h *= 0x100000001b3;
-    }
-    String half(int v) => (v & 0xFFFFFFFF).toRadixString(16).padLeft(8, '0');
-    return '${half(h >> 32)}${half(h)}';
   }
 }

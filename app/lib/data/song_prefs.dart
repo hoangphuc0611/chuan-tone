@@ -1,54 +1,34 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:tonecore_flutter/tonecore_flutter.dart';
 
-import 'app_dirs.dart';
+import 'library_db.dart';
 
 /// Lựa chọn của người dùng theo từng bài — tone beat đã đổi (−6…+6), preset hiệu ứng giọng, tone sửa
 /// tay — để mở lại bài là hát ngay như lần trước. Kèm preset chọn gần nhất (dùng khi bài mới không
 /// gợi ý được preset nào).
 ///
-/// Khoá = tên file + kích thước, như [AnalysisCache] nhưng KHÔNG kèm phiên bản engine: đây là lựa
-/// chọn của người dùng, không phải kết quả thuật toán.
+/// Lưu ở bảng `songs` của [LibraryDb] (M8; trước đó là `song_prefs.json`). Khoá = tên file + kích
+/// thước, như [AnalysisCache] nhưng KHÔNG kèm phiên bản engine: đây là lựa chọn của người dùng,
+/// không phải kết quả thuật toán.
 class SongPrefs {
   SongPrefs({this.baseDir});
 
+  /// Số bài tối đa chỉ có lựa chọn mà không có file trong thư viện (bài trong thư viện giữ hết).
   static const maxEntries = 500;
 
-  // Không trùng khoá bài được (khoá bài luôn có '|').
-  static const _lastGenreKey = '*lastGenre';
-
-  /// Thư mục lưu file; để null thì dùng thư mục dữ liệu của app (test truyền thư mục tạm).
+  /// Thư mục CSDL; để null thì dùng thư mục dữ liệu của app (test truyền thư mục tạm).
   final Directory? baseDir;
 
-  // Các lần ghi chạy lần lượt: hai lần ghi gần nhau (đổi tone rồi đổi preset) không ghi đè nhau.
-  Future<void> _writes = Future.value();
-
-  File get _file => File('${(baseDir ?? appDataDir()).path}/song_prefs.json');
-
-  String _keyOf(String name, int size) => '$name|$size';
-
-  Future<Map<String, dynamic>> _readAll() async {
-    try {
-      final f = _file;
-      if (!await f.exists()) return {};
-      final data = jsonDecode(await f.readAsString());
-      if (data is Map<String, dynamic>) return data;
-    } catch (_) {
-      // File hỏng → coi như chưa có gì.
-    }
-    return {};
-  }
-
-  Future<Map<String, dynamic>> _entry(String name, int size) async {
-    final entry = (await _readAll())[_keyOf(name, size)];
-    return entry is Map<String, dynamic> ? entry : const {};
+  Future<Map<String, Object?>> _row(String name, int size) async {
+    final rows = await (await LibraryDb.open(baseDir))
+        .query('songs', where: 'key = ?', whereArgs: [songKey(name, size)]);
+    return rows.isEmpty ? const {} : rows.first;
   }
 
   /// Tone beat đã chọn cho bài (0 nếu chưa đổi).
   Future<int> transposeFor({required String name, required int size}) async {
-    final t = (await _entry(name, size))['transpose'];
+    final t = (await _row(name, size))['transpose'];
     return t is int && t >= -6 && t <= 6 ? t : 0;
   }
 
@@ -56,27 +36,26 @@ class SongPrefs {
     required String name,
     required int size,
     required int semitones,
-  }) => _update(name, size, 'transpose', semitones == 0 ? null : semitones);
+  }) => _update(name, size, {'transpose': semitones == 0 ? null : semitones});
 
   /// Preset người dùng đã chọn cho bài (null nếu chưa chọn).
   Future<Genre?> genreFor({required String name, required int size}) async =>
-      _genreByName((await _entry(name, size))['genre']);
+      _genreByName((await _row(name, size))['genre']);
 
   Future<void> setGenre({
     required String name,
     required int size,
     required Genre genre,
-  }) => _update(name, size, 'genre', genre.name);
+  }) => _update(name, size, {'genre': genre.name});
 
   /// Tone người dùng sửa tay cho bài (tone của bài gốc, chưa cộng đổi tone beat); null = theo kết
   /// quả dò.
   Future<MusicKey?> keyFor({required String name, required int size}) async {
-    final k = (await _entry(name, size))['key'];
-    if (k is! Map) return null;
-    final root = k['root'];
+    final row = await _row(name, size);
+    final root = row['key_root'];
     MusicScale? scale;
     for (final s in MusicScale.values) {
-      if (s.name == k['scale']) scale = s;
+      if (s.name == row['key_scale']) scale = s;
     }
     if (root is! int || root < 0 || root > 11 || scale == null) return null;
     return MusicKey(root, scale);
@@ -86,28 +65,17 @@ class SongPrefs {
     required String name,
     required int size,
     required MusicKey? key,
-  }) => _update(
-    name,
-    size,
-    'key',
-    key == null ? null : {'root': key.root, 'scale': key.scale.name},
-  );
+  }) => _update(name, size, {
+    'key_root': key?.root,
+    'key_scale': key?.scale.name,
+  });
 
   /// Preset chọn gần nhất (bài nào cũng được).
   Future<Genre?> lastGenre() async =>
-      _genreByName((await _readAll())[_lastGenreKey]);
+      _genreByName(await LibraryDb.getSetting(baseDir, 'lastGenre'));
 
-  Future<void> setLastGenre(Genre genre) => _serial(() async {
-    final all = await _readAll();
-    all[_lastGenreKey] = genre.name;
-    await writeFileAtomic(_file, jsonEncode(all));
-  });
-
-  Future<void> _serial(Future<void> Function() op) {
-    final next = _writes.then((_) => op());
-    _writes = next.catchError((_) {});
-    return next;
-  }
+  Future<void> setLastGenre(Genre genre) =>
+      LibraryDb.setSetting(baseDir, 'lastGenre', genre.name);
 
   static Genre? _genreByName(Object? name) {
     for (final g in Genre.values) {
@@ -116,27 +84,47 @@ class SongPrefs {
     return null;
   }
 
-  /// Ghi một trường của bài (null = xoá trường; bài hết trường thì xoá bài) và đưa bài xuống cuối
-  /// (= mới nhất); quá [maxEntries] bài thì bỏ bài cũ nhất.
-  Future<void> _update(String name, int size, String field, Object? value) =>
-      _serial(() async {
-        final all = await _readAll();
-        final key = _keyOf(name, size);
-        final old = all.remove(key);
-        final entry = <String, dynamic>{
-          if (old is Map<String, dynamic>) ...old,
-        };
-        if (value == null) {
-          entry.remove(field);
-        } else {
-          entry[field] = value;
-        }
-        if (entry.isNotEmpty) all[key] = entry;
-        var songs = all.keys.where((k) => k != _lastGenreKey).length;
-        while (songs > maxEntries) {
-          all.remove(all.keys.firstWhere((k) => k != _lastGenreKey));
-          songs--;
-        }
-        await writeFileAtomic(_file, jsonEncode(all));
-      });
+  /// Ghi các trường của bài (null = xoá trường) và đánh dấu bài mới dùng. Bài không có file trong
+  /// thư viện mà hết lựa chọn thì xoá hẳn; quá [maxEntries] bài như vậy thì bỏ bài cũ nhất.
+  Future<void> _update(
+    String name,
+    int size,
+    Map<String, Object?> values,
+  ) async {
+    final db = await LibraryDb.open(baseDir);
+    final key = songKey(name, size);
+    await db.transaction((txn) async {
+      final t = LibraryDb.now();
+      final n = await txn.update(
+        'songs',
+        {...values, 'last_used_at': t},
+        where: 'key = ?',
+        whereArgs: [key],
+      );
+      if (n == 0) {
+        await txn.insert('songs', {
+          'key': key,
+          'name': name,
+          'size': size,
+          'title': titleFromFileName(name),
+          'added_at': t,
+          'last_used_at': t,
+          ...values,
+        });
+      }
+      await txn.delete(
+        'songs',
+        where:
+            'key = ? AND file IS NULL AND transpose IS NULL AND genre IS NULL '
+            'AND key_root IS NULL AND key_scale IS NULL',
+        whereArgs: [key],
+      );
+      await txn.execute(
+        'DELETE FROM songs WHERE file IS NULL AND key NOT IN '
+        '(SELECT key FROM songs WHERE file IS NULL '
+        'ORDER BY last_used_at DESC LIMIT ?)',
+        [maxEntries],
+      );
+    });
+  }
 }

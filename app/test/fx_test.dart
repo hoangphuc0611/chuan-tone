@@ -205,9 +205,12 @@ void main() {
       expect(await prefs.lastGenre(), Genre.ballad);
       expect(await prefs.genreFor(name: 's0', size: 1), isNull);
       expect(await prefs.genreFor(name: 's1', size: 1), Genre.pop);
+    });
 
+    test('file cũ: tên preset lạ → null', () async {
       File('${dir.path}/song_prefs.json')
           .writeAsStringSync('{"x|1": {"genre": "jazz"}, "*lastGenre": 3}');
+      final prefs = SongPrefs(baseDir: dir);
       expect(await prefs.genreFor(name: 'x', size: 1), isNull);
       expect(await prefs.lastGenre(), isNull);
     });

@@ -11,7 +11,26 @@
 
 ## Tiến độ
 
-- [ ] B1 — Thư viện bài (SQLite), nhận file từ app khác
+- [~] **B1** (2026-11-02, chờ thử "Mở bằng" trên iPhone): thư viện bài SQLite, nhận file từ app khác.
+  - `data/library_db.dart`: CSDL `chuantone.db` (sqflite, SQLite của hệ điều hành; không dùng UPSERT vì
+    Android 9 có SQLite 3.22) — bảng `songs` (thư viện + lựa chọn theo bài), `analysis`, `settings`.
+    Lần tạo đầu tự chuyển `song_prefs.json`, `analysis_cache.json`, `settings.json` vào rồi đổi tên
+    file cũ thành `.migrated`; giá trị sai kiểu thì bỏ qua; giữ thứ tự cũ → mới.
+  - `SongPrefs`, `AnalysisCache`, `AppSettings` giữ nguyên API, chạy trên CSDL (màn cũ không phải sửa).
+  - `data/song_library.dart`: file bài **chuyển** (không chép thêm) vào `<dữ liệu app>/library/<băm
+    khoá>.<đuôi>`; thêm lại cùng bài không nhân đôi; bài có lựa chọn từ trước giữ nguyên lựa chọn;
+    mới dùng lên đầu; tìm theo tên bỏ dấu (cả chữ tổ hợp của tên file iOS); đổi tên; xoá bài = xoá
+    file + giọng đã tách + kết quả dò + lựa chọn (bản thu giữ); đánh dấu bài mất file.
+  - Màn **"Bài hát của tôi"** (Trang chủ có nút mới; Trang chủ đầy đủ ở B3): tìm, mở → Phân tích bài
+    (có "Hát"), đổi tên, xoá, thêm bài; trống thì hướng dẫn. Bài chọn ở Trang chủ / Phòng thử cũng vào
+    thư viện; mở bài ở Phòng thử thì bài lên đầu.
+  - **"Mở bằng ChuẩnTone"**: iOS khai báo kiểu file âm thanh (`CFBundleDocumentTypes`, không mở tại
+    chỗ), plugin nhận URL qua scene delegate (cả lúc app được mở lên), chuyển file khỏi
+    `Documents/Inbox`; Android intent `VIEW` / `SEND` `audio/*` trong `MainActivity` (build CI). Kênh
+    `chuantone/incoming` (`take` + báo `available`); app thêm file vào thư viện rồi mở Phân tích bài.
+  - Test app 97 (+16): chuyển dữ liệu cũ, thư viện (thêm / chuyển / trùng / tìm / đổi tên / xoá / mất
+    file), màn Bài hát của tôi ở 320 px chữ 130%, nhận file "Mở bằng". Test chạy SQLite của máy qua
+    `sqflite_common_ffi` (`test/flutter_test_config.dart`).
 - [ ] B2 — Bộ điều khiển phiên hát dùng chung + Màn hát
 - [ ] B3 — Lời bài hát (.lrc), bài mẫu, Trang chủ mới
 - [ ] B4 — Engine 0.9 (mức micro, chọn micro) + màn Cài đặt

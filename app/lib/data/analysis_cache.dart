@@ -3,14 +3,13 @@ import 'dart:io';
 
 import 'package:tonecore_flutter/tonecore_flutter.dart';
 
-import 'app_dirs.dart';
+import 'library_db.dart';
 
 /// Lưu kết quả phân tích bài (tone, chuyển tone, tuning, BPM, độ to) để mở lại bài không phải
-/// phân tích lại.
+/// phân tích lại. Bảng `analysis` của [LibraryDb] (M8; trước đó là `analysis_cache.json`).
 ///
-/// Khoá = tên file + kích thước (file_picker trên iOS chép file sang thư mục tạm mới mỗi lần chọn
-/// nên đường dẫn không dùng làm khoá được; fingerprint nội dung làm ở M6/M8) + phiên bản engine
-/// (thuật toán đổi thì phân tích lại).
+/// Khoá = tên file + kích thước (như mọi kho khác của bài) + phiên bản engine (thuật toán đổi thì
+/// phân tích lại).
 class AnalysisCache {
   AnalysisCache({required this.engineVersion, this.baseDir});
 
@@ -18,34 +17,24 @@ class AnalysisCache {
 
   final String engineVersion;
 
-  /// Thư mục lưu file; để null thì dùng thư mục dữ liệu của app (test truyền thư mục tạm).
+  /// Thư mục CSDL; để null thì dùng thư mục dữ liệu của app (test truyền thư mục tạm).
   final Directory? baseDir;
-
-  File get _file =>
-      File('${(baseDir ?? appDataDir()).path}/analysis_cache.json');
-
-  String _keyOf(String name, int size) => '$engineVersion|$name|$size';
-
-  Future<Map<String, dynamic>> _readAll() async {
-    try {
-      final f = _file;
-      if (!await f.exists()) return {};
-      final data = jsonDecode(await f.readAsString());
-      if (data is Map<String, dynamic>) return data;
-    } catch (_) {
-      // File hỏng → coi như chưa có gì.
-    }
-    return {};
-  }
 
   Future<SongAnalysis?> lookup({
     required String name,
     required int size,
   }) async {
-    final entry = (await _readAll())[_keyOf(name, size)];
-    if (entry is! Map<String, dynamic>) return null;
+    final rows = await (await LibraryDb.open(baseDir)).query(
+      'analysis',
+      columns: ['json'],
+      where: 'song_key = ? AND engine_version = ?',
+      whereArgs: [songKey(name, size), engineVersion],
+    );
+    if (rows.isEmpty) return null;
     try {
-      return analysisFromJson(entry);
+      return analysisFromJson(
+        jsonDecode(rows.first['json']! as String) as Map<String, dynamic>,
+      );
     } catch (_) {
       return null;
     }
@@ -56,14 +45,33 @@ class AnalysisCache {
     required int size,
     required SongAnalysis analysis,
   }) async {
-    final all = await _readAll();
-    final key = _keyOf(name, size);
-    all.remove(key); // đưa xuống cuối = mới nhất
-    all[key] = analysisToJson(analysis);
-    while (all.length > maxEntries) {
-      all.remove(all.keys.first);
-    }
-    await writeFileAtomic(_file, jsonEncode(all));
+    final db = await LibraryDb.open(baseDir);
+    await db.transaction((txn) async {
+      await txn.rawInsert(
+        'INSERT OR REPLACE INTO analysis(song_key, engine_version, json, stored_at) '
+        'VALUES(?, ?, ?, ?)',
+        [
+          songKey(name, size),
+          engineVersion,
+          jsonEncode(analysisToJson(analysis)),
+          LibraryDb.now(),
+        ],
+      );
+      await txn.execute(
+        'DELETE FROM analysis WHERE rowid NOT IN '
+        '(SELECT rowid FROM analysis ORDER BY stored_at DESC LIMIT ?)',
+        [maxEntries],
+      );
+    });
+  }
+
+  /// Xoá mọi kết quả của bài (mọi phiên bản engine) — khi xoá bài khỏi thư viện.
+  Future<void> remove({required String name, required int size}) async {
+    await (await LibraryDb.open(baseDir)).delete(
+      'analysis',
+      where: 'song_key = ?',
+      whereArgs: [songKey(name, size)],
+    );
   }
 }
 

@@ -1,36 +1,88 @@
-import 'package:file_picker/file_picker.dart';
+import 'package:chuantone_media/chuantone_media.dart';
 import 'package:flutter/material.dart';
 
-import 'data/song_ref.dart';
+import 'data/song_import.dart';
+import 'data/song_library.dart';
 import 'engine_info.dart';
 import 'pages/analysis_page.dart';
 import 'pages/latency_page.dart';
+import 'pages/songs_page.dart';
 import 'pages/takes_page.dart';
 import 'pages/test_room_page.dart';
 
-class ChuanToneApp extends StatelessWidget {
-  const ChuanToneApp({super.key, required this.engineInfo});
+class ChuanToneApp extends StatefulWidget {
+  const ChuanToneApp({super.key, required this.engineInfo, this.library});
 
   final EngineInfo engineInfo;
+
+  /// Thư viện bài (null = thư viện của app; test truyền thư viện trong thư mục tạm).
+  final SongLibrary? library;
+
+  @override
+  State<ChuanToneApp> createState() => _ChuanToneAppState();
+}
+
+class _ChuanToneAppState extends State<ChuanToneApp> {
+  final _navigator = GlobalKey<NavigatorState>();
+  final _messenger = GlobalKey<ScaffoldMessengerState>();
+  late final SongLibrary _library = widget.library ?? SongLibrary();
+
+  @override
+  void initState() {
+    super.initState();
+    IncomingFiles.listen(_onIncoming);
+  }
+
+  /// "Mở bằng ChuẩnTone": thêm các file vào thư viện rồi mở màn Phân tích bài của file cuối.
+  Future<void> _onIncoming(List<IncomingFile> files) async {
+    LibrarySong? last;
+    var failed = 0;
+    for (final f in files) {
+      try {
+        last = await _library.add(f.path, name: f.name, move: true);
+      } catch (_) {
+        failed++;
+      }
+    }
+    if (failed > 0) {
+      _messenger.currentState?.showSnackBar(
+        SnackBar(
+          content: Text(
+            failed == 1
+                ? 'Không thêm được file nhạc vừa mở.'
+                : 'Không thêm được $failed file nhạc vừa mở.',
+          ),
+        ),
+      );
+    }
+    final song = last;
+    if (song == null || !widget.engineInfo.ok) return;
+    await _navigator.currentState?.push(
+      MaterialPageRoute<void>(builder: (_) => AnalysisPage(song: song.ref)),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'ChuẩnTone',
       debugShowCheckedModeBanner: false,
+      navigatorKey: _navigator,
+      scaffoldMessengerKey: _messenger,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFE5484D)),
         useMaterial3: true,
       ),
-      home: HomePage(engineInfo: engineInfo),
+      home: HomePage(engineInfo: widget.engineInfo, library: _library),
     );
   }
 }
 
 class HomePage extends StatelessWidget {
-  const HomePage({super.key, required this.engineInfo});
+  const HomePage({super.key, required this.engineInfo, required this.library});
 
   final EngineInfo engineInfo;
+  final SongLibrary library;
 
   @override
   Widget build(BuildContext context) {
@@ -65,7 +117,19 @@ class HomePage extends StatelessWidget {
                       subtitle: 'Dò tone, nhịp — tách giọng ca sĩ nếu cần',
                       enabled: engineInfo.ok,
                       primary: true,
-                      onTap: () => _addSong(context),
+                      onTap: () => _addSong(context, library),
+                    ),
+                    const SizedBox(height: 12),
+                    _BigButton(
+                      icon: Icons.library_music,
+                      label: 'Bài hát của tôi',
+                      subtitle: 'Các bài đã thêm — tìm và hát lại',
+                      enabled: engineInfo.ok,
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => SongsPage(library: library),
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 12),
                     _BigButton(
@@ -117,19 +181,27 @@ class HomePage extends StatelessWidget {
   }
 }
 
-/// Chọn file (app Tệp trên iOS, không cần quyền thư viện nhạc) → màn Phân tích bài.
-Future<void> _addSong(BuildContext context) async {
-  final files = await FilePicker.pickFiles(
-    type: FileType.custom,
-    allowedExtensions: const ['mp3', 'm4a', 'aac', 'wav', 'flac'],
+/// Chọn file (app Tệp trên iOS, không cần quyền thư viện nhạc) → thư viện bài → màn Phân tích bài.
+Future<void> _addSong(BuildContext context, SongLibrary library) async {
+  final LibrarySong? song;
+  try {
+    song = await pickSongIntoLibrary(library);
+  } catch (_) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Không thêm được file này. Hãy thử file MP3, M4A hoặc WAV.',
+          ),
+        ),
+      );
+    }
+    return;
+  }
+  if (song == null || !context.mounted) return;
+  await Navigator.of(context).push(
+    MaterialPageRoute<void>(builder: (_) => AnalysisPage(song: song!.ref)),
   );
-  if (files.isEmpty) return;
-  final path = files.single.path;
-  if (path == null) return;
-  final song = await SongRef.open(path, files.single.name);
-  if (!context.mounted) return;
-  await Navigator.of(context)
-      .push(MaterialPageRoute<void>(builder: (_) => AnalysisPage(song: song)));
 }
 
 class _BigButton extends StatelessWidget {

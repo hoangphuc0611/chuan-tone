@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:chuantone/data/library_db.dart';
 import 'package:chuantone/data/song_prefs.dart';
 import 'package:chuantone/engine/labels.dart';
 import 'package:chuantone/engine/playback_watch.dart';
@@ -55,19 +56,30 @@ void main() {
       expect(await prefs.transposeFor(name: 'a.m4a', size: 11), 0); // khác file
       await prefs.setTranspose(name: 'a.m4a', size: 10, semitones: 0);
       expect(await prefs.transposeFor(name: 'a.m4a', size: 10), 0);
-      expect(
-        File('${dir.path}/song_prefs.json').readAsStringSync(),
-        isNot(contains('a.m4a')),
-      );
+      final rows = await (await LibraryDb.open(dir))
+          .query('songs', where: 'name = ?', whereArgs: ['a.m4a']);
+      expect(rows, isEmpty); // hết lựa chọn, không có file → xoá hẳn
     });
 
-    test('file hỏng hoặc giá trị ngoài −6…+6 → coi như 0', () async {
+    test('file cũ hỏng hoặc giá trị ngoài −6…+6 → coi như 0', () async {
       File('${dir.path}/song_prefs.json')
           .writeAsStringSync('{"a|1": {"transpose": 9}');
       expect(await SongPrefs(baseDir: dir).transposeFor(name: 'a', size: 1), 0);
-      File('${dir.path}/song_prefs.json')
-          .writeAsStringSync('{"a|1": {"transpose": 9}}');
-      expect(await SongPrefs(baseDir: dir).transposeFor(name: 'a', size: 1), 0);
+      expect(File('${dir.path}/song_prefs.json.migrated').existsSync(), isTrue);
+
+      final dir2 = Directory.systemTemp.createTempSync('song_prefs2');
+      addTearDown(() => dir2.deleteSync(recursive: true));
+      File('${dir2.path}/song_prefs.json').writeAsStringSync(
+        '{"a|1": {"transpose": 9}, "b|2": {"transpose": -6}}',
+      );
+      expect(
+        await SongPrefs(baseDir: dir2).transposeFor(name: 'a', size: 1),
+        0,
+      );
+      expect(
+        await SongPrefs(baseDir: dir2).transposeFor(name: 'b', size: 2),
+        -6,
+      );
     });
 
     test('giữ tối đa ${SongPrefs.maxEntries} bài, bỏ bài cũ nhất', () async {

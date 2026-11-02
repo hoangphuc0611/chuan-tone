@@ -164,3 +164,53 @@ class CameraPreviewView extends StatelessWidget {
     return const UiKitView(viewType: 'chuantone/camera-preview');
   }
 }
+
+/// File nhạc mở từ app khác ("Mở bằng ChuẩnTone" từ Zalo, Tệp, Safari, AirDrop — M8 B1), qua kênh
+/// `chuantone/incoming` (iOS: plugin này; Android: `MainActivity`). Phần native đã chép file vào
+/// thư mục tạm của app; app chuyển nó vào thư viện.
+abstract final class IncomingFiles {
+  static const _channel = MethodChannel('chuantone/incoming');
+
+  /// Bắt đầu nhận: [onFiles] được gọi với các file đang chờ — cả file làm app mở lên — và mỗi khi
+  /// có file mới.
+  static void listen(void Function(List<IncomingFile> files) onFiles) {
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'available') {
+        final files = await take();
+        if (files.isNotEmpty) onFiles(files);
+      }
+    });
+    take().then((files) {
+      if (files.isNotEmpty) onFiles(files);
+    });
+  }
+
+  /// Lấy (và xoá khỏi hàng chờ) các file đang chờ; nền tảng chưa hỗ trợ → rỗng.
+  static Future<List<IncomingFile>> take() async {
+    try {
+      final list =
+          await _channel.invokeListMethod<Map<Object?, Object?>>('take') ??
+          const [];
+      return [
+        for (final m in list)
+          if (m['path'] case final String path)
+            IncomingFile(
+              path: path,
+              name: m['name'] as String? ?? path.split('/').last,
+            ),
+      ];
+    } on MissingPluginException {
+      return const [];
+    } on PlatformException {
+      return const [];
+    }
+  }
+}
+
+/// Một file nhận từ app khác: [path] = bản chép trong thư mục tạm, [name] = tên file gốc.
+class IncomingFile {
+  const IncomingFile({required this.path, required this.name});
+
+  final String path;
+  final String name;
+}

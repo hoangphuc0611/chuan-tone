@@ -6,13 +6,46 @@ import UIKit
 /// Kênh `chuantone/media` (M7, docs/m7-plan.md): API native của iOS cho phần xuất / chia sẻ.
 /// Việc nặng chạy ở hàng đợi nền; kết quả trả về luồng chính. Một việc dựng video tại một thời
 /// điểm (`progress` / `cancel` áp cho việc đó).
-public class ChuanToneMediaPlugin: NSObject, FlutterPlugin {
+public class ChuanToneMediaPlugin: NSObject, FlutterPlugin, FlutterSceneLifeCycleDelegate {
   private var waveform: WaveformVideo?
+  private var incoming: IncomingFiles?
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(name: "chuantone/media", binaryMessenger: registrar.messenger())
-    registrar.addMethodCallDelegate(ChuanToneMediaPlugin(), channel: channel)
+    let instance = ChuanToneMediaPlugin()
+    registrar.addMethodCallDelegate(instance, channel: channel)
+    instance.incoming = IncomingFiles(
+      channel: FlutterMethodChannel(name: "chuantone/incoming", binaryMessenger: registrar.messenger()))
+    registrar.addApplicationDelegate(instance)
+    registrar.addSceneDelegate(instance)
     registrar.register(CameraPreviewFactory(), withId: "chuantone/camera-preview")
+  }
+
+  // MARK: - "Mở bằng ChuẩnTone" (M8 B1)
+
+  /// App được mở lên bởi một file (khởi động nguội).
+  @objc(scene:willConnectToSession:options:)
+  public func scene(
+    _ scene: UIScene, willConnectTo session: UISceneSession,
+    options connectionOptions: UIScene.ConnectionOptions?
+  ) -> Bool {
+    guard let contexts = connectionOptions?.urlContexts, !contexts.isEmpty else { return false }
+    return incoming?.receive(contexts.map { $0.url }) ?? false
+  }
+
+  /// App đang chạy nhận thêm file.
+  @objc(scene:openURLContexts:)
+  public func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) -> Bool {
+    incoming?.receive(URLContexts.map { $0.url }) ?? false
+  }
+
+  /// Dự phòng khi không dùng scene.
+  @objc(application:openURL:options:)
+  public func application(
+    _ application: UIApplication, open url: URL,
+    options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+  ) -> Bool {
+    incoming?.receive([url]) ?? false
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {

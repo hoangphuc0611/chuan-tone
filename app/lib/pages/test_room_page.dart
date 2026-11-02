@@ -2,13 +2,14 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:chuantone_media/chuantone_media.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:tonecore_flutter/tonecore_flutter.dart';
 
 import '../data/analysis_cache.dart';
 import '../data/app_settings.dart';
+import '../data/song_import.dart';
+import '../data/song_library.dart';
 import '../data/song_prefs.dart';
 import '../data/song_ref.dart';
 import '../data/stem_store.dart';
@@ -78,6 +79,7 @@ class _TestRoomPageState extends State<TestRoomPage> {
   // Tách giọng ca sĩ (M6).
   final _settings = AppSettings();
   final _stemStore = StemStore();
+  final _library = SongLibrary();
   String? _server;
   String? _beatPath;
   List<String>? _vocals; // các đoạn giọng của bài đang nạp (null = chưa tách)
@@ -299,15 +301,16 @@ class _TestRoomPageState extends State<TestRoomPage> {
 
   Future<void> _pickBeat() async {
     if (_service.engine == null) return;
-    // Lọc theo đuôi file: trên iOS mở app Tệp (không cần quyền thư viện nhạc).
-    final files = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['mp3', 'm4a', 'aac', 'wav', 'flac'],
-    );
-    if (files.isEmpty) return; // người dùng huỷ
-    final path = files.single.path;
-    if (path == null) return;
-    await _openSong(await SongRef.open(path, files.single.name));
+    // Bài chọn ở đây cũng vào thư viện (hiện ở "Bài hát của tôi").
+    final LibrarySong? song;
+    try {
+      song = await pickSongIntoLibrary(_library);
+    } catch (_) {
+      _show('Không thêm được file này. Hãy thử MP3, M4A hoặc WAV.');
+      return;
+    }
+    if (song == null) return; // người dùng huỷ
+    await _openSong(song.ref);
   }
 
   Future<void> _openSong(SongRef song) async {
@@ -344,6 +347,7 @@ class _TestRoomPageState extends State<TestRoomPage> {
         ),
       );
       _playback = e.playback;
+      unawaited(_library.touch(song.name, song.size));
       unawaited(_analyze(song, vocals));
     } on ToneCoreException catch (err) {
       _show('Không mở được file (${err.codeName}). Hãy thử MP3, M4A hoặc WAV.');

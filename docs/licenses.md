@@ -17,6 +17,11 @@ Quy tắc (CLAUDE.md mục 0.2): chỉ MIT / BSD / Apache-2.0 / Zlib / ISC. LGPL
 | dr_wav / dr_mp3 / dr_flac | commit `dfe8377` (`engine/third_party/dr_libs/COMMIT`) | Public domain / MIT-0 | giải mã cho bản host (test, CI, `tcflac` của server); dr_flac từ M6 | Không |
 | file_picker | ^13.1.0 | MIT | `app` – chọn file beat | Có |
 | device_info_plus | ^13.3.0 | BSD-3-Clause | `app` – tên máy trong báo cáo độ trễ | Có |
+| sqflite (+ sqflite_common, sqflite_darwin, sqflite_android, sqflite_platform_interface) | ^2.4.5 | BSD-2-Clause | `app` – CSDL thư viện bài / lựa chọn / phân tích / cài đặt (M8). Dùng SQLite **có sẵn của hệ điều hành** (iOS, Android), không đóng gói SQLite | Có |
+| synchronized | 3.5.0 (theo sqflite) | MIT | phụ thuộc của sqflite | Có |
+| sqflite_common_ffi | ^2.4.5 | BSD-2-Clause | test app trên Mac / CI (`test/flutter_test_config.dart`) | Không |
+| sqlite3 (Dart) | theo sqflite_common_ffi | MIT | test (dev). `hooks.user_defines.sqlite3.source: system` trong `app/pubspec.yaml` → nạp SQLite của máy chạy test, không tải / đóng gói bản SQLite riêng | Không |
+| hooks, code_assets, native_toolchain_c, record_use, crypto, glob, logging, platform, pub_semver, typed_data, yaml | theo sqlite3 | BSD-3-Clause (Dart team) | phụ thuộc dev của sqlite3 (hook build) | Không |
 | mir_eval | 0.8.2 | MIT | `tools/keytest` – kiểm chéo điểm MIREX (không bắt buộc) | Không |
 | Signalsmith Stretch | 1.4.0 (commit `a670068`) | MIT | mốc so sánh A/B trong `engine/tools/beatlab` — gọi như hộp đen qua API công khai, không link vào libtonecore; tải bằng `tools/stretch/fetch_signalsmith.sh` vào `testdata/ref/` (không commit) | Không |
 | Signalsmith Linear | 0.6.4 (commit `de55e6a`) | MIT | phụ thuộc của Signalsmith Stretch (FFT), cùng chỗ | Không |
