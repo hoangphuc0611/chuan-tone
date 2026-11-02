@@ -28,7 +28,12 @@ class PeakLimiter {
   void reset() noexcept;
   // Giới hạn `frames` frame (interleaved) vào `out`, trong đó `in` là `frames` frame MỚI; đầu ra là
   // `frames` frame chậm `lookahead()` so với đầu vào. Cấp phát trong constructor; hàm này không.
-  void process(const float* in, float* out, uint32_t frames) noexcept;
+  void process(const float* in, float* out, uint32_t frames) noexcept {
+    process(in, out, frames, nullptr);
+  }
+  // Như trên nhưng điều khiển theo `peaks[f]` (đỉnh đã tính sẵn của frame f, vd. đỉnh thật — xem
+  // TruePeakLimiter) thay cho max |in| của frame. peaks = nullptr → đỉnh mẫu.
+  void process(const float* in, float* out, uint32_t frames, const float* peaks) noexcept;
 
  private:
   int channels_;

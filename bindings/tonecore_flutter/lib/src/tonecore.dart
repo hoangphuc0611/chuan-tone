@@ -341,8 +341,12 @@ FxPreset _presetFromC(tc_fx_preset c) => FxPreset(
   reverbMix: c.reverb_mix,
 );
 
-void _presetToC(FxPreset p, Pointer<tc_fx_preset> out) {
-  final c = out.ref
+void _presetToC(FxPreset p, Pointer<tc_fx_preset> out) =>
+    _presetFillC(p, out.ref);
+
+/// Ghi preset vào struct C — cả struct nằm trong struct khác (vd. `tc_render_config.fx`).
+void _presetFillC(FxPreset p, tc_fx_preset c) {
+  c
     ..struct_size = sizeOf<tc_fx_preset>()
     ..eq_high_pass_hz = p.eqHighPassHz
     ..eq_low_pass_hz = p.eqLowPassHz
@@ -1465,5 +1469,240 @@ class FlacExporter implements Finalizable {
     _disposed = true;
     _finalizer.detach(this);
     _bindings.tc_exporter_destroy(_handle);
+  }
+}
+
+/// Định dạng file render (thứ tự khớp `tc_render_format`, từ v0.8).
+enum RenderFormat { wav16, wavFloat, m4a }
+
+/// (từ v0.8) Thông số render lại bản thu — chuỗi giọng như khi hát, trộn, âm lượng file xuất.
+/// Vị trí tính bằng frame của bản thu; [keyTimeline] tính từ đầu bản thu, là key ĐANG NGHE (đã
+/// cộng tone đổi).
+class RenderSettings {
+  const RenderSettings({
+    this.voiceOffsetFrames = 0,
+    this.startFrame = 0,
+    this.endFrame = 0,
+    this.fx = const FxPreset(),
+    this.fxEnabled = true,
+    this.fxWet = 1.0,
+    this.tempoBpm = 100,
+    this.correction,
+    this.key = const MusicKey(9, MusicScale.naturalMinor),
+    this.tuningCents = 0,
+    this.keyTimeline = const [],
+    this.gate = false,
+    this.gateThresholdDb = -50,
+    this.voiceGain = 1,
+    this.beatGain = 1,
+    this.normalize = true,
+    this.targetLufs = -14,
+    this.truePeakDb = -1,
+    this.format = RenderFormat.wav16,
+    this.aacBitrate = 192000,
+  });
+
+  final int voiceOffsetFrames;
+  final int startFrame;
+
+  /// 0 = hết bài.
+  final int endFrame;
+  final FxPreset fx;
+  final bool fxEnabled;
+  final double fxWet;
+  final double tempoBpm;
+
+  /// null = tắt chỉnh giọng.
+  final CorrectionPreset? correction;
+  final MusicKey key;
+  final double tuningCents;
+  final List<KeySegment> keyTimeline;
+  final bool gate;
+  final double gateThresholdDb;
+  final double voiceGain;
+  final double beatGain;
+  final bool normalize;
+  final double targetLufs;
+  final double truePeakDb;
+  final RenderFormat format;
+  final int aacBitrate;
+}
+
+class RenderStatus {
+  const RenderStatus({
+    required this.state,
+    required this.progress,
+    required this.result,
+    required this.sampleRate,
+    required this.frames,
+    required this.mixLufs,
+    required this.outputLufs,
+    required this.truePeakDb,
+    required this.gainDb,
+  });
+
+  final AnalysisState state;
+  final double progress;
+  final int result;
+  final int sampleRate;
+  final int frames;
+
+  /// Độ to bản trộn trước chuẩn hoá (null = im lặng).
+  final double? mixLufs;
+
+  /// Độ to file xuất (null = im lặng).
+  final double? outputLufs;
+
+  /// Đỉnh thật file xuất (dBTP, trước bộ nén AAC).
+  final double truePeakDb;
+  final double gainDb;
+
+  Duration get duration => sampleRate == 0
+      ? Duration.zero
+      : Duration(microseconds: frames * 1000000 ~/ sampleRate);
+}
+
+/// (từ v0.8) Render lại bản thu ở luồng nền (giọng khô → chỉnh giọng + FX → trộn beat → chuẩn
+/// hoá độ to → limiter đỉnh thật → file). Gọi [dispose] khi xong.
+class TakeRenderer implements Finalizable {
+  TakeRenderer._(this._handle) {
+    _finalizer.attach(this, _handle.cast(), detach: this);
+  }
+
+  factory TakeRenderer.create() {
+    return using((arena) {
+      final out = arena<Pointer<tc_renderer>>();
+      _check('tc_renderer_create', _bindings.tc_renderer_create(out));
+      return TakeRenderer._(out.value);
+    });
+  }
+
+  static final _finalizer = NativeFinalizer(
+    _bindings.addresses.tc_renderer_destroy.cast(),
+  );
+
+  final Pointer<tc_renderer> _handle;
+  bool _disposed = false;
+
+  Pointer<tc_renderer> get _h {
+    if (_disposed) throw StateError('TakeRenderer đã bị dispose');
+    return _handle;
+  }
+
+  void start(
+    String beatPath,
+    String voicePath,
+    String outPath,
+    RenderSettings s,
+  ) {
+    using((arena) {
+      final c = arena<tc_render_config>();
+      _bindings.tc_render_config_init(c);
+      final segs = arena<tc_key_segment>(
+        s.keyTimeline.isEmpty ? 1 : s.keyTimeline.length,
+      );
+      for (var i = 0; i < s.keyTimeline.length; i++) {
+        final g = s.keyTimeline[i];
+        segs[i]
+          ..start_ms = g.start.inMicroseconds / 1000
+          ..end_ms = g.end.inMicroseconds / 1000
+          ..root = g.key.root
+          ..scale = g.key.scale.index
+          ..confidence = g.confidence;
+      }
+      _presetFillC(s.fx, c.ref.fx);
+      c.ref
+        ..voice_offset_frames = s.voiceOffsetFrames
+        ..start_frame = s.startFrame
+        ..end_frame = s.endFrame
+        ..fx_enabled = s.fxEnabled ? 1 : 0
+        ..fx_wet = s.fxWet
+        ..tempo_bpm = s.tempoBpm
+        ..correction_enabled = s.correction == null ? 0 : 1
+        ..correction_preset = (s.correction ?? CorrectionPreset.natural).index
+        ..key_root = s.key.root
+        ..key_scale = s.key.scale.index
+        ..tuning_cents = s.tuningCents
+        ..key_segments = s.keyTimeline.isEmpty ? nullptr : segs
+        ..key_segment_count = s.keyTimeline.length
+        ..gate_enabled = s.gate ? 1 : 0
+        ..gate_threshold_db = s.gateThresholdDb
+        ..voice_gain = s.voiceGain
+        ..beat_gain = s.beatGain
+        ..normalize = s.normalize ? 1 : 0
+        ..target_lufs = s.targetLufs
+        ..true_peak_db = s.truePeakDb
+        ..format = s.format.index
+        ..aac_bitrate = s.aacBitrate;
+      _check(
+        'tc_renderer_start',
+        _bindings.tc_renderer_start(
+          _h,
+          beatPath.toNativeUtf8(allocator: arena).cast(),
+          voicePath.toNativeUtf8(allocator: arena).cast(),
+          outPath.toNativeUtf8(allocator: arena).cast(),
+          c,
+        ),
+      );
+    });
+  }
+
+  RenderStatus get status {
+    return using((arena) {
+      final s = arena<tc_render_status>();
+      s.ref.struct_size = sizeOf<tc_render_status>();
+      _check('tc_renderer_get_status', _bindings.tc_renderer_get_status(_h, s));
+      final v = s.ref;
+      double? lufs(double x) => x.isNaN ? null : x;
+      return RenderStatus(
+        state: _enumAt(AnalysisState.values, v.state, AnalysisState.idle),
+        progress: v.progress,
+        result: v.result,
+        sampleRate: v.sample_rate,
+        frames: v.frames,
+        mixLufs: lufs(v.mix_lufs),
+        outputLufs: lufs(v.output_lufs),
+        truePeakDb: v.true_peak_db,
+        gainDb: v.gain_db,
+      );
+    });
+  }
+
+  /// Yêu cầu dừng (không chờ); file dở bị xoá.
+  void cancel() =>
+      _check('tc_renderer_cancel', _bindings.tc_renderer_cancel(_h));
+
+  /// Render và chờ xong, báo tiến độ qua [onProgress]. Lỗi / huỷ → [ToneCoreException].
+  Future<RenderStatus> render(
+    String beatPath,
+    String voicePath,
+    String outPath,
+    RenderSettings settings, {
+    void Function(RenderStatus status)? onProgress,
+    Duration pollInterval = const Duration(milliseconds: 50),
+  }) async {
+    start(beatPath, voicePath, outPath, settings);
+    while (true) {
+      final s = status;
+      onProgress?.call(s);
+      switch (s.state) {
+        case AnalysisState.done:
+          return s;
+        case AnalysisState.failed:
+        case AnalysisState.cancelled:
+          throw ToneCoreException('tc_renderer', s.result);
+        case AnalysisState.idle:
+        case AnalysisState.running:
+          break;
+      }
+      await Future<void>.delayed(pollInterval);
+    }
+  }
+
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _finalizer.detach(this);
+    _bindings.tc_renderer_destroy(_handle);
   }
 }

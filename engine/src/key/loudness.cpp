@@ -56,54 +56,46 @@ BiquadCoeffs kWeightingHighpass(double fs) {
   return c;
 }
 
-LoudnessResult measureLoudness(const DecodedAudio& audio) {
-  LoudnessResult out;
-  const std::size_t ch = audio.channels;
-  const auto frames = static_cast<std::size_t>(audio.frames);
-  if (ch == 0 || frames == 0 || audio.sampleRate == 0 || audio.samples.size() < frames * ch) {
-    return out;
+LoudnessMeter::LoudnessMeter(int channels, double sampleRate)
+    : channels_(static_cast<std::size_t>(std::max(1, channels))),
+      measured_(std::min<std::size_t>(channels_, 2)),
+      // Mono → mono kép (×2); ≥ 2 kênh → 2 kênh đầu.
+      weight_(channels_ == 1 ? 2.0 : 1.0),
+      shelf_(measured_),
+      highpass_(measured_),
+      stepLen_(static_cast<std::size_t>(std::lround(sampleRate * kBlockSec / kStepsPerBlock))) {
+  for (std::size_t c = 0; c < measured_; ++c) {
+    shelf_[c].setCoeffs(kWeightingShelf(sampleRate));
+    highpass_[c].setCoeffs(kWeightingHighpass(sampleRate));
   }
-  // Kênh được đo và trọng số: mono → mono kép (×2); ≥ 2 kênh → 2 kênh đầu.
-  const std::size_t measured = std::min<std::size_t>(ch, 2);
-  const double weight = ch == 1 ? 2.0 : 1.0;
+}
 
-  const double fs = audio.sampleRate;
-  std::vector<Biquad> shelf(measured);
-  std::vector<Biquad> highpass(measured);
-  for (std::size_t c = 0; c < measured; ++c) {
-    shelf[c].setCoeffs(kWeightingShelf(fs));
-    highpass[c].setCoeffs(kWeightingHighpass(fs));
-  }
-
+void LoudnessMeter::process(const float* x, std::size_t frames) {
   // Năng lượng từng bước 100 ms (tổng bình phương, đã nhân trọng số kênh).
-  const auto stepLen = static_cast<std::size_t>(std::lround(fs * kBlockSec / kStepsPerBlock));
-  std::vector<double> steps;
-  steps.reserve(frames / stepLen + 1);
-  double acc = 0.0;
-  std::size_t inStep = 0;
-  int peak = 0;
-  constexpr float kScale = 1.0f / 32768.0f;
   for (std::size_t i = 0; i < frames; ++i) {
-    for (std::size_t c = 0; c < measured; ++c) {
-      const int16_t s = audio.samples[i * ch + c];
-      peak = std::max(peak, std::abs(static_cast<int>(s)));
-      const float y = highpass[c].process(shelf[c].process(static_cast<float>(s) * kScale));
-      acc += weight * static_cast<double>(y) * static_cast<double>(y);
+    for (std::size_t c = 0; c < measured_; ++c) {
+      const float s = x[i * channels_ + c];
+      peak_ = std::max(peak_, std::abs(s));
+      const float y = highpass_[c].process(shelf_[c].process(s));
+      acc_ += weight_ * static_cast<double>(y) * static_cast<double>(y);
     }
-    if (++inStep == stepLen) {
-      steps.push_back(acc);
-      acc = 0.0;
-      inStep = 0;
+    if (++inStep_ == stepLen_) {
+      steps_.push_back(acc_);
+      acc_ = 0.0;
+      inStep_ = 0;
     }
   }
-  out.samplePeakDb = peak > 0 ? static_cast<float>(20.0 * std::log10(peak / 32768.0)) : -200.0f;
+}
 
+LoudnessResult LoudnessMeter::result() const {
+  LoudnessResult out;
+  out.samplePeakDb = peak_ > 0.0f ? 20.0f * std::log10(peak_) : -200.0f;
   // Khối 400 ms = 4 bước liên tiếp; z = trung bình bình phương trên khối.
-  const double blockLen = static_cast<double>(stepLen * kStepsPerBlock);
+  const double blockLen = static_cast<double>(stepLen_ * kStepsPerBlock);
   std::vector<double> blocks;
-  for (std::size_t s = 0; s + kStepsPerBlock <= steps.size(); ++s) {
+  for (std::size_t s = 0; s + kStepsPerBlock <= steps_.size(); ++s) {
     double z = 0.0;
-    for (int j = 0; j < kStepsPerBlock; ++j) z += steps[s + static_cast<std::size_t>(j)];
+    for (int j = 0; j < kStepsPerBlock; ++j) z += steps_[s + static_cast<std::size_t>(j)];
     blocks.push_back(z / blockLen);
   }
 
@@ -131,6 +123,26 @@ LoudnessResult measureLoudness(const DecodedAudio& audio) {
   }
   if (n > 0) out.integratedLufs = static_cast<float>(loudnessOf(sum / static_cast<double>(n)));
   return out;
+}
+
+LoudnessResult measureLoudness(const DecodedAudio& audio) {
+  const std::size_t ch = audio.channels;
+  const auto frames = static_cast<std::size_t>(audio.frames);
+  if (ch == 0 || frames == 0 || audio.sampleRate == 0 || audio.samples.size() < frames * ch) {
+    return LoudnessResult{};
+  }
+  LoudnessMeter meter(static_cast<int>(ch), audio.sampleRate);
+  constexpr std::size_t kChunk = 4096;
+  constexpr float kScale = 1.0f / 32768.0f;
+  std::vector<float> buf(kChunk * ch);
+  for (std::size_t at = 0; at < frames; at += kChunk) {
+    const std::size_t n = std::min(kChunk, frames - at);
+    for (std::size_t i = 0; i < n * ch; ++i) {
+      buf[i] = static_cast<float>(audio.samples[at * ch + i]) * kScale;
+    }
+    meter.process(buf.data(), n);
+  }
+  return meter.result();
 }
 
 }  // namespace tonecore

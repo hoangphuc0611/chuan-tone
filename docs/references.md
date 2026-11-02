@@ -107,6 +107,8 @@ Mọi thuật toán trong ToneCore được viết từ các nguồn công khai 
 
 - IBM, Microsoft, *Multimedia Programming Interface and Data Specifications 1.0* (1991) và Microsoft, *New Multimedia Data Types and Data Techniques* (1994) — định dạng RIFF/WAVE, PCM 16-bit và IEEE float (`fmt ` 18 byte + chunk `fact`) (`record/wav_file.cpp`).
 - Apple, *Core Audio Data Types — AudioTimeStamp* (`mHostTime`, `kAudioTimeStampHostTimeValid`) và *mach_absolute_time / mach_timebase_info* — đồng hồ máy của buffer âm thanh, để căn với mốc thời gian khung hình camera (`io/ios/remoteio_backend.mm`, ADR-007).
+- ITU-R BS.1770-4, phụ lục 2 (*Guidelines for accurate measurement of "true-peak" level*) — đỉnh thật bằng lấy mẫu ×4; ToneCore tự tính bộ lọc nội suy sinc–Kaiser 4 pha × 16 hệ số thay cho bảng 48 hệ số của chuẩn (`fx/true_peak.cpp`), limiter điều khiển theo đỉnh thật (`fx/peak_limiter.cpp`, render bản thu `record/take_renderer.cpp`).
+- EBU R 128 / AES TD1004 (khuyến nghị độ to phát trực tuyến ~ −14 LUFS) — mức chuẩn hoá mặc định của file xuất (`docs/m7-plan.md` điểm 8).
 - ITU-R BT.1359-1, *Relative timing of sound and vision for broadcasting* (1998) — ngưỡng nhận ra lệch tiếng – hình: tiếng sớm 45 ms, muộn 125 ms (chỉ tiêu ≤ 40 ms, `docs/m7-plan.md`).
 
 ## Fingerprint

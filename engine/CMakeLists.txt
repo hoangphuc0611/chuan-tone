@@ -45,9 +45,12 @@ add_library(tonecore_core STATIC
   src/api/tonecore.cpp
   src/api/analyzer.cpp
   src/api/exporter.cpp
+  src/api/fx_convert.cpp
+  src/api/renderer.cpp
   src/codec/flac_encoder.cpp
   src/decode/stems.cpp
   src/record/recorder.cpp
+  src/record/take_renderer.cpp
   src/record/wav_file.cpp
   src/latency/mls.cpp
   src/latency/latency_probe.cpp
@@ -78,6 +81,7 @@ add_library(tonecore_core STATIC
   src/stretch/pitch_shifter.cpp
   src/stretch/transient_detector.cpp
   src/fx/peak_limiter.cpp
+  src/fx/true_peak.cpp
   src/fx/equalizer.cpp
   src/fx/noise_gate.cpp
   src/fx/compressor.cpp

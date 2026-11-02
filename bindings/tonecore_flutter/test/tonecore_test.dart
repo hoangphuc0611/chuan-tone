@@ -753,6 +753,72 @@ void main() {
     );
   });
 
+  test(
+    'render bản thu: chuẩn hoá −14 LUFS, cắt, preset, timeline (v0.8)',
+    () async {
+      final dir = Directory.systemTemp.createTempSync('tonecore_render');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final engine = ToneCoreEngine.create(maxBlockFrames: 256);
+      addTearDown(engine.dispose);
+      engine.start();
+      engine.startRecording(dir.path);
+      final mic = Float32List(256);
+      for (var b = 0; b < 375; b++) {
+        for (var i = 0; i < 256; i++) {
+          mic[i] = 0.2 * math.sin(2 * math.pi * 220 * (b * 256 + i) / 48000);
+        }
+        engine.processOffline(mic, 256);
+      }
+      engine.stopRecording();
+      final r = TakeRenderer.create();
+      addTearDown(r.dispose);
+      final bolero = ToneCore.genrePreset(Genre.bolero);
+      final progress = <double>[];
+      final s = await r.render(
+        '${dir.path}/beat.wav',
+        '${dir.path}/dry.wav',
+        '${dir.path}/mix.wav',
+        RenderSettings(
+          voiceOffsetFrames: 650,
+          startFrame: 4800,
+          endFrame: 86400,
+          fx: bolero,
+          correction: CorrectionPreset.singer,
+          keyTimeline: const [
+            KeySegment(
+              start: Duration.zero,
+              end: Duration(seconds: 1),
+              key: MusicKey(9, MusicScale.naturalMinor),
+            ),
+            KeySegment(
+              start: Duration(seconds: 1),
+              end: Duration(seconds: 2),
+              key: MusicKey(0, MusicScale.major),
+            ),
+          ],
+        ),
+        onProgress: (p) => progress.add(p.progress),
+      );
+      expect(s.state, AnalysisState.done);
+      expect(s.frames, 86400 - 4800);
+      expect(s.duration, const Duration(milliseconds: 1700));
+      expect(s.outputLufs!, closeTo(-14, 0.5));
+      expect(s.truePeakDb, lessThanOrEqualTo(-0.95));
+      expect(s.mixLufs, isNotNull);
+      expect(progress.last, 1.0);
+      expect(File('${dir.path}/mix.wav').lengthSync(), 44 + (86400 - 4800) * 4);
+      await expectLater(
+        r.render(
+          '${dir.path}/khong.wav',
+          '${dir.path}/dry.wav',
+          '${dir.path}/x.wav',
+          const RenderSettings(),
+        ),
+        throwsA(isA<ToneCoreException>()),
+      );
+    },
+  );
+
   test('block quá lớn bị từ chối ở phía Dart', () {
     final engine = ToneCoreEngine.create(maxBlockFrames: 64);
     addTearDown(engine.dispose);

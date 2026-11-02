@@ -42,7 +42,14 @@
     `PlaybackState.hasTake`. Test: giọng ra khớp beat đúng từng frame (xung dịch 100 frame + limiter
     48), micro thật bị bỏ qua, đổi tone bị chặn, nạp beat thường thì hết; không cấp phát (đổi
     preset / bật chỉnh giọng / tua khi đang nghe lại). Engine 292 / 292, binding 25.
-  - [ ] B3b — render offline + −14 LUFS + true-peak.
+  - [x] B3b (2026-11-02) — render offline: `tc_render_config_init / tc_renderer_create / start /
+    get_status / cancel / destroy` (luồng nền riêng, độc lập engine). Giọng khô đã căn → cổng →
+    chỉnh giọng (key / timeline theo thời gian bản thu) → FX ("Vang", nhịp) → trộn beat (âm lượng
+    giọng / nhạc), chạy trước điểm cắt đầu 2 s, fade 10 ms; bản trộn float ra file tạm + đo độ to
+    theo khối (`LoudnessMeter`, BS.1770, dùng chung với measureLoudness) → gain về −14 LUFS (kẹp
+    −30…+24 dB) → limiter đỉnh thật (`TruePeakDetector` ×4 + PeakLimiter điều khiển theo đỉnh thật)
+    → WAV 16-bit / float. Binding: `TakeRenderer`, `RenderSettings`, `RenderStatus`. Bài 4 phút trên
+    Mac M1: 4,2 s → `docs/record-results.md`. Test engine 298 (+6), binding 26.
   - [ ] B3c — AAC (Apple / Android).
 - [ ] B4: binding 0.8 + app (nút Thu, kho bản thu, Nghe lại & chỉnh, xuất M4A, chia sẻ / lưu).
 - [ ] B5: iOS video sóng nhạc.

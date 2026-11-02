@@ -635,6 +635,78 @@ TC_EXPORT void tc_take_config_init(tc_take_config* config);
 TC_EXPORT tc_result tc_load_take(tc_engine* engine, const char* beat_path_utf8,
                                  const char* voice_path_utf8, const tc_take_config* config);
 
+/* Render lại bản thu (tc_renderer_*). */
+typedef enum tc_render_format {
+  TC_RENDER_WAV16 = 0,     /* WAV PCM 16-bit stereo */
+  TC_RENDER_WAV_FLOAT = 1, /* WAV float 32-bit stereo */
+  TC_RENDER_M4A = 2        /* AAC trong M4A, bằng bộ nén của hệ điều hành (iOS / macOS, Android) */
+} tc_render_format;
+
+typedef struct tc_render_config {
+  uint32_t struct_size;        /* = sizeof(tc_render_config); tc_render_config_init tự điền */
+  int64_t voice_offset_frames; /* như tc_take_config */
+  uint64_t start_frame;        /* cắt đầu (frame của bản thu) */
+  uint64_t end_frame;          /* cắt đuôi; 0 = hết bài */
+  /* Chuỗi giọng — như khi hát */
+  tc_fx_preset fx;
+  int32_t fx_enabled; /* 0 = "Khô" */
+  float fx_wet;       /* "Vang" 0..1 (TC_NODE_FX / TC_PARAM_MIX) */
+  float tempo_bpm;    /* delay theo nhịp; ≤ 0 = 100 */
+  int32_t correction_enabled;
+  int32_t correction_preset; /* tc_correction_preset */
+  int32_t key_root;          /* key ĐANG NGHE lúc hát (đã cộng tone đổi) */
+  int32_t key_scale;         /* tc_scale */
+  float tuning_cents;
+  /* Key theo thời gian bản thu (start_ms tính từ đầu bản thu, đã cộng tone đổi); NULL / 0 = dùng
+   * key_root / key_scale. Mảng chỉ cần sống tới khi tc_renderer_start trả về. */
+  const tc_key_segment* key_segments;
+  uint32_t key_segment_count;
+  int32_t gate_enabled;
+  float gate_threshold_db;
+  /* Trộn */
+  float voice_gain; /* 0..4 */
+  float beat_gain;  /* 0..4 */
+  /* Âm lượng file xuất */
+  int32_t normalize;   /* 1 = chuẩn hoá về target_lufs */
+  float target_lufs;   /* mặc định −14 */
+  float true_peak_db;  /* trần đỉnh thật, mặc định −1 */
+  int32_t format;      /* tc_render_format */
+  int32_t aac_bitrate; /* bit/s, mặc định 192000 */
+} tc_render_config;
+
+typedef struct tc_render_status {
+  uint32_t struct_size; /* = sizeof(tc_render_status) */
+  int32_t state;        /* tc_analysis_state (cùng các trạng thái) */
+  float progress;       /* 0..1 */
+  int32_t result;       /* tc_result của lần chạy gần nhất */
+  uint32_t sample_rate;
+  uint64_t frames;    /* số frame file xuất */
+  float mix_lufs;     /* độ to bản trộn trước chuẩn hoá (NaN = im lặng) */
+  float output_lufs;  /* độ to file xuất (NaN = im lặng) */
+  float true_peak_db; /* đỉnh thật file xuất (dBTP, trước bộ nén AAC) */
+  float gain_db;      /* gain chuẩn hoá đã áp */
+} tc_render_status;
+
+typedef struct tc_renderer tc_renderer;
+
+/* ---- Render lại bản thu (từ v0.8) ----
+ * Độc lập với tc_engine (luồng nền riêng, kéo trạng thái như tc_exporter). Giọng khô (đã căn như
+ * tc_load_take) → cổng → chỉnh giọng → FX → trộn với beat → chuẩn hoá độ to (BS.1770) → limiter
+ * đỉnh thật → file. Chuỗi giọng chạy trước điểm cắt đầu 2 s để vang / dò cao độ liền mạch; fade
+ * 10 ms ở hai đầu. Bài 4 phút: vài giây. */
+TC_EXPORT void tc_render_config_init(tc_render_config* config);
+TC_EXPORT tc_result tc_renderer_create(tc_renderer** out_renderer);
+/* Đang chạy → TC_ERR_INVALID_STATE. Lỗi đọc / ghi file báo qua trạng thái TC_ANALYSIS_FAILED.
+ * TC_RENDER_M4A trên nền tảng không có bộ nén → TC_ERR_NOT_SUPPORTED (qua trạng thái). */
+TC_EXPORT tc_result tc_renderer_start(tc_renderer* renderer, const char* beat_path_utf8,
+                                      const char* voice_path_utf8, const char* out_path_utf8,
+                                      const tc_render_config* config);
+TC_EXPORT tc_result tc_renderer_get_status(tc_renderer* renderer, tc_render_status* out_status);
+/* Yêu cầu dừng (không chờ); file dở bị xoá. */
+TC_EXPORT tc_result tc_renderer_cancel(tc_renderer* renderer);
+/* Huỷ việc đang chạy và chờ luồng nền dừng. Cho phép renderer == NULL. */
+TC_EXPORT void tc_renderer_destroy(tc_renderer* renderer);
+
 /* ---- Đo lường ---- */
 TC_EXPORT tc_result tc_get_metrics(tc_engine* engine, tc_metrics* out_metrics);
 

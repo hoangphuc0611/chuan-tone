@@ -1103,6 +1103,121 @@ class ToneCoreBindings {
         )
       >();
 
+  /// ---- Render lại bản thu (từ v0.8) ----
+  /// Độc lập với tc_engine (luồng nền riêng, kéo trạng thái như tc_exporter). Giọng khô (đã căn như
+  /// tc_load_take) → cổng → chỉnh giọng → FX → trộn với beat → chuẩn hoá độ to (BS.1770) → limiter
+  /// đỉnh thật → file. Chuỗi giọng chạy trước điểm cắt đầu 2 s để vang / dò cao độ liền mạch; fade
+  /// 10 ms ở hai đầu. Bài 4 phút: vài giây.
+  void tc_render_config_init(ffi.Pointer<tc_render_config> config) {
+    return _tc_render_config_init(config);
+  }
+
+  late final _tc_render_config_initPtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Void Function(ffi.Pointer<tc_render_config>)>
+      >('tc_render_config_init');
+  late final _tc_render_config_init = _tc_render_config_initPtr
+      .asFunction<void Function(ffi.Pointer<tc_render_config>)>();
+
+  int tc_renderer_create(ffi.Pointer<ffi.Pointer<tc_renderer>> out_renderer) {
+    return _tc_renderer_create(out_renderer);
+  }
+
+  late final _tc_renderer_createPtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(ffi.Pointer<ffi.Pointer<tc_renderer>>)
+        >
+      >('tc_renderer_create');
+  late final _tc_renderer_create = _tc_renderer_createPtr
+      .asFunction<int Function(ffi.Pointer<ffi.Pointer<tc_renderer>>)>();
+
+  /// Đang chạy → TC_ERR_INVALID_STATE. Lỗi đọc / ghi file báo qua trạng thái TC_ANALYSIS_FAILED.
+  /// TC_RENDER_M4A trên nền tảng không có bộ nén → TC_ERR_NOT_SUPPORTED (qua trạng thái).
+  int tc_renderer_start(
+    ffi.Pointer<tc_renderer> renderer,
+    ffi.Pointer<ffi.Char> beat_path_utf8,
+    ffi.Pointer<ffi.Char> voice_path_utf8,
+    ffi.Pointer<ffi.Char> out_path_utf8,
+    ffi.Pointer<tc_render_config> config,
+  ) {
+    return _tc_renderer_start(
+      renderer,
+      beat_path_utf8,
+      voice_path_utf8,
+      out_path_utf8,
+      config,
+    );
+  }
+
+  late final _tc_renderer_startPtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(
+            ffi.Pointer<tc_renderer>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<tc_render_config>,
+          )
+        >
+      >('tc_renderer_start');
+  late final _tc_renderer_start = _tc_renderer_startPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<tc_renderer>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<tc_render_config>,
+        )
+      >();
+
+  int tc_renderer_get_status(
+    ffi.Pointer<tc_renderer> renderer,
+    ffi.Pointer<tc_render_status> out_status,
+  ) {
+    return _tc_renderer_get_status(renderer, out_status);
+  }
+
+  late final _tc_renderer_get_statusPtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(
+            ffi.Pointer<tc_renderer>,
+            ffi.Pointer<tc_render_status>,
+          )
+        >
+      >('tc_renderer_get_status');
+  late final _tc_renderer_get_status = _tc_renderer_get_statusPtr
+      .asFunction<
+        int Function(ffi.Pointer<tc_renderer>, ffi.Pointer<tc_render_status>)
+      >();
+
+  /// Yêu cầu dừng (không chờ); file dở bị xoá.
+  int tc_renderer_cancel(ffi.Pointer<tc_renderer> renderer) {
+    return _tc_renderer_cancel(renderer);
+  }
+
+  late final _tc_renderer_cancelPtr =
+      _lookup<ffi.NativeFunction<tc_result Function(ffi.Pointer<tc_renderer>)>>(
+        'tc_renderer_cancel',
+      );
+  late final _tc_renderer_cancel = _tc_renderer_cancelPtr
+      .asFunction<int Function(ffi.Pointer<tc_renderer>)>();
+
+  /// Huỷ việc đang chạy và chờ luồng nền dừng. Cho phép renderer == NULL.
+  void tc_renderer_destroy(ffi.Pointer<tc_renderer> renderer) {
+    return _tc_renderer_destroy(renderer);
+  }
+
+  late final _tc_renderer_destroyPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<tc_renderer>)>>(
+        'tc_renderer_destroy',
+      );
+  late final _tc_renderer_destroy = _tc_renderer_destroyPtr
+      .asFunction<void Function(ffi.Pointer<tc_renderer>)>();
+
   /// ---- Đo lường ----
   int tc_get_metrics(
     ffi.Pointer<tc_engine> engine,
@@ -1134,6 +1249,8 @@ class _SymbolAddresses {
   get tc_analyzer_destroy => _library._tc_analyzer_destroyPtr;
   ffi.Pointer<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<tc_exporter>)>>
   get tc_exporter_destroy => _library._tc_exporter_destroyPtr;
+  ffi.Pointer<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<tc_renderer>)>>
+  get tc_renderer_destroy => _library._tc_renderer_destroyPtr;
 }
 
 /// Mã kết quả. Dùng int32_t (không dùng kiểu enum) trong chữ ký hàm vì kích thước enum
@@ -2036,6 +2153,153 @@ final class tc_fx_preset extends ffi.Struct {
   @ffi.Float()
   external double reverb_mix;
 }
+
+/// Render lại bản thu (tc_renderer_*).
+sealed class tc_render_format {
+  /// WAV PCM 16-bit stereo
+  static const TC_RENDER_WAV16 = 0;
+
+  /// WAV float 32-bit stereo
+  static const TC_RENDER_WAV_FLOAT = 1;
+
+  /// AAC trong M4A, bằng bộ nén của hệ điều hành (iOS / macOS, Android)
+  static const TC_RENDER_M4A = 2;
+}
+
+final class tc_render_config extends ffi.Struct {
+  /// = sizeof(tc_render_config); tc_render_config_init tự điền
+  @ffi.Uint32()
+  external int struct_size;
+
+  /// như tc_take_config
+  @ffi.Int64()
+  external int voice_offset_frames;
+
+  /// cắt đầu (frame của bản thu)
+  @ffi.Uint64()
+  external int start_frame;
+
+  /// cắt đuôi; 0 = hết bài
+  @ffi.Uint64()
+  external int end_frame;
+
+  /// Chuỗi giọng — như khi hát
+  external tc_fx_preset fx;
+
+  /// 0 = "Khô"
+  @ffi.Int32()
+  external int fx_enabled;
+
+  /// "Vang" 0..1 (TC_NODE_FX / TC_PARAM_MIX)
+  @ffi.Float()
+  external double fx_wet;
+
+  /// delay theo nhịp; ≤ 0 = 100
+  @ffi.Float()
+  external double tempo_bpm;
+
+  @ffi.Int32()
+  external int correction_enabled;
+
+  /// tc_correction_preset
+  @ffi.Int32()
+  external int correction_preset;
+
+  /// key ĐANG NGHE lúc hát (đã cộng tone đổi)
+  @ffi.Int32()
+  external int key_root;
+
+  /// tc_scale
+  @ffi.Int32()
+  external int key_scale;
+
+  @ffi.Float()
+  external double tuning_cents;
+
+  /// Key theo thời gian bản thu (start_ms tính từ đầu bản thu, đã cộng tone đổi); NULL / 0 = dùng
+  /// key_root / key_scale. Mảng chỉ cần sống tới khi tc_renderer_start trả về.
+  external ffi.Pointer<tc_key_segment> key_segments;
+
+  @ffi.Uint32()
+  external int key_segment_count;
+
+  @ffi.Int32()
+  external int gate_enabled;
+
+  @ffi.Float()
+  external double gate_threshold_db;
+
+  /// 0..4
+  @ffi.Float()
+  external double voice_gain;
+
+  /// 0..4
+  @ffi.Float()
+  external double beat_gain;
+
+  /// 1 = chuẩn hoá về target_lufs
+  @ffi.Int32()
+  external int normalize;
+
+  /// mặc định −14
+  @ffi.Float()
+  external double target_lufs;
+
+  /// trần đỉnh thật, mặc định −1
+  @ffi.Float()
+  external double true_peak_db;
+
+  /// tc_render_format
+  @ffi.Int32()
+  external int format;
+
+  /// bit/s, mặc định 192000
+  @ffi.Int32()
+  external int aac_bitrate;
+}
+
+final class tc_render_status extends ffi.Struct {
+  /// = sizeof(tc_render_status)
+  @ffi.Uint32()
+  external int struct_size;
+
+  /// tc_analysis_state (cùng các trạng thái)
+  @ffi.Int32()
+  external int state;
+
+  /// 0..1
+  @ffi.Float()
+  external double progress;
+
+  /// tc_result của lần chạy gần nhất
+  @ffi.Int32()
+  external int result;
+
+  @ffi.Uint32()
+  external int sample_rate;
+
+  /// số frame file xuất
+  @ffi.Uint64()
+  external int frames;
+
+  /// độ to bản trộn trước chuẩn hoá (NaN = im lặng)
+  @ffi.Float()
+  external double mix_lufs;
+
+  /// độ to file xuất (NaN = im lặng)
+  @ffi.Float()
+  external double output_lufs;
+
+  /// đỉnh thật file xuất (dBTP, trước bộ nén AAC)
+  @ffi.Float()
+  external double true_peak_db;
+
+  /// gain chuẩn hoá đã áp
+  @ffi.Float()
+  external double gain_db;
+}
+
+final class tc_renderer extends ffi.Opaque {}
 
 const int TC_API_VERSION_MAJOR = 0;
 

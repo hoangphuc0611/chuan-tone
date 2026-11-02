@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstddef>
 #include <optional>
+#include <vector>
 
 #include "decode/decoder.h"
 #include "dsp/biquad.h"
@@ -35,5 +37,28 @@ BiquadCoeffs kWeightingHighpass(double sampleRate);
 
 // Chạy trên luồng nền. `audio` không bị thay đổi.
 LoudnessResult measureLoudness(const DecodedAudio& audio);
+
+// Đo độ to tích hợp theo từng khối float (cùng thuật toán như measureLoudness) — dùng khi render
+// bản thu (M7) để không phải giữ cả bài trong RAM. Nhớ 1 số / 100 ms (bài 15 phút ≈ 9000 số).
+class LoudnessMeter {
+ public:
+  // `channels` kênh interleaved, đo tối đa 2 kênh đầu; mono tính như mono kép (như trên).
+  LoudnessMeter(int channels, double sampleRate);
+  void process(const float* interleaved, std::size_t frames);
+  // Độ to tích hợp (rỗng nếu im lặng); đỉnh mẫu (dBFS).
+  LoudnessResult result() const;
+
+ private:
+  std::size_t channels_;
+  std::size_t measured_;
+  double weight_;
+  std::vector<Biquad> shelf_;
+  std::vector<Biquad> highpass_;
+  std::size_t stepLen_;
+  std::vector<double> steps_;
+  double acc_ = 0.0;
+  std::size_t inStep_ = 0;
+  float peak_ = 0.0f;
+};
 
 }  // namespace tonecore

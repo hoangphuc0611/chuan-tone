@@ -26,12 +26,17 @@ void PeakLimiter::reset() noexcept {
   count_ = 0;
 }
 
-void PeakLimiter::process(const float* in, float* out, uint32_t frames) noexcept {
+void PeakLimiter::process(const float* in, float* out, uint32_t frames,
+                          const float* peaks) noexcept {
   const auto ch = static_cast<std::size_t>(channels_);
   const auto len = static_cast<uint32_t>(lookahead_ + 1);
   for (uint32_t f = 0; f < frames; ++f) {
     float peak = 0.0f;
-    for (std::size_t c = 0; c < ch; ++c) peak = std::max(peak, std::abs(in[f * ch + c]));
+    if (peaks != nullptr) {
+      peak = peaks[f];
+    } else {
+      for (std::size_t c = 0; c < ch; ++c) peak = std::max(peak, std::abs(in[f * ch + c]));
+    }
     const uint32_t slot = head_;
     // Lấy mẫu cũ nhất (chậm L) ra trước khi ghi đè.
     const uint32_t oldest = head_ + 1 == len ? 0 : head_ + 1;
