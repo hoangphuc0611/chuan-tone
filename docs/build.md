@@ -54,10 +54,13 @@ cd app
 fvm flutter run            # chọn emulator Android hoặc simulator iOS
 fvm flutter build apk --debug
 fvm flutter build ios --simulator --debug
+# Test app: bộ điều khiển phiên hát và Màn hát chạy với engine thật (backend NULL); thiếu
+# TONECORE_LIB thì các test đó bị bỏ qua (CI bắt buộc có).
+TONECORE_LIB=../engine/build/host/libtonecore.dylib fvm flutter test
 ```
 
 ## CI
 GitHub Actions trong `.github/workflows/`:
 - `engine.yml`: test engine trên Linux (thường, ASan, UBSan, TSan) và macOS; benchmark; kiểm tra clang-format.
-- `flutter.yml`: test binding Dart với thư viện host, `flutter analyze`, build APK, build iOS simulator.
+- `flutter.yml`: test binding Dart và test app với thư viện host, `flutter analyze`, build APK, build iOS simulator.
 - Server (`server.yml`) sẽ thêm ở M6 khi có mã server.

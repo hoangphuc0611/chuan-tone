@@ -34,7 +34,7 @@ jobs:
         run: |
           flutter pub get
           flutter analyze
-          flutter test
+          TONECORE_LIB=$GITHUB_WORKSPACE/engine/build/host/libtonecore.so flutter test
 
   android:
     name: build APK

@@ -1,25 +1,16 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:chuantone_media/chuantone_media.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:tonecore_flutter/tonecore_flutter.dart';
 
-import '../data/analysis_cache.dart';
-import '../data/app_settings.dart';
 import '../data/song_import.dart';
 import '../data/song_library.dart';
-import '../data/song_prefs.dart';
 import '../data/song_ref.dart';
-import '../data/stem_store.dart';
-import '../engine/audio_service.dart';
-import '../engine/genre_rules.dart';
+import '../data/take_store.dart';
 import '../engine/labels.dart';
 import '../engine/playback_watch.dart';
-import '../engine/separation_client.dart';
-import '../engine/song_jobs.dart';
-import '../engine/takes.dart';
+import '../engine/sing_controller.dart';
 import '../engine/transpose_timing.dart';
 import '../widgets/fx_panel.dart';
 import '../widgets/gain_slider.dart';
@@ -28,612 +19,123 @@ import '../widgets/separation_panel.dart';
 import '../widgets/transpose_control.dart';
 import 'review_page.dart';
 
-/// Màn thử M1–M6: phát beat, đổi tone beat (nhớ theo bài), tự dò tone / BPM khi nạp bài, tách giọng
-/// ca sĩ qua máy chủ (nhớ theo bài, "Giữ giọng ca sĩ gốc"), nghe lại giọng, hiệu ứng giọng theo thể
-/// loại (gợi ý + nhớ theo bài), tự chỉnh giọng theo tone của bài (tự cộng số nửa cung đổi tone),
-/// đồng hồ cao độ, số đo.
+/// Phòng thử (M1–M7; M8: vào Cài đặt → Nâng cao): mọi nút và số đo của một phiên hát trên một
+/// trang dài — nhạc, đổi tone (nhớ theo bài), tách giọng ca sĩ, nghe lại giọng, thể loại, chỉnh
+/// giọng theo tone của bài, đồng hồ cao độ, thu âm + camera, thông số kỹ thuật. Logic nằm ở
+/// [SingController] (dùng chung với Màn hát).
 class TestRoomPage extends StatefulWidget {
-  const TestRoomPage({super.key, this.initialSong});
+  const TestRoomPage({super.key, this.initialSong, this.controller});
 
-  /// Bài mở sẵn (từ màn Phân tích bài → "Hát").
+  /// Bài mở sẵn.
   final SongRef? initialSong;
+
+  /// Bộ điều khiển phiên hát (test truyền vào; null = tạo mới, huỷ khi rời màn).
+  final SingController? controller;
 
   @override
   State<TestRoomPage> createState() => _TestRoomPageState();
 }
 
 class _TestRoomPageState extends State<TestRoomPage> {
-  final _service = AudioService.instance;
-  Timer? _ticker;
-  Timer? _pitchTicker;
-  PitchState? _pitch;
-  StreamSubscription<ToneCoreEvent>? _sub;
-  bool _starting = true;
-  bool _loading = false;
-  String? _beatName;
-  String? _message;
-  PlaybackState? _playback;
-  EngineMetrics? _metrics;
-  double _beatGain = 0.8;
-  double _monitorGain = 1.0;
-  bool _monitorOn = false;
+  late final SingController _c = widget.controller ?? SingController();
   double? _dragPosition;
-  SongAnalyzer? _analyzer;
-  AnalysisCache? _cache;
-  bool _analyzing = false;
-  AnalysisStatus? _analysisStatus;
-  String? _analysisError;
-  MusicKey? _currentKey;
-  final _prefs = SongPrefs();
-  // Số đo trên máy thật (M4 B7): bấm tone → nghe, render cả bài, thời gian phân tích, RAM.
-  final _clock = Stopwatch()..start();
-  final _timing = TransposeTiming();
-  final _watch = PlaybackWatch();
-  Duration? _analysisTime;
-  int _rssMb = 0;
-  int _maxRssMb = 0;
-  String? _beatFile; // tên + kích thước của beat đang nạp: khoá nhớ tone / preset theo bài
-  int? _beatSize;
-  // Preset đang chọn có từ đâu (null: giữ preset chọn lần trước).
-  GenreSource? _genreSource;
-  // Tách giọng ca sĩ (M6).
-  final _settings = AppSettings();
-  final _stemStore = StemStore();
-  final _library = SongLibrary();
-  String? _server;
-  String? _beatPath;
-  List<String>? _vocals; // các đoạn giọng của bài đang nạp (null = chưa tách)
-  SeparationProgress? _sepProgress;
-  SeparationCancel? _sepCancel;
-  String? _sepError;
-  SeparationResult? _sepResult;
-  // Thu âm (M7).
-  final _session = TakeSession();
-  bool _recording = false;
-  int? _countdown; // đếm ngược 3…1 trước khi thu khi beat đang dừng
-  RecordStatus? _recStatus;
-  bool _camera = false; // quay video camera trước cùng lúc (iOS)
-  bool _cameraRecording = false;
+  bool _pickError = false; // file vừa chọn không thêm được vào thư viện
 
   @override
   void initState() {
     super.initState();
-    _start();
-  }
-
-  Future<void> _start() async {
-    if (!_service.isRunning) {
-      // Mở app: dùng lại preset chọn gần nhất (kèm mức chỉnh giọng của nó).
-      final last = await _prefs.lastGenre();
-      if (last != null) _service.setGenre(last);
-    }
-    _server = await _settings.separationServer();
-    final ok = await _service.ensureStarted();
-    if (!mounted) return;
-    setState(() => _starting = false);
-    if (!ok) return;
-    final e = _service.engine!;
-    e.beatGain = _beatGain;
-    _monitorOn = e.monitorEnabled;
-    _monitorGain = e.monitorGain;
-    _sub = _service.events.listen(_onEvent);
-    final initial = widget.initialSong;
-    if (initial != null) unawaited(_openSong(initial));
-    _ticker = Timer.periodic(
-      const Duration(milliseconds: 250),
-      (_) => _refresh(),
-    );
-    // Đồng hồ cao độ cần mượt hơn: ~30 lần/giây.
-    _pitchTicker = Timer.periodic(const Duration(milliseconds: 33), (_) {
-      final eng = _service.engine;
-      if (eng == null || !mounted) return;
-      setState(() {
-        _pitch = eng.pitchState;
-        final now = _clock.elapsed;
-        if (_timing.pending || !_watch.done(now)) {
-          final pb = eng.playback;
-          _watch.observe(at: now, position: pb.position, playing: pb.playing);
-          if (_timing.observe(pb.audibleTranspose, now)) _playback = pb;
-        }
-      });
-    });
-  }
-
-  void _refresh() {
-    final e = _service.engine;
-    if (e == null || !mounted) return;
-    if (_recording) {
-      final r = e.recordStatus;
-      // Đủ thời lượng tối đa → engine tự dừng thu.
-      if (r.state == RecordState.done || r.state == RecordState.failed) {
-        unawaited(_stopRecording());
-      }
-    }
-    setState(() {
-      if (_recording) _recStatus = e.recordStatus;
-      _playback = e.playback;
-      _metrics = e.metrics;
-      _currentKey = _service.currentKey;
-      _rssMb = ProcessInfo.currentRss >> 20;
-      _maxRssMb = ProcessInfo.maxRss >> 20;
-    });
-  }
-
-  void _onEvent(ToneCoreEvent ev) {
-    if (!mounted) return;
-    switch (ev.type) {
-      case ToneCoreEventType.keyChanged:
-        setState(() => _currentKey = ev.key);
-      case ToneCoreEventType.transposeReady:
-        setState(() => _timing.rendered(ev.code, ev.value));
-      case ToneCoreEventType.monitorBlocked:
-        _show(
-          'Tai nghe Bluetooth bị trễ nhiều nên đã tắt nghe lại giọng. Hãy dùng tai nghe có dây.',
-        );
-      case ToneCoreEventType.interrupted:
-        if (ev.code == 1) _show('Âm thanh bị gián đoạn (cuộc gọi…)');
-      case ToneCoreEventType.streamRestarted:
-        if (!ev.ok) {
-          _show(
-            'Thiết bị âm thanh lỗi: ${ToneCoreException.resultName(ev.code)}',
-          );
-        }
-      default:
-        break;
-    }
-  }
-
-  void _show(String text) => setState(() => _message = text);
-
-  void _setTranspose(int semitones) {
-    final e = _service.engine;
-    if (e == null || !_service.setTranspose(semitones)) return;
-    _timing.requested(semitones, _clock.elapsed);
-    _watch.restart(_clock.elapsed);
-    setState(() => _playback = e.playback);
-    final name = _beatFile;
-    final size = _beatSize;
-    if (name != null && size != null) {
-      unawaited(
-        _prefs.setTranspose(name: name, size: size, semitones: semitones),
-      );
-    }
-  }
-
-  SongRef? get _currentSong {
-    final path = _beatPath;
-    final name = _beatFile;
-    final size = _beatSize;
-    if (path == null || name == null || size == null) return null;
-    return SongRef(path: path, name: name, size: size);
-  }
-
-  /// Thu âm: beat đang dừng thì đếm ngược 3 giây rồi phát từ vị trí hiện tại.
-  Future<void> _startRecording() async {
-    final e = _service.engine;
-    if (e == null || _currentSong == null || _recording || _countdown != null) {
-      return;
-    }
-    final wasPlaying = e.playback.playing;
-    if (!wasPlaying) {
-      for (var n = 3; n > 0; n--) {
-        setState(() => _countdown = n);
-        await Future<void>.delayed(const Duration(seconds: 1));
-        if (!mounted) return;
-      }
-      setState(() => _countdown = null);
-    }
-    try {
-      final dir = await _session.start(
-        e,
-        TakeSnapshot.of(
-          _service,
-          e,
-          voiceGain: _monitorGain,
-          beatGain: _beatGain,
-        ),
-      );
-      if (_camera) {
-        try {
-          await ChuanToneMedia.cameraRecordStart('${dir.path}/camera.mp4');
-          _cameraRecording = true;
-        } on PlatformException catch (err) {
-          _show(
-            'Không quay được video: ${err.message ?? err.code}. Vẫn thu âm.',
-          );
-        }
-      }
-    } on ToneCoreException catch (err) {
-      _show('Không thu được (${err.codeName}).');
-      return;
-    }
-    if (!wasPlaying) e.play();
-    setState(() {
-      _recording = true;
-      _recStatus = e.recordStatus;
-    });
-  }
-
-  Future<void> _toggleCamera(bool on) async {
-    if (!on) {
-      setState(() => _camera = false);
-      await ChuanToneMedia.cameraStop();
-      return;
-    }
-    try {
-      final ok = await ChuanToneMedia.cameraStart();
-      if (ok == true && mounted) setState(() => _camera = true);
-    } on PlatformException catch (err) {
-      _show('Không mở được camera: ${err.message ?? err.code}');
-    }
-  }
-
-  /// Dừng thu → lưu bản thu → màn Nghe lại & chỉnh; quay về thì nạp lại bài.
-  Future<void> _stopRecording() async {
-    final e = _service.engine;
-    final song = _currentSong;
-    if (e == null || song == null || !_recording) return;
-    setState(() => _recording = false);
-    e.pause();
-    CameraClip? clip;
-    if (_cameraRecording) {
-      _cameraRecording = false;
-      try {
-        clip = await ChuanToneMedia.cameraRecordStop();
-      } on PlatformException catch (err) {
-        _show('Video camera lỗi: ${err.message ?? err.code}');
-      }
-    }
-    try {
-      final take = await _session.stop(e, song, camera: clip);
-      if (!mounted) return;
-      await Navigator.of(
-        context,
-      ).push(MaterialPageRoute<void>(builder: (_) => ReviewPage(take: take)));
-      if (!mounted) return;
-      e.beatGain = _beatGain;
-      e.monitorGain = _monitorGain;
-      await _openSong(song);
-    } on ToneCoreException catch (err) {
-      _show('Không lưu được bản thu (${err.codeName}).');
-    }
-  }
-
-  Future<void> _pickBeat() async {
-    if (_service.engine == null) return;
-    // Bài chọn ở đây cũng vào thư viện (hiện ở "Bài hát của tôi").
-    final LibrarySong? song;
-    try {
-      song = await pickSongIntoLibrary(_library);
-    } catch (_) {
-      _show('Không thêm được file này. Hãy thử MP3, M4A hoặc WAV.');
-      return;
-    }
-    if (song == null) return; // người dùng huỷ
-    await _openSong(song.ref);
-  }
-
-  Future<void> _openSong(SongRef song) async {
-    final e = _service.engine;
-    if (e == null) return;
-    setState(() {
-      _loading = true;
-      _message = null;
-    });
-    try {
-      final vocals = await _loadSong(e, song);
-      _beatName = song.name;
-      _beatFile = song.name;
-      _beatSize = song.size;
-      _beatPath = song.path;
-      _vocals = vocals;
-      _sepError = null;
-      _sepResult = vocals == null
-          ? null
-          : await _stemStore.resultFor(name: song.name, size: song.size);
-      _service.setVocalGain(0); // bài mới: karaoke
-      // Nạp beat mới → engine về tone gốc; đặt lại tone người dùng đã chọn cho bài này.
-      final saved = await _prefs.transposeFor(name: song.name, size: song.size);
-      _timing.reset();
-      _analysisTime = null;
-      if (saved != 0 && _service.setTranspose(saved)) {
-        _timing.requested(saved, _clock.elapsed);
-      }
-      // Preset: đã chọn cho bài → theo tên file; theo BPM thì chờ phân tích xong.
-      _applySuggestion(
-        suggestGenre(
-          saved: await _prefs.genreFor(name: song.name, size: song.size),
-          fileName: song.name,
-        ),
-      );
-      _playback = e.playback;
-      unawaited(_library.touch(song.name, song.size));
-      unawaited(_analyze(song, vocals));
-    } on ToneCoreException catch (err) {
-      _show('Không mở được file (${err.codeName}). Hãy thử MP3, M4A hoặc WAV.');
-    } on TimeoutException {
-      _show('Nạp bài quá lâu.');
-    }
-    if (mounted) setState(() => _loading = false);
-  }
-
-  /// Dò tone / chuyển tone / tuning / BPM của beat vừa nạp (lấy từ bộ nhớ nếu đã phân tích; đã tách
-  /// giọng thì phân tích phần nhạc), rồi cho tự chỉnh giọng theo bài — trừ khi người dùng đã sửa
-  /// tone tay cho bài ở màn Phân tích bài.
-  Future<void> _analyze(SongRef song, List<String>? vocals) async {
-    _analyzer?.dispose(); // beat trước còn đang phân tích → dừng
-    _analyzer = null;
-    _service.applySongAnalysis(null);
-    setState(() {
-      _analyzing = true;
-      _analysisStatus = null;
-      _analysisError = null;
-    });
-    final cache = _cache ??= AnalysisCache(engineVersion: ToneCore.version);
-    SongAnalysis? result;
-    try {
-      final (r, took) = await analyzeSong(
-        song,
-        vocals: vocals,
-        cache: cache,
-        onAnalyzer: (a) => _analyzer = a,
-        onProgress: (s) {
-          if (mounted) setState(() => _analysisStatus = s);
-        },
-      );
-      result = r;
-      if (took != null) _analysisTime = took;
-    } on StateError {
-      return; // đã chọn beat khác: analyzer này bị dispose giữa chừng
-    } on ToneCoreException catch (err) {
-      if (err.code != TcResult.cancelled) {
-        _analysisError = 'Không phân tích được bài (${err.codeName}).';
-      }
-    } on TimeoutException {
-      _analysisError = 'Phân tích bài quá lâu.';
-    } finally {
-      _analyzer = null;
-    }
-    if (!mounted || _beatFile != song.name || _beatSize != song.size) return;
-    if (result != null) {
-      _service.applySongAnalysis(result);
-      final manual = await _prefs.keyFor(name: song.name, size: song.size);
-      if (manual != null) _service.setBaseKey(manual);
-      // Chưa có preset nhớ / theo tên, người dùng chưa bấm chip → gợi ý theo nhịp.
-      if (_genreSource == null) {
-        _applySuggestion(suggestGenre(fileName: song.name, bpm: result.bpm));
-      }
-    }
-    if (!mounted) return;
-    setState(() {
-      _analyzing = false;
-      _currentKey = _service.currentKey;
-    });
-  }
-
-  /// Nạp bài; có stem giọng đã tách thì nạp kèm (hỏng thì xoá stem, nạp bài thường). Trả các đoạn
-  /// giọng đã dùng (null = không có).
-  Future<List<String>?> _loadSong(ToneCoreEngine e, SongRef song) async {
-    final vocals = await _stemStore.vocalsFor(name: song.name, size: song.size);
-    if (vocals != null) {
-      try {
-        await e.loadBeatWithVocalsAndWait(song.path, vocals);
-        return vocals;
-      } on ToneCoreException {
-        await _stemStore.delete(name: song.name, size: song.size);
-      }
-    }
-    await e.loadBeatAndWait(song.path);
-    return null;
-  }
-
-  SongRef? get _song {
-    final path = _beatPath;
-    final name = _beatFile;
-    final size = _beatSize;
-    return path == null || name == null || size == null
-        ? null
-        : SongRef(path: path, name: name, size: size);
-  }
-
-  Future<void> _separate() async {
-    final e = _service.engine;
-    final song = _song;
-    final server = _server;
-    if (e == null || song == null || server == null) return;
-    if (!await _settings.separationConsent()) {
-      if (!mounted) return;
-      final remember = await askSeparationConsent(context);
-      if (remember == null) return; // không đồng ý → không gửi
-      if (remember) await _settings.setSeparationConsent(true);
-    }
-    final cancel = _sepCancel = SeparationCancel();
-    setState(() {
-      _sepError = null;
-      _sepResult = null;
-      _sepProgress = SeparationProgress.start;
-    });
-    try {
-      final r = await separateSong(
-        song,
-        server: server,
-        settings: _settings,
-        store: _stemStore,
-        cancel: cancel,
-        onProgress: (p) {
-          if (mounted) setState(() => _sepProgress = p);
-        },
-      );
-      if (!mounted || _beatFile != song.name || _beatSize != song.size) {
-        return; // đã đổi bài
-      }
-      final vocals = [for (final f in r.vocals) f.path];
-      final transpose = _service.transpose;
-      await e.loadBeatWithVocalsAndWait(song.path, vocals);
-      _vocals = vocals;
-      _sepResult = r;
-      _timing.reset();
-      if (transpose != 0 && _service.setTranspose(transpose)) {
-        _timing.requested(transpose, _clock.elapsed);
-      }
-      unawaited(_analyze(song, vocals));
-    } on SeparationException catch (err) {
-      _sepError = err.message;
-    } on ToneCoreException catch (err) {
-      _sepError = 'Không nạp được giọng đã tách (${err.codeName}).';
-      await _stemStore.delete(name: song.name, size: song.size);
-    } finally {
-      if (mounted) {
-        setState(() {
-          _sepProgress = null;
-          _sepCancel = null;
-          _playback = e.playback;
-        });
-      }
-    }
-  }
-
-  Future<void> _deleteStems() async {
-    final e = _service.engine;
-    final song = _song;
-    if (e == null || song == null) return;
-    await _stemStore.delete(name: song.name, size: song.size);
-    final transpose = _service.transpose;
-    try {
-      await e.loadBeatAndWait(song.path);
-    } on ToneCoreException catch (err) {
-      _show('Không nạp lại được bài (${err.codeName}).');
-      return;
-    }
-    _vocals = null;
-    _sepResult = null;
-    _timing.reset();
-    if (transpose != 0 && _service.setTranspose(transpose)) {
-      _timing.requested(transpose, _clock.elapsed);
-    }
-    if (mounted) setState(() => _playback = e.playback);
-    unawaited(_analyze(song, null));
-  }
-
-  Future<String> _saveServer(String input) async {
-    if (input.trim().isEmpty) {
-      await _settings.setSeparationServer(null);
-      if (mounted) setState(() => _server = null);
-      return 'Đã xoá địa chỉ.';
-    }
-    final url = normalizeServerUrl(input);
-    if (url == null) return 'Địa chỉ không hợp lệ.';
-    final c = SeparationClient(
-      baseUrl: url,
-      deviceId: await _settings.deviceId(),
-      retries: 1,
-    );
-    try {
-      final info = await c.health();
-      await _settings.setSeparationServer(url);
-      if (mounted) setState(() => _server = url);
-      return 'Đã kết nối (bộ tách ${info.separator}).';
-    } on SeparationException catch (err) {
-      return err.message;
-    } finally {
-      c.close();
-    }
-  }
-
-  /// null → giữ preset đang dùng (người dùng chọn lần trước). Cùng preset đang dùng thì không áp
-  /// lại: mức chỉnh giọng người dùng đã bấm vẫn giữ.
-  void _applySuggestion(GenreSuggestion? s) {
-    _genreSource = s?.source;
-    if (s != null && s.genre != _service.genre) _service.setGenre(s.genre);
-    if (mounted) setState(() {});
-  }
-
-  void _pickGenre(Genre g) {
-    _service.setGenre(g);
-    final name = _beatFile;
-    final size = _beatSize;
-    setState(() => _genreSource = name != null ? GenreSource.saved : null);
-    unawaited(_prefs.setLastGenre(g));
-    if (name != null && size != null) {
-      unawaited(_prefs.setGenre(name: name, size: size, genre: g));
-    }
+    _c.onTake = _review;
+    unawaited(_c.start(initial: widget.initialSong));
   }
 
   @override
   void dispose() {
-    _ticker?.cancel();
-    _pitchTicker?.cancel();
-    _sub?.cancel();
-    _analyzer?.dispose();
-    _sepCancel?.cancel();
-    if (_recording) {
-      try {
-        // Rời màn khi đang thu: vẫn giữ file đã ghi.
-        _service.engine?.stopRecording();
-      } on ToneCoreException {
-        // bỏ qua
-      }
-    }
-    if (_cameraRecording) {
-      unawaited(
-        ChuanToneMedia.cameraRecordStop().then((_) {}, onError: (_) {}),
-      );
-    }
-    if (_camera) unawaited(ChuanToneMedia.cameraStop());
-    _service.engine?.pause();
+    _c.onTake = null;
+    if (widget.controller == null) _c.dispose();
     super.dispose();
+  }
+
+  Future<void> _review(Take take) async {
+    if (!mounted) return;
+    await Navigator.of(context)
+        .push(MaterialPageRoute<void>(builder: (_) => ReviewPage(take: take)));
+  }
+
+  Future<void> _pickBeat() async {
+    if (_c.engine == null) return;
+    // Bài chọn ở đây cũng vào thư viện (hiện ở "Bài hát của tôi").
+    final LibrarySong? song;
+    try {
+      song = await pickSongIntoLibrary(_c.library);
+    } catch (_) {
+      _c.clearMessage();
+      setState(() => _pickError = true);
+      return;
+    }
+    if (song == null) return; // người dùng huỷ
+    setState(() => _pickError = false);
+    await _c.openSong(song.ref);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Phòng thử')),
-      body: _starting
-          ? const Center(child: CircularProgressIndicator())
-          : _service.engine == null
-          ? _ErrorView(message: _service.lastError ?? 'Không mở được âm thanh')
-          : _buildBody(context),
+      body: ListenableBuilder(
+        listenable: _c,
+        builder: (context, _) => _c.starting
+            ? const Center(child: CircularProgressIndicator())
+            : _c.engine == null
+            ? _ErrorView(message: _c.startError ?? 'Không mở được âm thanh')
+            : _buildBody(context),
+      ),
     );
   }
 
   Widget _buildBody(BuildContext context) {
-    final e = _service.engine!;
-    final pb = _playback;
-    final m = _metrics;
+    final c = _c;
+    final pb = c.playback;
+    final m = c.metrics;
     final theme = Theme.of(context);
     final duration = pb?.duration ?? Duration.zero;
     final position = pb?.position ?? Duration.zero;
     final maxMs = duration.inMilliseconds.toDouble();
-    final speakerWarning = _monitorOn && m?.route == AudioRoute.speaker;
+    final speakerWarning = c.monitorOn && m?.route == AudioRoute.speaker;
+    final message = _pickError
+        ? 'Không thêm được file này. Hãy thử MP3, M4A hoặc WAV.'
+        : c.message;
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        if (_message != null)
+        if (message != null)
           Card(
             color: theme.colorScheme.errorContainer,
             child: ListTile(
               leading: const Icon(Icons.info_outline),
-              title: Text(_message!),
+              title: Text(message),
               trailing: IconButton(
                 icon: const Icon(Icons.close),
-                onPressed: () => setState(() => _message = null),
+                onPressed: () {
+                  setState(() => _pickError = false);
+                  c.clearMessage();
+                },
               ),
             ),
           ),
-        // ---- Beat ----
+        // ---- Nhạc ----
         Text('Nhạc beat', style: theme.textTheme.titleLarge),
         const SizedBox(height: 8),
         FilledButton.icon(
-          onPressed: _loading || _recording ? null : _pickBeat,
-          icon: _loading
+          onPressed: c.loading || c.recording ? null : _pickBeat,
+          icon: c.loading
               ? const SizedBox(
                   width: 20,
                   height: 20,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.library_music),
-          label: Text(_beatName ?? 'Chọn file nhạc'),
+          label: Text(c.song?.name ?? 'Chọn file nhạc'),
           style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
         ),
         if (pb case final p? when p.hasBeat) ...[
@@ -645,7 +147,7 @@ class _TestRoomPageState extends State<TestRoomPage> {
             max: maxMs > 0 ? maxMs : 1,
             onChanged: (v) => setState(() => _dragPosition = v),
             onChangeEnd: (v) {
-              e.seek(Duration(milliseconds: v.round()));
+              c.seek(Duration(milliseconds: v.round()));
               _dragPosition = null;
             },
           ),
@@ -660,20 +162,20 @@ class _TestRoomPageState extends State<TestRoomPage> {
           Center(
             child: IconButton.filled(
               iconSize: 48,
-              onPressed: () => p.playing ? e.pause() : e.play(),
+              onPressed: c.playPause,
               icon: Icon(p.playing ? Icons.pause : Icons.play_arrow),
             ),
           ),
           const SizedBox(height: 8),
-          if (Platform.isIOS)
+          if (c.camera.supported)
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Quay video (camera trước)'),
               subtitle: const Text('Xuất video 9:16 có mặt bạn, khớp tiếng'),
-              value: _camera,
-              onChanged: _recording ? null : _toggleCamera,
+              value: c.cameraOn,
+              onChanged: c.recording ? null : c.setCamera,
             ),
-          if (_camera)
+          if (c.cameraOn)
             Center(
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
@@ -688,46 +190,44 @@ class _TestRoomPageState extends State<TestRoomPage> {
             ),
           const SizedBox(height: 8),
           _RecordRow(
-            recording: _recording,
-            countdown: _countdown,
-            elapsed: _recStatus?.duration ?? Duration.zero,
+            recording: c.recording,
+            countdown: c.countdown,
+            elapsed: c.recStatus?.duration ?? Duration.zero,
             bluetooth: m?.route == AudioRoute.bluetooth,
-            enabled: !_loading && _sepProgress == null,
-            onStart: _startRecording,
-            onStop: _stopRecording,
+            enabled: !c.loading && c.sepProgress == null,
+            onStart: c.startRecording,
+            onStop: c.stopRecording,
           ),
           const SizedBox(height: 8),
           TransposeControl(
             value: p.transpose,
             audible: p.audibleTranspose,
             progress: p.transposeProgress,
-            onChanged: _setTranspose,
-            enabled: !_recording,
+            onChanged: c.setTranspose,
+            enabled: !c.recording,
           ),
         ],
         if (pb case final p? when p.hasBeat) ...[
           const SizedBox(height: 8),
           SeparationPanel(
-            hasServer: _server != null,
-            hasStems: _vocals != null,
-            progress: _sepProgress,
-            error: _sepError,
-            lastResult: _sepResult,
-            vocalGain: _service.vocalGain,
-            onSeparate: _separate,
-            onCancel: () => _sepCancel?.cancel(),
-            onDelete: _deleteStems,
-            onVocalGain: (v) => setState(() => _service.setVocalGain(v)),
+            hasServer: c.server != null,
+            hasStems: c.hasStems,
+            progress: c.sepProgress,
+            error: c.sepError,
+            lastResult: c.sepResult,
+            vocalGain: c.service.vocalGain,
+            onSeparate: () =>
+                c.separate(askConsent: () => askSeparationConsent(context)),
+            onCancel: c.cancelSeparation,
+            onDelete: c.deleteStems,
+            onVocalGain: c.setVocalGain,
           ),
           const SizedBox(height: 8),
         ],
         GainSlider(
           label: 'Âm lượng nhạc',
-          value: _beatGain,
-          onChanged: (v) {
-            setState(() => _beatGain = v);
-            e.beatGain = v;
-          },
+          value: c.beatGain,
+          onChanged: c.setBeatGain,
         ),
         const Divider(height: 32),
         // ---- Nghe lại giọng ----
@@ -735,11 +235,8 @@ class _TestRoomPageState extends State<TestRoomPage> {
           contentPadding: EdgeInsets.zero,
           title: Text('Nghe lại giọng', style: theme.textTheme.titleLarge),
           subtitle: const Text('Nghe giọng mình qua tai nghe khi hát'),
-          value: _monitorOn,
-          onChanged: (v) {
-            setState(() => _monitorOn = v);
-            e.monitorEnabled = v;
-          },
+          value: c.monitorOn,
+          onChanged: c.setMonitorOn,
         ),
         if (speakerWarning)
           Text(
@@ -748,55 +245,46 @@ class _TestRoomPageState extends State<TestRoomPage> {
           ),
         GainSlider(
           label: 'Âm lượng giọng',
-          value: _monitorGain,
+          value: c.monitorGain,
           max: 2,
-          onChanged: (v) {
-            setState(() => _monitorGain = v);
-            e.monitorGain = v;
-          },
+          onChanged: c.setMonitorGain,
         ),
         const Divider(height: 32),
         // ---- Hiệu ứng giọng ----
         FxPanel(
-          genre: _service.genre,
-          preset: _service.presetOf(_service.genre),
-          source: _genreSource,
-          bpm: _service.songAnalysis?.bpm,
-          mix: _service.fxMix,
-          gateOn: _service.gateOn,
-          monitorOn: _monitorOn,
-          onGenre: _pickGenre,
-          onMix: (v) => setState(() => _service.setFxMix(v)),
-          onGate: (v) => setState(() => _service.setGate(v)),
+          genre: c.service.genre,
+          preset: c.service.presetOf(c.service.genre),
+          source: c.genreSource,
+          bpm: c.analysis?.bpm,
+          mix: c.service.fxMix,
+          gateOn: c.service.gateOn,
+          monitorOn: c.monitorOn,
+          onGenre: c.pickGenre,
+          onMix: c.setFxMix,
+          onGate: c.setGate,
         ),
         const Divider(height: 32),
         // ---- Tự chỉnh giọng ----
         Text('Tự chỉnh giọng', style: theme.textTheme.titleLarge),
         const SizedBox(height: 8),
-        if (_analyzing) _AnalysisProgress(status: _analysisStatus),
-        if (_analysisError != null)
+        if (c.analyzing) _AnalysisProgress(status: c.analysisStatus),
+        if (c.analysisError != null)
           Text(
-            _analysisError!,
+            c.analysisError!,
             style: TextStyle(color: theme.colorScheme.error),
           ),
-        if (!_analyzing && _service.songAnalysis != null)
+        if (!c.analyzing && c.analysis != null)
           _AnalysisCard(
-            analysis: _service.songAnalysis!,
-            follow: _service.followSong,
-            onFollowChanged: (v) => setState(() {
-              _service.setFollowSong(v);
-              _currentKey = _service.currentKey;
-            }),
+            analysis: c.analysis!,
+            follow: c.service.followSong,
+            onFollowChanged: c.setFollowSong,
           ),
         const SizedBox(height: 8),
         _KeyPicker(
-          value: _currentKey ?? _service.currentKey,
+          value: c.currentKey,
           transpose: pb?.audibleTranspose ?? 0,
-          followingSong: _service.followSong,
-          onChanged: (k) => setState(() {
-            _service.setKey(k);
-            _currentKey = k;
-          }),
+          followingSong: c.service.followSong,
+          onChanged: c.setKey,
         ),
         const SizedBox(height: 12),
         SegmentedButton<int>(
@@ -808,37 +296,40 @@ class _TestRoomPageState extends State<TestRoomPage> {
                 label: Text(correctionPresetLabel(p)),
               ),
           ],
-          selected: {_service.correction?.index ?? -1},
+          selected: {c.service.correction?.index ?? -1},
           showSelectedIcon: false,
-          onSelectionChanged: (sel) => setState(() {
+          onSelectionChanged: (sel) {
             final v = sel.single;
-            _service.setCorrection(v < 0 ? null : CorrectionPreset.values[v]);
-          }),
+            c.setCorrection(v < 0 ? null : CorrectionPreset.values[v]);
+          },
         ),
         const SizedBox(height: 4),
         Text(
-          _service.correction == null
+          c.service.correction == null
               ? 'Đồng hồ cao độ vẫn hoạt động khi tắt.'
-              : _monitorOn
+              : c.monitorOn
               ? 'Giọng nghe lại trễ thêm 10 ms khi bật tự chỉnh giọng.'
               : 'Bật "Nghe lại giọng" để nghe giọng đã chỉnh.',
           style: theme.textTheme.bodySmall,
         ),
         const SizedBox(height: 8),
-        PitchMeter(state: _pitch),
+        ValueListenableBuilder(
+          valueListenable: c.pitch,
+          builder: (context, pitch, _) => PitchMeter(state: pitch),
+        ),
         const Divider(height: 32),
         // ---- Máy chủ tách giọng (bản phát triển) ----
-        ServerSettingsCard(initial: _server, onSave: _saveServer),
+        ServerSettingsCard(initial: c.server, onSave: c.saveServer),
         const SizedBox(height: 8),
         // ---- Số đo ----
         if (m != null)
           _MetricsCard(
             metrics: m,
-            timing: _timing,
-            watch: playbackWatchLabel(_watch, _clock.elapsed),
-            analysisTime: _analysisTime,
-            rssMb: _rssMb,
-            maxRssMb: _maxRssMb,
+            timing: c.timing,
+            watch: playbackWatchLabel(c.watch, c.clock),
+            analysisTime: c.analysisTime,
+            rssMb: c.rssMb,
+            maxRssMb: c.maxRssMb,
           ),
       ],
     );

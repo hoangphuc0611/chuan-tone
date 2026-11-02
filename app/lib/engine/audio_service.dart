@@ -10,9 +10,15 @@ import 'labels.dart';
 ///
 /// Mở engine khi màn đầu tiên cần, xin quyền micro trước khi mở.
 class AudioService extends ChangeNotifier {
-  AudioService._();
+  AudioService._(this._create);
 
-  static final AudioService instance = AudioService._();
+  /// Dịch vụ cho test: engine do [create] tạo (vd backend NULL, xử lý bằng `processOffline`).
+  @visibleForTesting
+  AudioService.test(ToneCoreEngine Function() create) : this._(create);
+
+  static final AudioService instance = AudioService._(ToneCoreEngine.platform);
+
+  final ToneCoreEngine Function() _create;
 
   ToneCoreEngine? _engine;
   RouteMonitor? _routeMonitor;
@@ -80,7 +86,7 @@ class AudioService extends ChangeNotifier {
       return false;
     }
     try {
-      final e = ToneCoreEngine.platform();
+      final e = _create();
       e.start();
       e.key = key;
       _engine = e;

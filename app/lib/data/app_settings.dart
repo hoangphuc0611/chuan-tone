@@ -33,6 +33,15 @@ class AppSettings {
   Future<void> setSeparationConsent(bool remember) =>
       _set('separationConsent', remember ? true : null);
 
+  /// Mẹo [id] (vd "sing": bong bóng mẹo ở Màn hát) chưa hiện lần nào → true và đánh dấu đã hiện;
+  /// các lần sau false.
+  Future<bool> firstTimeTip(String id) async {
+    final key = 'tipShown.$id';
+    if (await _get(key) == true) return false;
+    await _set(key, true);
+    return true;
+  }
+
   /// Mã máy ngẫu nhiên 128 bit (tạo lần đầu, không gắn với danh tính người dùng).
   Future<String> deviceId() async {
     final v = await _get('deviceId');

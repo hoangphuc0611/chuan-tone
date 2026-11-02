@@ -13,7 +13,7 @@ import '../engine/separation_client.dart';
 import '../engine/song_jobs.dart';
 import '../widgets/analysis_widgets.dart';
 import '../widgets/separation_panel.dart';
-import 'test_room_page.dart';
+import 'sing_page.dart';
 
 /// Màn Phân tích bài (CLAUDE.md mục 5 màn 2, M6): các bước (tách giọng ca sĩ → dò tone → dò nhịp),
 /// kết quả "Tone: La thứ (Am) – 92 BPM", sửa tone tay (nhớ theo bài), nút "Hát".
@@ -258,7 +258,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
                 ? null
                 : () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (_) => TestRoomPage(initialSong: _song),
+                      builder: (_) => SingPage(song: _song),
                     ),
                   ),
             icon: const Icon(Icons.mic),

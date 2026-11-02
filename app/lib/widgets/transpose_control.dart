@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../engine/labels.dart';
 
-/// Đổi tone beat −6…+6: hai nút to − / +, mức hiện tại ở giữa, và tiến độ khi engine đang render
+/// Đổi tone nhạc −6…+6: hai nút to − / +, mức hiện tại ở giữa, và tiến độ khi engine đang render
 /// bản mới (nghe được sau ~0,1 s, cả bài xong sau vài giây ở luồng nền).
+///
+/// [label] = null: hàng giữa màn "[ − ]  Tone +2  [ + ]" (Màn hát).
 class TransposeControl extends StatelessWidget {
   const TransposeControl({
     super.key,
@@ -12,6 +14,7 @@ class TransposeControl extends StatelessWidget {
     required this.progress,
     required this.onChanged,
     this.enabled = true,
+    this.label = 'Tone nhạc',
   });
 
   static const minValue = -6;
@@ -27,6 +30,7 @@ class TransposeControl extends StatelessWidget {
   final double progress;
   final ValueChanged<int> onChanged;
   final bool enabled;
+  final String? label;
 
   @override
   Widget build(BuildContext context) {
@@ -34,14 +38,23 @@ class TransposeControl extends StatelessWidget {
     final pending = value != audible;
     final rendering = value != 0 && progress < 1.0;
     final buttonStyle = IconButton.styleFrom(minimumSize: const Size(56, 56));
+    final align = label == null ? TextAlign.center : TextAlign.start;
+    final valueText = Text(
+      label == null ? 'Tone ${transposeLabel(value)}' : transposeLabel(value),
+      key: const ValueKey('transpose-value'),
+      textAlign: TextAlign.center,
+      style: theme.textTheme.headlineSmall?.copyWith(
+        fontWeight: FontWeight.w700,
+      ),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Expanded(
-              child: Text('Tone beat', style: theme.textTheme.titleMedium),
-            ),
+            if (label != null)
+              Expanded(child: Text(label!, style: theme.textTheme.titleMedium)),
             IconButton.filledTonal(
               tooltip: 'Hạ tone',
               style: buttonStyle,
@@ -51,17 +64,15 @@ class TransposeControl extends StatelessWidget {
                   : null,
               icon: const Icon(Icons.remove),
             ),
-            SizedBox(
-              width: 76,
-              child: Text(
-                transposeLabel(value),
-                key: const ValueKey('transpose-value'),
-                textAlign: TextAlign.center,
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
+            if (label != null)
+              SizedBox(width: 76, child: valueText)
+            else
+              Flexible(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: 120),
+                  child: valueText,
                 ),
               ),
-            ),
             IconButton.filledTonal(
               tooltip: 'Nâng tone',
               style: buttonStyle,
@@ -76,6 +87,7 @@ class TransposeControl extends StatelessWidget {
         if (value != 0 && !rendering && !pending)
           Text(
             'Đã ${value > 0 ? 'nâng' : 'hạ'} ${value.abs()} nửa cung, giữ nguyên nhịp.',
+            textAlign: align,
             style: theme.textTheme.bodySmall,
           ),
         if (rendering || pending) ...[
@@ -86,6 +98,7 @@ class TransposeControl extends StatelessWidget {
             pending
                 ? 'Đang đổi tone…'
                 : 'Đang chuẩn bị cả bài: ${(progress * 100).round()}%',
+            textAlign: align,
             style: theme.textTheme.bodySmall,
           ),
         ],

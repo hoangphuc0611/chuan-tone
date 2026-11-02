@@ -19,6 +19,8 @@ class SeparationPanel extends StatelessWidget {
     required this.onCancel,
     required this.onDelete,
     required this.onVocalGain,
+    this.noServerHint = 'Nhập địa chỉ máy chủ tách giọng ở cuối trang.',
+    this.showTitle = true,
   });
 
   final bool hasServer;
@@ -34,6 +36,10 @@ class SeparationPanel extends StatelessWidget {
   final VoidCallback onDelete;
   final ValueChanged<double> onVocalGain;
 
+  /// Câu hướng dẫn khi chưa có máy chủ tách giọng.
+  final String noServerHint;
+  final bool showTitle;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -42,8 +48,10 @@ class SeparationPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Giọng ca sĩ', style: theme.textTheme.titleLarge),
-        const SizedBox(height: 8),
+        if (showTitle) ...[
+          Text('Giọng ca sĩ', style: theme.textTheme.titleLarge),
+          const SizedBox(height: 8),
+        ],
         if (p != null) ...[
           Text(separationStageLabel(p)),
           const SizedBox(height: 6),
@@ -88,7 +96,7 @@ class SeparationPanel extends StatelessWidget {
           Text(
             hasServer
                 ? 'Dùng cho bài gốc có giọng ca sĩ. Beat karaoke thì không cần.'
-                : 'Nhập địa chỉ máy chủ tách giọng ở cuối trang.',
+                : noServerHint,
             style: theme.textTheme.bodySmall,
           ),
         ],

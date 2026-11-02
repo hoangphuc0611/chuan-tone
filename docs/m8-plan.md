@@ -31,7 +31,27 @@
   - Test app 97 (+16): chuyển dữ liệu cũ, thư viện (thêm / chuyển / trùng / tìm / đổi tên / xoá / mất
     file), màn Bài hát của tôi ở 320 px chữ 130%, nhận file "Mở bằng". Test chạy SQLite của máy qua
     `sqflite_common_ffi` (`test/flutter_test_config.dart`).
-- [ ] B2 — Bộ điều khiển phiên hát dùng chung + Màn hát
+- [~] **B2** (2026-11-02, chờ thử trên iPhone ở B7): bộ điều khiển phiên hát dùng chung + Màn hát.
+  - `engine/sing_controller.dart` (`SingController`): toàn bộ logic của Phòng thử tách khỏi giao
+    diện — nạp bài (kèm giọng đã tách; hỏng thì xoá, nạp bài thường), nhớ tone nhạc / thể loại theo
+    bài, dò tone rồi chỉnh giọng theo bài (tone sửa tay thắng kết quả dò), tách giọng, âm lượng, nghe
+    lại giọng, thu âm (đếm ngược khi nhạc dừng, **khoá tone khi thu**, tự dừng khi đủ thời lượng) +
+    camera, số đo. Đồng hồ cao độ ~30 lần/giây qua `ValueNotifier` riêng (không dựng lại cả màn).
+    Phòng thử (1160 → 655 dòng) chỉ còn giao diện, hành vi giữ nguyên.
+  - **Màn hát** (`pages/sing_page.dart`, bố cục mục 1): tone chữ to nhất + "theo bài / tone bạn đã
+    sửa / chọn tay · nhạc +2", `[ − ] Tone +2 [ + ]`, đồng hồ cao độ gọn, Chỉnh giọng (Tắt / Tự
+    nhiên / Ca sĩ / Robot), chip Thể loại cuộn ngang, Vang, Giữ giọng ca sĩ gốc (khi đã tách); thanh
+    phát + Lùi 10 giây + Phát + **Thu** ("Dừng · 0:42") + camera luôn ở đáy; cảnh báo Bluetooth / loa
+    ngoài. Nút loa: âm lượng nhạc / giọng, nghe lại giọng, lọc tiếng ồn. Menu ⋮: tách giọng ca sĩ,
+    sửa tone của bài. Lỗi hiện bằng thanh thông báo.
+  - **Mẹo lần đầu** (`widgets/coach_marks.dart`): 3 bong bóng Tone → Chỉnh giọng → Thu (khoét sáng
+    chỗ được chỉ, "Bỏ qua" / "Tiếp"), hiện một lần sau khi dò tone xong (cài đặt `tipShown.sing`).
+  - Màn Phân tích bài → "Hát" mở Màn hát (Phòng thử vẫn ở Trang chủ tới khi có Cài đặt ở B4).
+  - Test app 115 (+18): bộ điều khiển chạy với **engine thật** (backend NULL, `processOffline`) — mở
+    bài, nhớ theo bài qua hai phiên, tone sửa tay, thu → lưu → Nghe lại → nạp lại bài, khoá tone,
+    camera giả, bài hỏng, bản tách hỏng, không mở được thiết bị; Màn hát ở 320 / 375 px chữ 130%
+    (cả lúc đang thu), mẹo chỉ hiện một lần, menu sửa tone, nút loa. CI chạy test app với
+    `TONECORE_LIB` (thiếu thì test engine bị bỏ qua khi chạy tay, CI bắt buộc có).
 - [ ] B3 — Lời bài hát (.lrc), bài mẫu, Trang chủ mới
 - [ ] B4 — Engine 0.9 (mức micro, chọn micro) + màn Cài đặt
 - [ ] B5 — Hướng dẫn lần đầu, Việt hoá phần còn lại, icon, thông báo lỗi
