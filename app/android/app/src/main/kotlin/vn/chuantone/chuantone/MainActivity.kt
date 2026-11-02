@@ -11,7 +11,7 @@ import java.io.File
 import java.util.concurrent.Executors
 
 /**
- * "Mở bằng ChuẩnTone" (M8 B1): nhận file nhạc từ app khác (intent VIEW / SEND `audio/*`), chép vào
+ * "Mở bằng ChuẩnTone" (M8 B1): nhận file nhạc từ app khác (intent VIEW / SEND, kiểu `audio` bất kỳ), chép vào
  * `cache/incoming/<mốc>/<tên gốc>` rồi xếp hàng chờ; Dart lấy qua kênh `chuantone/incoming`
  * (`take`, báo `available` khi có file mới) — cùng giao thức với plugin iOS.
  */
