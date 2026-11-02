@@ -53,6 +53,14 @@ Ràng buộc: audio thread không cấp phát / khoá / I/O (mục 0.4). Độ t
    Đổi preset / mức chỉnh giọng dùng lại đường đổi không click của M5 → nghe ngay, không chờ render.
    Không đổi tone (beat.wav đã ở tone lúc hát).
 
+7. **Rời màn Nghe lại thì gỡ bản thu** (`tc_unload_beat`): chế độ nghe lại thay micro bằng giọng bản
+   thu chừng nào bản thu còn nạp → phải gỡ khi đóng màn, kẻo màn khác (Phòng thử chưa chọn bài) mất
+   nghe lại giọng.
+8. **Video camera** (B6): AVCaptureSession chỉ có hình, không tự cấu hình audio session; khung hình
+   mang mốc theo đồng hồ của phiên (đồng hồ máy). Ghép: khung đầu đặt ở (mốc khung đầu) −
+   (`start_host_time_ns` + `output_latency_ms` + L) − (điểm cắt đầu) trên trục file tiếng đã xuất,
+   cộng hằng hiệu chỉnh `cameraSyncNs` (đo bằng vỗ tay, `tools/video/av_sync.swift`).
+
 ## Hệ quả
 
 - Bản thu 4 phút ≈ 140 MB (WAV như spec); app hiện dung lượng và cho xoá; FLAC để sau nếu cần.
