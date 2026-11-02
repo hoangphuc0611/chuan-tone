@@ -375,6 +375,23 @@ TEST(TakeApi, ReviewFeedsShiftedVoiceInsteadOfMic) {
   // Giữa hai xung (xa đuôi lọc thông cao) gần như im: không lọt micro thật.
   for (int i = 4000; i < 5500; ++i) ASSERT_LT(std::fabs(all[2 * i]), 0.01) << i;
 
+  // Gỡ bản thu: micro trở lại chuỗi giọng, không còn beat.
+  ASSERT_EQ(tc_unload_beat(e), TC_OK);
+  for (int i = 0; i < 200; ++i) {
+    ASSERT_EQ(tc_get_playback_state(e, &ps), TC_OK);
+    if (ps.has_beat == 0) break;
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  EXPECT_EQ(ps.has_beat, 0);
+  EXPECT_EQ(ps.has_take, 0);
+  ASSERT_EQ(tc_set_param(e, TC_NODE_MONITOR, TC_PARAM_ENABLED, 1.0f), TC_OK);
+  float live = 0.0f;
+  for (int b = 0; b < 20; ++b) {
+    ASSERT_EQ(tc_engine_process_offline(e, realMic.data() + b * kBlock, out.data(), kBlock), TC_OK);
+    for (const float v : out) live = std::max(live, std::fabs(v));
+  }
+  EXPECT_GT(live, 0.2f);  // nghe lại micro thật (sin 0,3)
+
   // Nạp beat thường → hết chế độ nghe lại.
   const std::string beatPath = tonecore::test::tempPath("take_beat.wav");
   ASSERT_TRUE(tonecore::test::writeWav16(

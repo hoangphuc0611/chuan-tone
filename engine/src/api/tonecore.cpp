@@ -431,6 +431,15 @@ tc_result tc_record_get_status(tc_engine* engine, tc_record_status* out_status) 
   return TC_OK;
 }
 
+tc_result tc_unload_beat(tc_engine* engine) {
+  if (engine == nullptr) return TC_ERR_INVALID_ARG;
+  try {
+    return engine->impl.unloadBeat();
+  } catch (...) {
+    return TC_ERR_INTERNAL;
+  }
+}
+
 void tc_take_config_init(tc_take_config* config) {
   if (config == nullptr) return;
   *config = tc_take_config{};

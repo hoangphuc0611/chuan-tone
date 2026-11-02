@@ -341,7 +341,11 @@ class _ReviewPageState extends State<ReviewPage> {
   void dispose() {
     _ticker?.cancel();
     _cancelExport();
-    _service.engine?.pause();
+    final e = _service.engine;
+    if (e != null) {
+      e.pause();
+      e.unloadBeat(); // gỡ bản thu: micro trở lại chuỗi giọng ở các màn khác
+    }
     super.dispose();
   }
 

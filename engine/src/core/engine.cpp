@@ -433,6 +433,21 @@ tc_result Engine::loadTake(const std::string& beatPath, const std::string& voice
   return TC_OK;
 }
 
+tc_result Engine::unloadBeat() {
+  worker_.post([this] {
+    transposeGen_.fetch_add(1, std::memory_order_relaxed);
+    if (requestedTrack_) requestedTrack_->cancelled.store(true, std::memory_order_relaxed);
+    requestedTrack_.reset();
+    requestedSemis_.store(0, std::memory_order_relaxed);
+    transposeProgress_.store(1.0f, std::memory_order_relaxed);
+    if (player_.unload()) {
+      currentTrack_.reset();
+      takeLoaded_.store(false, std::memory_order_relaxed);
+    }
+  });
+  return TC_OK;
+}
+
 tc_result Engine::play() noexcept {
   if (!player_.hasTrack()) return TC_ERR_INVALID_STATE;
   player_.play();

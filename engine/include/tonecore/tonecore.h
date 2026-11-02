@@ -632,6 +632,9 @@ TC_EXPORT tc_result tc_record_get_status(tc_engine* engine, tc_record_status* ou
  * Chạy nền như tc_load_beat (kết quả qua TC_EVENT_BEAT_LOADED). Không đổi tone được
  * (tc_set_transpose → TC_ERR_INVALID_STATE) cho tới khi nạp beat khác. */
 TC_EXPORT void tc_take_config_init(tc_take_config* config);
+/* Gỡ beat / bản thu đang nạp (chạy nền, có hiệu lực sau vài ms): beat im, has_beat = 0, micro trở
+ * lại chuỗi giọng. Dùng khi rời màn Nghe lại bản thu. */
+TC_EXPORT tc_result tc_unload_beat(tc_engine* engine);
 TC_EXPORT tc_result tc_load_take(tc_engine* engine, const char* beat_path_utf8,
                                  const char* voice_path_utf8, const tc_take_config* config);
 

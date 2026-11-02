@@ -26,7 +26,7 @@ BeatPlayer::~BeatPlayer() = default;
 bool BeatPlayer::setTrack(std::shared_ptr<const Track> track) {
   collectGarbage();
   if (!track) return false;
-  if (!incoming_.push(Command{track.get(), nullptr})) return false;
+  if (!incoming_.push(Command{track.get(), nullptr, false})) return false;
   const uint64_t frames = track->frames;
   liveTracks_.push_back(std::move(track));
   playing_.store(false, std::memory_order_relaxed);
@@ -40,8 +40,20 @@ bool BeatPlayer::setTrack(std::shared_ptr<const Track> track) {
 
 bool BeatPlayer::setTransposed(std::shared_ptr<TransposedTrack> track) {
   collectGarbage();
-  if (!incoming_.push(Command{nullptr, track.get()})) return false;
+  if (!incoming_.push(Command{nullptr, track.get(), false})) return false;
   if (track) liveTransposed_.push_back(std::move(track));
+  return true;
+}
+
+bool BeatPlayer::unload() {
+  collectGarbage();
+  if (!incoming_.push(Command{nullptr, nullptr, true})) return false;
+  playing_.store(false, std::memory_order_relaxed);
+  seekRequest_.store(-1, std::memory_order_relaxed);
+  position_.store(0, std::memory_order_relaxed);
+  hasVocal_.store(false, std::memory_order_relaxed);
+  duration_.store(0, std::memory_order_relaxed);
+  ended_.store(false, std::memory_order_relaxed);
   return true;
 }
 
@@ -99,12 +111,12 @@ void BeatPlayer::adoptCommands() noexcept {
 
   Command cmd{};
   while (incoming_.pop(cmd)) {
-    if (cmd.track != nullptr) {
+    if (cmd.unload || cmd.track != nullptr) {
       // Beat mới: trả lại mọi thứ của beat cũ, về đầu bài, tone 0.
       retire(track_, active_);
       if (hasNext_) retire(nullptr, next_);
       if (fadeFromValid_) retire(nullptr, fadeFrom_);
-      track_ = cmd.track;
+      track_ = cmd.unload ? nullptr : cmd.track;
       active_ = nullptr;
       hasNext_ = false;
       fadeFromValid_ = false;

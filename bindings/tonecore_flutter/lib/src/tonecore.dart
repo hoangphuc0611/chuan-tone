@@ -1030,6 +1030,10 @@ class ToneCoreEngine implements Finalizable {
     });
   }
 
+  /// Gỡ beat / bản thu đang nạp (có hiệu lực sau vài ms): micro trở lại chuỗi giọng. Gọi khi rời
+  /// màn Nghe lại bản thu.
+  void unloadBeat() => _check('tc_unload_beat', _bindings.tc_unload_beat(_h));
+
   /// Nạp bản thu và chờ kết quả.
   Future<Duration> loadTakeAndWait(
     String beatPath,

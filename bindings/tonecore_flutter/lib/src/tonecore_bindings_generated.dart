@@ -1073,6 +1073,19 @@ class ToneCoreBindings {
   late final _tc_take_config_init = _tc_take_config_initPtr
       .asFunction<void Function(ffi.Pointer<tc_take_config>)>();
 
+  /// Gỡ beat / bản thu đang nạp (chạy nền, có hiệu lực sau vài ms): beat im, has_beat = 0, micro trở
+  /// lại chuỗi giọng. Dùng khi rời màn Nghe lại bản thu.
+  int tc_unload_beat(ffi.Pointer<tc_engine> engine) {
+    return _tc_unload_beat(engine);
+  }
+
+  late final _tc_unload_beatPtr =
+      _lookup<ffi.NativeFunction<tc_result Function(ffi.Pointer<tc_engine>)>>(
+        'tc_unload_beat',
+      );
+  late final _tc_unload_beat = _tc_unload_beatPtr
+      .asFunction<int Function(ffi.Pointer<tc_engine>)>();
+
   int tc_load_take(
     ffi.Pointer<tc_engine> engine,
     ffi.Pointer<ffi.Char> beat_path_utf8,

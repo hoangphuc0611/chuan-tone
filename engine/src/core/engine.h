@@ -72,6 +72,8 @@ class Engine : public BackendHost {
   // vào chuỗi giọng thay cho micro. Không đổi tone được cho tới khi nạp beat khác.
   tc_result loadTake(const std::string& beatPath, const std::string& voicePath,
                      int64_t voiceOffsetFrames);
+  // Gỡ beat / bản thu đang nạp (chạy nền như loadBeat; micro trở lại chuỗi giọng).
+  tc_result unloadBeat();
   tc_result play() noexcept;
   tc_result pause() noexcept;
   tc_result seekMs(double ms) noexcept;

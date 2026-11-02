@@ -742,6 +742,12 @@ void main() {
         expect(d.inMilliseconds, 533);
         expect(engine.playback.hasTake, isTrue);
         expect(() => engine.transpose = 2, throwsA(isA<ToneCoreException>()));
+        engine.unloadBeat();
+        for (var i = 0; i < 200 && engine.playback.hasBeat; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 1));
+        }
+        expect(engine.playback.hasBeat, isFalse);
+        expect(engine.playback.hasTake, isFalse);
         await expectLater(
           engine.loadTakeAndWait(
             '${dir.path}/khong.wav',

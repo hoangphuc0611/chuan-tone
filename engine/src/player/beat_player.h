@@ -40,6 +40,8 @@ class BeatPlayer {
   bool setTrack(std::shared_ptr<const Track> track);
   // Đổi tone: phát `track` (đang render) khi sẵn; nullptr = về beat gốc.
   bool setTransposed(std::shared_ptr<TransposedTrack> track);
+  // (M7) Gỡ beat đang nạp (vd. rời màn Nghe lại bản thu): im lặng, không còn track.
+  bool unload();
   // Huỷ các track audio thread đã trả về.
   void collectGarbage();
   bool hasGarbage() const noexcept { return retired_.sizeApprox() > 0; }
@@ -77,6 +79,7 @@ class BeatPlayer {
   struct Command {
     const Track* track;   // != nullptr: beat mới
     TransposedTrack* tt;  // bản đổi tone (nullptr = beat gốc)
+    bool unload;          // gỡ beat (track / tt bỏ qua)
   };
   struct Retired {
     const Track* track;
