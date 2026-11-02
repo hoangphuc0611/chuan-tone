@@ -21,7 +21,18 @@
     giọng đã xử lý) chậm đúng L frame; tự dừng; `tc_engine_stop / destroy` chốt file; lỗi gọi sai;
     ring đầy; không cấp phát trên audio thread (kể cả lúc dừng từ luồng khác). Engine 289 / 289;
     TSan / ASan / UBSan sạch.
-- [ ] B2: bù trễ theo đường ra + đo click trên iPhone.
+- [~] **B2** (2026-11-02, chờ đo trên iPhone): bù trễ theo đường ra + kiểm tra khớp tiếng.
+  - Binding 0.8: `startRecording / stopRecording / recordStatus` (`RecordStatus`, `RecordState`).
+  - `engine/take_alignment.dart`: đọc lịch sử đo độ trễ (CSV), chọn độ trễ khứ hồi theo thứ tự đã
+    duyệt (đo cho đúng đường ra → HĐH báo + chênh đo ở loa ngoài → HĐH báo; Bluetooth chỉ HĐH
+    báo), số frame dịch = độ trễ + limiter nhìn trước.
+  - Màn Đo độ trễ có thẻ **"Kiểm tra khớp tiếng khi thu"**: phát beat toàn tiếng "tách" (3 ms,
+    2 kHz, mỗi 0,5 s), thu 6 s qua micro, so tiếng "tách" trong `beat.wav` với `dry.wav` (trung vị
+    độ chậm) rồi so với độ lệch app sẽ bù → báo "còn lệch … ms", sao chép được dòng CSV.
+  - `data/wav_io.dart`: đọc WAV 16-bit / float, ghi WAV 16-bit.
+  - Test: binding 24 (1 mới), app 72 (8 mới: đọc CSV, chọn độ trễ, số frame dịch, đo độ chậm trên
+    micro giả có vang + ồn, WAV) + `test/sync_e2e_test.dart` (engine thật, micro = đầu ra trễ
+    600 frame → bản thu đo đúng 600 + 48 frame, lệch ≤ 2 frame).
 - [ ] B3: Nghe lại (`tc_load_take`), render offline, −14 LUFS, AAC.
 - [ ] B4: binding 0.8 + app (nút Thu, kho bản thu, Nghe lại & chỉnh, xuất M4A, chia sẻ / lưu).
 - [ ] B5: iOS video sóng nhạc.

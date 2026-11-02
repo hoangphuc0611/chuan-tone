@@ -969,6 +969,92 @@ class ToneCoreBindings {
   late final _tc_exporter_destroy = _tc_exporter_destroyPtr
       .asFunction<void Function(ffi.Pointer<tc_exporter>)>();
 
+  /// ---- Thu âm (từ v0.8) ----
+  /// Ghi 3 file WAV vào thư mục `dir_utf8` (phải có sẵn; file cũ cùng tên bị ghi đè):
+  /// - dry.wav: giọng khô — micro thô trước mọi xử lý, mono 32-bit float;
+  /// - wet.wav: giọng đã chỉnh + FX (đúng như nghe lại, trước khi trộn), stereo 16-bit;
+  /// - beat.wav: beat đang phát (đã đổi tone, kèm giọng ca sĩ theo TC_NODE_VOCAL; trước gain
+  /// TC_NODE_BEAT và limiter), stereo 16-bit.
+  /// Ba file bắt đầu cùng một frame, dài bằng nhau, ghi thô (CHƯA bù độ trễ): giọng khô ở frame n
+  /// khớp beat ở frame n − (độ trễ khứ hồi + output_lookahead_frames); giọng đã xử lý thêm
+  /// pitch_latency_frames. Thu liên tục cả khi beat dừng / tua.
+  /// Engine phải RUNNING, không đang đo độ trễ. Audio thread không cấp phát, không chờ: chỉ chép
+  /// vào bộ đệm ~4 s, luồng ghi riêng viết file. File ghi qua tên tạm `.part`, đổi tên khi xong.
+  void tc_record_config_init(ffi.Pointer<tc_record_config> config) {
+    return _tc_record_config_init(config);
+  }
+
+  late final _tc_record_config_initPtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Void Function(ffi.Pointer<tc_record_config>)>
+      >('tc_record_config_init');
+  late final _tc_record_config_init = _tc_record_config_initPtr
+      .asFunction<void Function(ffi.Pointer<tc_record_config>)>();
+
+  /// config = NULL → mặc định. Đang thu → TC_ERR_INVALID_STATE; không mở được file →
+  /// TC_ERR_INVALID_ARG.
+  int tc_record_start(
+    ffi.Pointer<tc_engine> engine,
+    ffi.Pointer<ffi.Char> dir_utf8,
+    ffi.Pointer<tc_record_config> config,
+  ) {
+    return _tc_record_start(engine, dir_utf8, config);
+  }
+
+  late final _tc_record_startPtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(
+            ffi.Pointer<tc_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<tc_record_config>,
+          )
+        >
+      >('tc_record_start');
+  late final _tc_record_start = _tc_record_startPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<tc_engine>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<tc_record_config>,
+        )
+      >();
+
+  /// Dừng và chờ ghi xong (thường < 50 ms). Trả TC_OK nếu 3 file đã ghi xong, mã lỗi nếu ghi lỗi;
+  /// chưa từng thu → TC_ERR_INVALID_STATE. tc_engine_stop / tc_engine_destroy cũng tự dừng và chốt
+  /// file.
+  int tc_record_stop(ffi.Pointer<tc_engine> engine) {
+    return _tc_record_stop(engine);
+  }
+
+  late final _tc_record_stopPtr =
+      _lookup<ffi.NativeFunction<tc_result Function(ffi.Pointer<tc_engine>)>>(
+        'tc_record_stop',
+      );
+  late final _tc_record_stop = _tc_record_stopPtr
+      .asFunction<int Function(ffi.Pointer<tc_engine>)>();
+
+  int tc_record_get_status(
+    ffi.Pointer<tc_engine> engine,
+    ffi.Pointer<tc_record_status> out_status,
+  ) {
+    return _tc_record_get_status(engine, out_status);
+  }
+
+  late final _tc_record_get_statusPtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(
+            ffi.Pointer<tc_engine>,
+            ffi.Pointer<tc_record_status>,
+          )
+        >
+      >('tc_record_get_status');
+  late final _tc_record_get_status = _tc_record_get_statusPtr
+      .asFunction<
+        int Function(ffi.Pointer<tc_engine>, ffi.Pointer<tc_record_status>)
+      >();
+
   /// ---- Đo lường ----
   int tc_get_metrics(
     ffi.Pointer<tc_engine> engine,
@@ -1638,6 +1724,86 @@ final class tc_export_status extends ffi.Struct {
 
 final class tc_exporter extends ffi.Opaque {}
 
+/// ---- Thu âm (từ v0.8, docs/m7-plan.md) ----
+sealed class tc_record_state {
+  static const TC_RECORD_IDLE = 0;
+  static const TC_RECORD_RECORDING = 1;
+
+  /// đã dừng, đang ghi nốt phần còn trong bộ đệm
+  static const TC_RECORD_FINISHING = 2;
+
+  /// 3 file đã ghi xong, đọc được
+  static const TC_RECORD_DONE = 3;
+
+  /// lỗi ghi file (đầy bộ nhớ…) — các file đã bị xoá
+  static const TC_RECORD_FAILED = 4;
+}
+
+final class tc_record_config extends ffi.Struct {
+  /// = sizeof(tc_record_config); tc_record_config_init tự điền
+  @ffi.Uint32()
+  external int struct_size;
+
+  /// đủ thì tự dừng; 0 = 15 phút (tối đa 60 phút)
+  @ffi.Float()
+  external double max_seconds;
+}
+
+final class tc_record_status extends ffi.Struct {
+  /// = sizeof(tc_record_status)
+  @ffi.Uint32()
+  external int struct_size;
+
+  /// tc_record_state
+  @ffi.Int32()
+  external int state;
+
+  /// tc_result: lỗi khi TC_RECORD_FAILED
+  @ffi.Int32()
+  external int result;
+
+  /// của 3 file (= tần số engine)
+  @ffi.Uint32()
+  external int sample_rate;
+
+  /// số frame đã thu (DONE: số frame trong file)
+  @ffi.Uint64()
+  external int frames;
+
+  /// frame bị bỏ vì luồng ghi không kịp — > 0 là bản thu có chỗ hụt
+  @ffi.Uint64()
+  external int dropped_frames;
+
+  /// vị trí beat (frame, tần số engine)
+  @ffi.Uint64()
+  external int start_beat_frame;
+
+  /// đồng hồ máy (iOS: mach_absolute_time ra ns) lúc frame đó ra
+  /// thiết bị, chưa gồm output_latency_ms; 0 = nền tảng không báo
+  @ffi.Int64()
+  external int start_host_time_ns;
+
+  /// hệ điều hành báo
+  @ffi.Double()
+  external double input_latency_ms;
+
+  /// hệ điều hành báo
+  @ffi.Double()
+  external double output_latency_ms;
+
+  /// giọng đã xử lý trễ hơn giọng khô (chỉnh giọng bật)
+  @ffi.Uint32()
+  external int pitch_latency_frames;
+
+  /// limiter đầu ra: beat nghe trễ hơn beat ghi
+  @ffi.Uint32()
+  external int output_lookahead_frames;
+
+  /// tc_route
+  @ffi.Int32()
+  external int route;
+}
+
 /// ---- FX giọng (từ v0.6, xem docs/adr/005-fx-chain.md) ----
 /// Chuỗi trên đường giọng nghe lại: micro → HPF 80 Hz → gate → chỉnh giọng → EQ → compressor →
 /// de-esser → delay → reverb → trộn beat → limiter. Preset là một struct C (không JSON trong
@@ -1809,8 +1975,8 @@ final class tc_fx_preset extends ffi.Struct {
 
 const int TC_API_VERSION_MAJOR = 0;
 
-const int TC_API_VERSION_MINOR = 7;
+const int TC_API_VERSION_MINOR = 8;
 
 const int TC_API_VERSION_PATCH = 0;
 
-const int TC_API_VERSION = 1792;
+const int TC_API_VERSION = 2048;

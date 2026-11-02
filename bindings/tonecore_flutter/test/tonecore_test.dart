@@ -672,6 +672,52 @@ void main() {
     });
   });
 
+  group('thu âm (v0.8)', () {
+    late Directory dir;
+    setUp(() => dir = Directory.systemTemp.createTempSync('tonecore_v08'));
+    tearDown(() => dir.deleteSync(recursive: true));
+
+    test('thu 3 track, trạng thái, tự dừng theo maxDuration', () {
+      final engine = ToneCoreEngine.create(maxBlockFrames: 256);
+      addTearDown(engine.dispose);
+      engine.start();
+      expect(engine.recordStatus.state, RecordState.idle);
+      engine.startRecording(dir.path);
+      expect(engine.recordStatus.recording, isTrue);
+      final mic = Float32List(256)..fillRange(0, 256, 0.25);
+      for (var i = 0; i < 40; i++) {
+        engine.processOffline(mic, 256);
+      }
+      engine.stopRecording();
+      final s = engine.recordStatus;
+      expect(s.state, RecordState.done);
+      expect(s.sampleRate, 48000);
+      expect(s.frames, 40 * 256);
+      expect(s.droppedFrames, 0);
+      expect(s.outputLookaheadFrames, 48);
+      expect(s.duration, const Duration(microseconds: 213333));
+      for (final f in ['dry.wav', 'wet.wav', 'beat.wav']) {
+        expect(File('${dir.path}/$f').existsSync(), isTrue, reason: f);
+      }
+      // dry.wav: float32 mono, 58 byte header + 4 byte / mẫu.
+      expect(File('${dir.path}/dry.wav').lengthSync(), 58 + 40 * 256 * 4);
+
+      expect(
+        () => engine.startRecording('${dir.path}/khong-co'),
+        throwsA(isA<ToneCoreException>()),
+      );
+      engine.startRecording(
+        dir.path,
+        maxDuration: const Duration(milliseconds: 10),
+      );
+      for (var i = 0; i < 4; i++) {
+        engine.processOffline(mic, 256);
+      }
+      engine.stopRecording();
+      expect(engine.recordStatus.frames, 480);
+    });
+  });
+
   test('block quá lớn bị từ chối ở phía Dart', () {
     final engine = ToneCoreEngine.create(maxBlockFrames: 64);
     addTearDown(engine.dispose);

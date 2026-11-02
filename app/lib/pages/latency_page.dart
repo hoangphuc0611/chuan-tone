@@ -8,6 +8,7 @@ import 'package:tonecore_flutter/tonecore_flutter.dart';
 import '../data/latency_history.dart';
 import '../engine/audio_service.dart';
 import '../engine/labels.dart';
+import '../widgets/sync_check_card.dart';
 
 /// Màn đo độ trễ round-trip (M1). Kết quả lưu trên máy và sao chép được dạng một dòng CSV để
 /// gộp báo cáo bằng tools/latency/aggregate.py.
@@ -208,6 +209,8 @@ class _LatencyPageState extends State<LatencyPage> {
                     ),
                   ),
                 ],
+                const SizedBox(height: 16),
+                SyncCheckCard(history: _history, model: _model),
                 const Divider(height: 32),
                 Row(
                   children: [

@@ -504,6 +504,60 @@ class LatencyResult {
       reportedInputLatencyMs + reportedOutputLatencyMs;
 }
 
+/// Trạng thái bộ thu (thứ tự khớp `tc_record_state`, từ v0.8).
+enum RecordState { idle, recording, finishing, done, failed }
+
+/// (từ v0.8) Trạng thái bản thu: dry.wav / wet.wav / beat.wav (docs/adr/007-recording-sync.md).
+class RecordStatus {
+  const RecordStatus({
+    required this.state,
+    required this.result,
+    required this.sampleRate,
+    required this.frames,
+    required this.droppedFrames,
+    required this.startBeatFrame,
+    required this.startHostTimeNs,
+    required this.inputLatencyMs,
+    required this.outputLatencyMs,
+    required this.pitchLatencyFrames,
+    required this.outputLookaheadFrames,
+    required this.route,
+  });
+
+  final RecordState state;
+
+  /// Mã `tc_result` (lý do khi [RecordState.failed]).
+  final int result;
+  final int sampleRate;
+
+  /// Số frame đã thu (khi [RecordState.done]: số frame trong file).
+  final int frames;
+
+  /// > 0: bản thu có chỗ hụt (luồng ghi không kịp).
+  final int droppedFrames;
+
+  /// Vị trí beat (frame) và đồng hồ máy (ns, 0 = không rõ) của frame đầu tiên.
+  final int startBeatFrame;
+  final int startHostTimeNs;
+
+  /// Độ trễ hệ điều hành báo lúc bắt đầu thu.
+  final double inputLatencyMs;
+  final double outputLatencyMs;
+
+  /// Giọng đã xử lý trễ hơn giọng khô (chỉnh giọng bật).
+  final int pitchLatencyFrames;
+
+  /// Beat nghe trễ hơn beat ghi (limiter đầu ra nhìn trước).
+  final int outputLookaheadFrames;
+  final AudioRoute route;
+
+  bool get recording => state == RecordState.recording;
+
+  Duration get duration => sampleRate == 0
+      ? Duration.zero
+      : Duration(microseconds: frames * 1000000 ~/ sampleRate);
+}
+
 class ToneCoreEvent {
   const ToneCoreEvent(this.type, this.code, this.value);
 
@@ -942,6 +996,50 @@ class ToneCoreEngine implements Finalizable {
     startLatencyMeasurement();
     await done;
     return latencyResult;
+  }
+
+  // ---- Thu âm (từ v0.8) ----
+
+  /// Thu giọng khô (`dry.wav`), giọng đã xử lý (`wet.wav`) và beat đang phát (`beat.wav`) vào
+  /// thư mục [dir] (phải có sẵn). File ghi thô, chưa bù độ trễ — xem [RecordStatus] và
+  /// docs/adr/007-recording-sync.md. [maxDuration] null = 15 phút.
+  void startRecording(String dir, {Duration? maxDuration}) {
+    using((arena) {
+      final cfg = arena<tc_record_config>();
+      _bindings.tc_record_config_init(cfg);
+      if (maxDuration != null) {
+        cfg.ref.max_seconds = maxDuration.inMicroseconds / 1e6;
+      }
+      final p = dir.toNativeUtf8(allocator: arena);
+      _check('tc_record_start', _bindings.tc_record_start(_h, p.cast(), cfg));
+    });
+  }
+
+  /// Dừng và chờ ghi xong file (thường < 50 ms). Lỗi ghi → [ToneCoreException].
+  void stopRecording() =>
+      _check('tc_record_stop', _bindings.tc_record_stop(_h));
+
+  RecordStatus get recordStatus {
+    return using((arena) {
+      final s = arena<tc_record_status>();
+      s.ref.struct_size = sizeOf<tc_record_status>();
+      _check('tc_record_get_status', _bindings.tc_record_get_status(_h, s));
+      final v = s.ref;
+      return RecordStatus(
+        state: _enumAt(RecordState.values, v.state, RecordState.idle),
+        result: v.result,
+        sampleRate: v.sample_rate,
+        frames: v.frames,
+        droppedFrames: v.dropped_frames,
+        startBeatFrame: v.start_beat_frame,
+        startHostTimeNs: v.start_host_time_ns,
+        inputLatencyMs: v.input_latency_ms,
+        outputLatencyMs: v.output_latency_ms,
+        pitchLatencyFrames: v.pitch_latency_frames,
+        outputLookaheadFrames: v.output_lookahead_frames,
+        route: _enumAt(AudioRoute.values, v.route, AudioRoute.unknown),
+      );
+    });
   }
 
   // ---- Sự kiện ----
