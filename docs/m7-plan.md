@@ -74,7 +74,18 @@
     "Vang" 0..2 như real-time; `AudioService.applyVoiceSettings`.
   - Test app 79 (7 mới: JSON bản thu, độ lệch + chỉnh tay, chuyển tone theo bản thu, ghép phiên thu
     → bản thu → thông số render, kho bản thu, màn "Bản thu của tôi").
-- [ ] B5: iOS video sóng nhạc.
+- [~] **B5** (2026-11-02, chờ thử trên iPhone): video 9:16 nền sóng nhạc (iOS, plugin
+  `chuantone_media`).
+  - `WaveformVideo.swift`: đọc file M4A (AVAudioFile) → phổ 2048 điểm mỗi khung 1/30 s (vDSP) gom 40
+    cột log 60 Hz – 12 kHz, lên nhanh xuống chậm; nền màu theo thể loại + tên bài + thể loại / ngày
+    + "ChuẩnTone" vẽ sẵn một lần (chép vào mỗi khung), cột sóng nhạc đối xứng, thanh thời gian →
+    AVAssetWriter H.264 High 1080×1920 30 fps 5 Mbit/s.
+  - `MediaMux.swift`: ghép hình + tiếng bằng AVMutableComposition, xuất nguyên dạng (không nén lại),
+    MP4 moov ở đầu; nhận độ lệch hình ↔ tiếng và đoạn cắt (dùng lại cho camera ở B6).
+  - Kênh: `renderWaveformVideo` / `progress` / `cancel` / `saveVideoToPhotos` (quyền "chỉ thêm",
+    `NSPhotoLibraryAddUsageDescription`).
+  - Màn Nghe lại: **Xuất video sóng nhạc (9:16)** (dùng lại file M4A nếu thông số chưa đổi), tiến độ
+    hai bước (trộn âm thanh → dựng video), huỷ; kết quả có **Lưu vào Ảnh** + **Chia sẻ**.
 - [ ] B6: iOS camera trước + đo vỗ tay.
 - [ ] B7: nghiệm thu iPhone, đăng TikTok, báo cáo M7.
 

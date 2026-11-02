@@ -4,6 +4,8 @@
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>ChuẩnTone cần micro để bạn nghe lại giọng hát và thu âm.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>ChuẩnTone lưu video bài hát của bạn vào Ảnh.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>ChuẩnTone kết nối máy chủ tách giọng ca sĩ trong mạng Wi-Fi của bạn.</string>
 	<key>NSAppTransportSecurity</key>

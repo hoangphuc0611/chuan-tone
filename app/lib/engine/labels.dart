@@ -263,3 +263,20 @@ String nudgeLabel(double ms) {
   if (v == 0) return 'Như lúc thu';
   return v > 0 ? 'Giọng sớm hơn $v ms' : 'Giọng muộn hơn ${-v} ms';
 }
+
+/// Tên bài để hiện: bỏ đuôi file.
+String songTitle(String fileName) {
+  final dot = fileName.lastIndexOf('.');
+  return dot > 0 ? fileName.substring(0, dot) : fileName;
+}
+
+/// Màu chủ đạo của video theo thể loại (ARGB).
+int genreColor(Genre g) => switch (g) {
+  Genre.dry => 0xFF7F8C8D,
+  Genre.bolero => 0xFF9B59B6,
+  Genre.ballad => 0xFF3498DB,
+  Genre.pop => 0xFFE5484D,
+  Genre.remix => 0xFFF39C12,
+  Genre.rap => 0xFF27AE60,
+  Genre.lofi => 0xFF16A085,
+};

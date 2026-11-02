@@ -1,8 +1,13 @@
 import Flutter
+import Photos
 import UIKit
 
 /// Kênh `chuantone/media` (M7, docs/m7-plan.md): API native của iOS cho phần xuất / chia sẻ.
+/// Việc nặng chạy ở hàng đợi nền; kết quả trả về luồng chính. Một việc dựng video tại một thời
+/// điểm (`progress` / `cancel` áp cho việc đó).
 public class ChuanToneMediaPlugin: NSObject, FlutterPlugin {
+  private var waveform: WaveformVideo?
+
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(name: "chuantone/media", binaryMessenger: registrar.messenger())
     registrar.addMethodCallDelegate(ChuanToneMediaPlugin(), channel: channel)
@@ -12,14 +17,53 @@ public class ChuanToneMediaPlugin: NSObject, FlutterPlugin {
     let args = call.arguments as? [String: Any] ?? [:]
     switch call.method {
     case "share":
-      guard let path = args["path"] as? String else {
-        result(FlutterError(code: "args", message: "thiếu path", details: nil))
-        return
-      }
+      guard let path = args["path"] as? String else { return result(Self.argError("path")) }
       share(URL(fileURLWithPath: path), result: result)
+    case "renderWaveformVideo":
+      guard let audio = args["audio"] as? String, let output = args["output"] as? String else {
+        return result(Self.argError("audio / output"))
+      }
+      let argb = (args["color"] as? NSNumber)?.uint32Value ?? 0xFFE5_484D
+      let style = WaveformVideo.Style(
+        title: args["title"] as? String ?? "",
+        subtitle: args["subtitle"] as? String ?? "",
+        color: UIColor(
+          red: CGFloat((argb >> 16) & 0xFF) / 255, green: CGFloat((argb >> 8) & 0xFF) / 255,
+          blue: CGFloat(argb & 0xFF) / 255, alpha: 1))
+      let job = WaveformVideo()
+      waveform = job
+      DispatchQueue.global(qos: .userInitiated).async {
+        do {
+          try job.render(
+            audio: URL(fileURLWithPath: audio), output: URL(fileURLWithPath: output), style: style)
+          DispatchQueue.main.async { result(true) }
+        } catch let e as MediaError {
+          DispatchQueue.main.async {
+            if case .cancelled = e { result(false) } else {
+              result(FlutterError(code: "video", message: e.message, details: nil))
+            }
+          }
+        } catch {
+          DispatchQueue.main.async {
+            result(FlutterError(code: "video", message: error.localizedDescription, details: nil))
+          }
+        }
+      }
+    case "progress":
+      result(waveform?.progress ?? 0)
+    case "cancel":
+      waveform?.cancel()
+      result(nil)
+    case "saveVideoToPhotos":
+      guard let path = args["path"] as? String else { return result(Self.argError("path")) }
+      saveVideo(URL(fileURLWithPath: path), result: result)
     default:
       result(FlutterMethodNotImplemented)
     }
+  }
+
+  private static func argError(_ what: String) -> FlutterError {
+    FlutterError(code: "args", message: "thiếu \(what)", details: nil)
   }
 
   /// Bảng chia sẻ của hệ điều hành (TikTok, Facebook, Zalo… đã cài sẽ tự hiện; "Lưu vào Tệp").
@@ -43,6 +87,27 @@ public class ChuanToneMediaPlugin: NSObject, FlutterPlugin {
       pop.permittedArrowDirections = []
     }
     top.present(vc, animated: true)
+  }
+
+  /// Lưu video vào Ảnh (quyền "chỉ thêm"). true = đã lưu; false = người dùng không cho phép.
+  private func saveVideo(_ url: URL, result: @escaping FlutterResult) {
+    PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+      guard status == .authorized || status == .limited else {
+        DispatchQueue.main.async { result(false) }
+        return
+      }
+      PHPhotoLibrary.shared().performChanges({
+        PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
+      }) { ok, error in
+        DispatchQueue.main.async {
+          if let error = error {
+            result(FlutterError(code: "photos", message: error.localizedDescription, details: nil))
+          } else {
+            result(ok)
+          }
+        }
+      }
+    }
   }
 
   static func topViewController() -> UIViewController? {

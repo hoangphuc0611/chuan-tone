@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:chuantone_media/chuantone_media.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:tonecore_flutter/tonecore_flutter.dart';
 
 import '../data/take_store.dart';
@@ -38,9 +40,15 @@ class _ReviewPageState extends State<ReviewPage> {
   double? _drag;
   RangeValues? _trimDrag;
 
+  // Xuất: file M4A dùng lại cho video nếu thông số chưa đổi (_audioKey).
   TakeRenderer? _renderer;
-  RenderStatus? _render;
-  String? _exportPath;
+  bool _videoBusy = false;
+  double? _progress;
+  String? _busyLabel;
+  RenderStatus? _audioStatus;
+  String? _audioPath;
+  String? _audioKey;
+  String? _videoPath;
   String? _exportError;
 
   Take get _take => widget.take;
@@ -135,16 +143,25 @@ class _ReviewPageState extends State<ReviewPage> {
     await _load(at: pb?.position, play: pb?.playing ?? false);
   }
 
-  Future<void> _export() async {
-    final r = _renderer = TakeRenderer.create();
+  String _stamp() {
     final t = DateTime.now();
     String two(int v) => v.toString().padLeft(2, '0');
-    final out =
-        '${_take.dir.path}/xuat-${two(t.hour)}${two(t.minute)}${two(t.second)}.m4a';
+    return '${two(t.hour)}${two(t.minute)}${two(t.second)}';
+  }
+
+  /// File M4A của lựa chọn hiện tại (render nếu chưa có / thông số đã đổi). null = lỗi / huỷ.
+  Future<String?> _ensureAudio() async {
+    final key = jsonEncode(_info.toJson());
+    final cached = _audioPath;
+    if (cached != null && _audioKey == key && File(cached).existsSync()) {
+      return cached;
+    }
+    final r = _renderer = TakeRenderer.create();
+    final out = '${_take.dir.path}/xuat-${_stamp()}.m4a';
     setState(() {
       _exportError = null;
-      _exportPath = null;
-      _render = null;
+      _busyLabel = 'Đang trộn âm thanh…';
+      _progress = 0;
     });
     try {
       final s = await r.render(
@@ -153,33 +170,107 @@ class _ReviewPageState extends State<ReviewPage> {
         out,
         renderSettingsFor(_info, preset: _service.presetOf(_info.genre)),
         onProgress: (s) {
-          if (mounted) setState(() => _render = s);
+          if (mounted) setState(() => _progress = s.progress);
         },
       );
-      if (!mounted) return;
-      setState(() {
-        _render = s;
-        _exportPath = out;
-      });
-    } on ToneCoreException catch (err) {
-      if (mounted && err.code != TcResult.cancelled) {
-        setState(() => _exportError = 'Xuất lỗi (${err.codeName}).');
+      if (cached != null && cached != out) {
+        unawaited(File(cached).delete().then((_) {}, onError: (_) {}));
       }
+      _audioPath = out;
+      _audioKey = key;
+      _audioStatus = s;
+      return out;
+    } on ToneCoreException catch (err) {
+      if (err.code != TcResult.cancelled) {
+        _exportError = 'Xuất lỗi (${err.codeName}).';
+      }
+      return null;
     } finally {
       r.dispose();
       _renderer = null;
-      if (mounted) setState(() {});
+      if (mounted) setState(() => _busyLabel = null);
     }
   }
 
-  Future<void> _share() async {
-    final path = _exportPath;
-    if (path == null) return;
+  Future<void> _exportAudio() async {
+    await _ensureAudio();
+    if (mounted) setState(() {});
+  }
+
+  /// Video 9:16 nền sóng nhạc + tên bài (iOS, B5): dựng từ chính file M4A nên khớp tiếng.
+  Future<void> _exportVideo() async {
+    final audio = await _ensureAudio();
+    if (audio == null || !mounted) return;
+    final out = '${_take.dir.path}/video-${_stamp()}.mp4';
+    setState(() {
+      _videoBusy = true;
+      _busyLabel = 'Đang dựng video…';
+      _progress = 0;
+      _exportError = null;
+    });
+    final poll = Timer.periodic(const Duration(milliseconds: 250), (_) async {
+      final p = await ChuanToneMedia.progress();
+      if (mounted && _videoBusy) setState(() => _progress = p);
+    });
+    try {
+      final ok = await ChuanToneMedia.renderWaveformVideo(
+        audio: audio,
+        output: out,
+        title: songTitle(_info.songName),
+        subtitle:
+            '${genreLabel(_info.genre)} · ${formatTakeDate(_info.createdAt)}',
+        color: genreColor(_info.genre),
+      );
+      if (ok == true) {
+        final old = _videoPath;
+        if (old != null) {
+          unawaited(File(old).delete().then((_) {}, onError: (_) {}));
+        }
+        _videoPath = out;
+      } else if (ok == null) {
+        _exportError = 'Máy này chưa dựng được video (sẽ có trên Android sau).';
+      }
+    } on PlatformException catch (err) {
+      _exportError = 'Dựng video lỗi: ${err.message ?? err.code}';
+    } finally {
+      poll.cancel();
+      if (mounted) {
+        setState(() {
+          _videoBusy = false;
+          _busyLabel = null;
+        });
+      }
+    }
+  }
+
+  void _cancelExport() {
+    _renderer?.cancel();
+    if (_videoBusy) unawaited(ChuanToneMedia.cancel());
+  }
+
+  Future<void> _share(String path) async {
     final ok = await ChuanToneMedia.share(path);
     if (ok == null && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Máy này chưa chia sẻ được. File: $path')),
       );
+    }
+  }
+
+  Future<void> _saveVideo(String path) async {
+    String msg;
+    try {
+      final ok = await ChuanToneMedia.saveVideoToPhotos(path);
+      msg = switch (ok) {
+        true => 'Đã lưu video vào Ảnh.',
+        false => 'Chưa được phép lưu vào Ảnh (Cài đặt → ChuẩnTone → Ảnh).',
+        null => 'Máy này chưa lưu được vào Ảnh.',
+      };
+    } on PlatformException catch (err) {
+      msg = 'Không lưu được: ${err.message ?? err.code}';
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     }
   }
 
@@ -210,7 +301,7 @@ class _ReviewPageState extends State<ReviewPage> {
   @override
   void dispose() {
     _ticker?.cancel();
-    _renderer?.cancel();
+    _cancelExport();
     _service.engine?.pause();
     super.dispose();
   }
@@ -244,7 +335,7 @@ class _ReviewPageState extends State<ReviewPage> {
     final trimEnd = _info.trimEndFrame == 0 ? _info.frames : _info.trimEndFrame;
     final trim =
         _trimDrag ?? RangeValues(ms(_info.trimStartFrame), ms(trimEnd));
-    final rendering = _renderer != null;
+    final busy = _busyLabel != null;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -436,23 +527,50 @@ class _ReviewPageState extends State<ReviewPage> {
         Text('Xuất', style: theme.textTheme.titleLarge),
         const SizedBox(height: 8),
         FilledButton.icon(
-          onPressed: rendering || _loading ? null : _export,
-          icon: const Icon(Icons.audio_file),
-          label: const Text('Xuất âm thanh (M4A)'),
+          onPressed: busy || _loading ? null : _exportVideo,
+          icon: const Icon(Icons.movie),
+          label: const Text('Xuất video sóng nhạc (9:16)'),
           style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
         ),
-        if (rendering) ...[
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: busy || _loading ? null : _exportAudio,
+          icon: const Icon(Icons.audio_file),
+          label: const Text('Xuất âm thanh (M4A)'),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size.fromHeight(48),
+          ),
+        ),
+        if (busy) ...[
           const SizedBox(height: 8),
-          LinearProgressIndicator(value: _render?.progress),
-          TextButton(
-            onPressed: () => _renderer?.cancel(),
-            child: const Text('Huỷ'),
+          Text(_busyLabel!),
+          const SizedBox(height: 4),
+          LinearProgressIndicator(value: _progress),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: _cancelExport,
+              child: const Text('Huỷ'),
+            ),
           ),
         ],
         if (_exportError != null)
           Text(_exportError!, style: TextStyle(color: theme.colorScheme.error)),
-        if (_exportPath != null && _render != null)
-          _ExportResult(path: _exportPath!, status: _render!, onShare: _share),
+        if (_videoPath case final v? when !busy)
+          _ExportResult(
+            title: 'Video 9:16',
+            path: v,
+            status: _audioStatus,
+            onShare: () => _share(v),
+            onSave: () => _saveVideo(v),
+          ),
+        if (_audioPath case final a? when !busy)
+          _ExportResult(
+            title: 'Âm thanh M4A',
+            path: a,
+            status: _audioStatus,
+            onShare: () => _share(a),
+          ),
       ],
     );
   }
@@ -460,20 +578,24 @@ class _ReviewPageState extends State<ReviewPage> {
 
 class _ExportResult extends StatelessWidget {
   const _ExportResult({
+    required this.title,
     required this.path,
     required this.status,
     required this.onShare,
+    this.onSave,
   });
 
+  final String title;
   final String path;
-  final RenderStatus status;
+  final RenderStatus? status;
   final VoidCallback onShare;
+  final VoidCallback? onSave;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final size = File(path).existsSync() ? File(path).lengthSync() : 0;
-    final lufs = status.outputLufs;
+    final lufs = status?.outputLufs;
     return Card(
       margin: const EdgeInsets.only(top: 8),
       child: Padding(
@@ -481,16 +603,32 @@ class _ExportResult extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Đã xuất', style: theme.textTheme.titleMedium),
+            Text('Đã xuất: $title', style: theme.textTheme.titleMedium),
             Text(
-              '${formatDuration(status.duration)} · ${formatBytes(size)}'
-              '${lufs == null ? '' : ' · ${lufs.toStringAsFixed(1).replaceAll('.', ',')} LUFS'}',
+              [
+                if (status != null) formatDuration(status!.duration),
+                formatBytes(size),
+                if (lufs != null)
+                  '${lufs.toStringAsFixed(1).replaceAll('.', ',')} LUFS',
+              ].join(' · '),
             ),
             const SizedBox(height: 8),
-            FilledButton.tonalIcon(
-              onPressed: onShare,
-              icon: const Icon(Icons.ios_share),
-              label: const Text('Chia sẻ'),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (onSave != null)
+                  FilledButton.icon(
+                    onPressed: onSave,
+                    icon: const Icon(Icons.photo_library),
+                    label: const Text('Lưu vào Ảnh'),
+                  ),
+                FilledButton.tonalIcon(
+                  onPressed: onShare,
+                  icon: const Icon(Icons.ios_share),
+                  label: const Text('Chia sẻ'),
+                ),
+              ],
             ),
           ],
         ),

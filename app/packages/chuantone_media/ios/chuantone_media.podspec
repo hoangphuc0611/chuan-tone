@@ -15,6 +15,7 @@ A new Flutter plugin project.
   s.source           = { :path => '.' }
   s.source_files = 'chuantone_media/Sources/chuantone_media/**/*'
   s.dependency 'Flutter'
+  s.frameworks = 'AVFoundation', 'Accelerate', 'CoreText', 'Photos'
   s.platform = :ios, '15.0'
 
   # Flutter.framework does not contain a i386 slice.

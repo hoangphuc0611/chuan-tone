@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:chuantone/data/take_store.dart';
+import 'package:chuantone/engine/labels.dart';
 import 'package:chuantone/engine/take_alignment.dart';
 import 'package:chuantone/engine/takes.dart';
 import 'package:chuantone/data/song_ref.dart';
@@ -103,6 +104,23 @@ void main() {
       expect(t[0].key, const MusicKey(2, MusicScale.major));
       expect(t[1].start, const Duration(seconds: 50));
       expect(t[1].key, const MusicKey(11, MusicScale.naturalMinor));
+    });
+  });
+
+  group('nhãn bản thu', () {
+    test('tên bài, dung lượng, ngày, giọng sớm / muộn, màu thể loại', () {
+      expect(songTitle('Lạc trôi.m4a'), 'Lạc trôi');
+      expect(songTitle('.ẩn'), '.ẩn');
+      expect(formatBytes(512 * 1024), '512 KB');
+      expect(formatBytes(4831838), '4,6 MB');
+      expect(formatTakeDate(DateTime(2026, 11, 2, 9, 5)), '02/11 09:05');
+      expect(nudgeLabel(0), 'Như lúc thu');
+      expect(nudgeLabel(10), 'Giọng sớm hơn 10 ms');
+      expect(nudgeLabel(-5), 'Giọng muộn hơn 5 ms');
+      expect(
+        Genre.values.map(genreColor).toSet(),
+        hasLength(Genre.values.length),
+      );
     });
   });
 
