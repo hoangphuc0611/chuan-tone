@@ -110,6 +110,12 @@ class AppSettings {
     'normalize': p.normalize,
   });
 
+  /// Đã xong (hoặc bỏ qua) hướng dẫn lần đầu.
+  Future<bool> onboardingDone() async => await _get('onboardingDone') == true;
+
+  Future<void> setOnboardingDone(bool done) =>
+      _set('onboardingDone', done ? true : null);
+
   /// Cho mẹo [id] hiện lại (Cài đặt → Trợ giúp).
   Future<void> resetTip(String id) => _set('tipShown.$id', null);
 

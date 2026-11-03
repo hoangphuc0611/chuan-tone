@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Màu ChuẩnTone (M8 B5): nền màn khởi động, nền icon thích ứng. -->
+    <color name="splash_background">#E5484D</color>
+    <color name="ic_launcher_background">#D63C44</color>
+</resources>

@@ -12,6 +12,7 @@ import '../data/take_store.dart';
 import '../engine/audio_service.dart';
 import '../engine/labels.dart';
 import '../engine/takes.dart';
+import '../widgets/error_text.dart';
 import '../widgets/fx_panel.dart';
 import '../widgets/gain_slider.dart';
 
@@ -37,6 +38,7 @@ class _ReviewPageState extends State<ReviewPage> {
   Timer? _ticker;
   bool _loading = true;
   String? _error;
+  String? _errorDetails;
   PlaybackState? _playback;
   double? _drag;
   RangeValues? _trimDrag;
@@ -51,6 +53,7 @@ class _ReviewPageState extends State<ReviewPage> {
   String? _audioKey;
   String? _videoPath;
   String? _exportError;
+  String? _exportDetails;
   // Cài đặt → Xuất (đọc lại mỗi lần xuất: người dùng có thể vừa đổi).
   late final AppSettings _settings = AppSettings(baseDir: _store.baseDir);
 
@@ -109,10 +112,13 @@ class _ReviewPageState extends State<ReviewPage> {
       if (at != null) e.seek(at);
       if (play) e.play();
       _error = null;
+      _errorDetails = null;
     } on ToneCoreException catch (err) {
-      _error = 'Không mở được bản thu (${err.codeName}).';
-    } on TimeoutException {
-      _error = 'Mở bản thu quá lâu.';
+      _error = 'Không mở được bản thu này. File có thể đã bị xoá.';
+      _errorDetails = errorDetails(err);
+    } on TimeoutException catch (err) {
+      _error = 'Mở bản thu quá lâu. Hãy thử lại.';
+      _errorDetails = errorDetails(err);
     }
     if (mounted) {
       setState(() {
@@ -168,6 +174,7 @@ class _ReviewPageState extends State<ReviewPage> {
     final out = '${_take.dir.path}/xuat-${_stamp()}.m4a';
     setState(() {
       _exportError = null;
+      _exportDetails = null;
       _busyLabel = 'Đang trộn âm thanh…';
       _progress = 0;
     });
@@ -195,7 +202,8 @@ class _ReviewPageState extends State<ReviewPage> {
       return out;
     } on ToneCoreException catch (err) {
       if (err.code != TcResult.cancelled) {
-        _exportError = 'Xuất lỗi (${err.codeName}).';
+        _exportError = 'Xuất chưa được. Hãy thử lại; nếu vẫn lỗi, xoá bớt file ở Cài đặt → Bộ nhớ.';
+        _exportDetails = errorDetails(err);
       }
       return null;
     } finally {
@@ -222,6 +230,7 @@ class _ReviewPageState extends State<ReviewPage> {
       _busyLabel = 'Đang ghép video…';
       _progress = null;
       _exportError = null;
+      _exportDetails = null;
     });
     try {
       await ChuanToneMedia.muxVideo(
@@ -237,7 +246,8 @@ class _ReviewPageState extends State<ReviewPage> {
       }
       _videoPath = out;
     } on PlatformException catch (err) {
-      _exportError = 'Ghép video lỗi: ${err.message ?? err.code}';
+      _exportError = 'Ghép video chưa được. Hãy thử lại.';
+      _exportDetails = errorDetails(err);
     } on MissingPluginException {
       _exportError = 'Máy này chưa ghép được video.';
     } finally {
@@ -260,6 +270,7 @@ class _ReviewPageState extends State<ReviewPage> {
       _busyLabel = 'Đang dựng video…';
       _progress = 0;
       _exportError = null;
+      _exportDetails = null;
     });
     final poll = Timer.periodic(const Duration(milliseconds: 250), (_) async {
       final p = await ChuanToneMedia.progress();
@@ -285,7 +296,8 @@ class _ReviewPageState extends State<ReviewPage> {
         _exportError = 'Máy này chưa dựng được video (sẽ có trên Android sau).';
       }
     } on PlatformException catch (err) {
-      _exportError = 'Dựng video lỗi: ${err.message ?? err.code}';
+      _exportError = 'Dựng video chưa được. Hãy thử lại.';
+      _exportDetails = errorDetails(err);
     } finally {
       poll.cancel();
       if (mounted) {
@@ -321,7 +333,14 @@ class _ReviewPageState extends State<ReviewPage> {
         null => 'Máy này chưa lưu được vào Ảnh.',
       };
     } on PlatformException catch (err) {
-      msg = 'Không lưu được: ${err.message ?? err.code}';
+      if (mounted) {
+        showErrorSnack(
+          context,
+          'Chưa lưu được vào Ảnh. Hãy thử lại, hoặc kiểm tra bộ nhớ máy.',
+          details: errorDetails(err),
+        );
+      }
+      return;
     }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
@@ -417,10 +436,7 @@ class _ReviewPageState extends State<ReviewPage> {
         if (_error != null)
           Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: Text(
-              _error!,
-              style: TextStyle(color: theme.colorScheme.error),
-            ),
+            child: ErrorText(_error!, details: _errorDetails),
           ),
         const SizedBox(height: 8),
         // ---- Phát ----
@@ -624,7 +640,7 @@ class _ReviewPageState extends State<ReviewPage> {
           ),
         ],
         if (_exportError != null)
-          Text(_exportError!, style: TextStyle(color: theme.colorScheme.error)),
+          ErrorText(_exportError!, details: _exportDetails),
         if (_videoPath case final v? when !busy)
           _ExportResult(
             title: 'Video 9:16',

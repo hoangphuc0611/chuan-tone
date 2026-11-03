@@ -1,9 +1,12 @@
 package vn.chuantone.chuantone
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.OpenableColumns
+import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -30,6 +33,27 @@ class MainActivity : FlutterActivity() {
                 } else {
                     result.notImplemented()
                 }
+            }
+        }
+        // Quyền micro (M8 B5, hướng dẫn lần đầu): xem trạng thái, mở trang Cài đặt của app. Xin quyền
+        // do plugin tonecore_flutter làm.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "chuantone/system").setMethodCallHandler { call, result ->
+            when (call.method) {
+                "micPermission" -> result.success(
+                    if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                        "granted"
+                    } else {
+                        "undetermined"
+                    }
+                )
+                "openAppSettings" -> {
+                    startActivity(
+                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                    result.success(null)
+                }
+                else -> result.notImplemented()
             }
         }
         handleIntent(intent)

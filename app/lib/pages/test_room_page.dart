@@ -114,6 +114,9 @@ class _TestRoomPageState extends State<TestRoomPage> {
             child: ListTile(
               leading: const Icon(Icons.info_outline),
               title: Text(message),
+              subtitle: !_pickError && c.messageDetails != null
+                  ? Text(c.messageDetails!)
+                  : null,
               trailing: IconButton(
                 icon: const Icon(Icons.close),
                 onPressed: () {
@@ -124,7 +127,7 @@ class _TestRoomPageState extends State<TestRoomPage> {
             ),
           ),
         // ---- Nhạc ----
-        Text('Nhạc beat', style: theme.textTheme.titleLarge),
+        Text('Nhạc', style: theme.textTheme.titleLarge),
         const SizedBox(height: 8),
         FilledButton.icon(
           onPressed: c.loading || c.recording ? null : _pickBeat,
@@ -214,6 +217,7 @@ class _TestRoomPageState extends State<TestRoomPage> {
             hasStems: c.hasStems,
             progress: c.sepProgress,
             error: c.sepError,
+            errorDetails: c.sepErrorDetails,
             lastResult: c.sepResult,
             vocalGain: c.service.vocalGain,
             onSeparate: () =>
@@ -500,7 +504,7 @@ class _KeyPicker extends StatelessWidget {
         Text(
           [
             followingSong ? 'Theo bài · chọn bên dưới để đổi tay' : 'Chọn tay',
-            if (transpose != 0) 'beat ${transposeLabel(transpose)}',
+            if (transpose != 0) 'nhạc ${transposeLabel(transpose)}',
           ].join(' · '),
           style: theme.textTheme.bodySmall,
         ),
@@ -577,7 +581,7 @@ class _MetricsCard extends StatelessWidget {
       ),
       ('Trễ xử lý', '${m.algorithmLatencyMs.toStringAsFixed(1)} ms'),
       ('Xrun (rè)', '${m.xruns}'),
-      ('Đổi tone beat', transposeTimingLabel(timing)),
+      ('Đổi tone nhạc', transposeTimingLabel(timing)),
       ('Sau khi đổi tone', watch),
       (
         'Phân tích bài',

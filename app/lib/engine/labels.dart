@@ -134,7 +134,7 @@ String? tuningNote(SongAnalysis a) {
   final c = a.tuningCents;
   if (c == null || c.abs() < 3) return null;
   final sign = c > 0 ? '+' : '−';
-  return 'Beat lệch $sign${c.abs().round()} cent so với chuẩn — chỉnh giọng đã theo đúng beat.';
+  return 'Nhạc lệch $sign${c.abs().round()} cent so với chuẩn — chỉnh giọng đã theo đúng nhạc.';
 }
 
 /// Đoạn đầu / cuối bài ngắn hơn mức này (dạo đầu, phần kết của MV…) không kể là chuyển tone.

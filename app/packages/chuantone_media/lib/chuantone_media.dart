@@ -219,3 +219,45 @@ class IncomingFile {
   final String path;
   final String name;
 }
+
+/// Trạng thái quyền micro.
+enum MicStatus { granted, denied, undetermined }
+
+/// Quyền micro và trang Cài đặt của máy (kênh `chuantone/system`, M8 B5 — hướng dẫn lần đầu).
+/// iOS: plugin này; Android: `MainActivity` (xin quyền do plugin tonecore_flutter làm).
+abstract final class SystemPermissions {
+  static const _channel = MethodChannel('chuantone/system');
+
+  /// Trạng thái hiện tại; nền tảng chưa hỗ trợ (máy tính, test) → [MicStatus.granted].
+  static Future<MicStatus> micStatus() async {
+    try {
+      final s = await _channel.invokeMethod<String>('micPermission');
+      return switch (s) {
+        'denied' => MicStatus.denied,
+        'undetermined' => MicStatus.undetermined,
+        _ => MicStatus.granted,
+      };
+    } on MissingPluginException {
+      return MicStatus.granted;
+    }
+  }
+
+  /// Hiện hộp thoại xin quyền micro của iOS (chỉ lần đầu); true = được phép. Nền tảng khác → null
+  /// (Android xin qua `MicPermission.request` của tonecore_flutter).
+  static Future<bool?> requestMicIOS() async {
+    try {
+      return await _channel.invokeMethod<bool>('requestMic');
+    } on MissingPluginException {
+      return null;
+    }
+  }
+
+  /// Mở trang Cài đặt của ChuẩnTone (bật lại quyền micro / camera / ảnh).
+  static Future<void> openAppSettings() async {
+    try {
+      await _channel.invokeMethod<void>('openAppSettings');
+    } on MissingPluginException {
+      // máy tính / test
+    }
+  }
+}

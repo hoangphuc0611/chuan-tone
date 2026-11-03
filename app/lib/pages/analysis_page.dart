@@ -97,7 +97,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
     } on ToneCoreException catch (err) {
       _analysisError = err.code == TcResult.cancelled
           ? null
-          : 'Không phân tích được bài (${err.codeName}).';
+          : 'Chưa dò được tone của bài. Bạn vẫn hát được và sửa tone tay được.';
     } on TimeoutException {
       _analysisError = 'Phân tích bài quá lâu.';
     } finally {

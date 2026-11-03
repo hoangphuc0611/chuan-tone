@@ -9,11 +9,14 @@ import 'data/song_library.dart';
 import 'data/take_store.dart';
 import 'engine/labels.dart';
 import 'engine_info.dart';
+import 'data/app_settings.dart';
 import 'pages/analysis_page.dart';
+import 'pages/onboarding_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/sing_page.dart';
 import 'pages/songs_page.dart';
 import 'pages/takes_page.dart';
+import 'theme.dart';
 
 /// Báo cho Trang chủ khi quay lại từ màn khác (để cập nhật "Hát tiếp", số bản thu…).
 final homeRouteObserver = RouteObserver<ModalRoute<void>>();
@@ -133,12 +136,68 @@ class _ChuanToneAppState extends State<ChuanToneApp> {
       navigatorKey: _navigator,
       scaffoldMessengerKey: _messenger,
       navigatorObservers: [homeRouteObserver],
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFE5484D)),
-        useMaterial3: true,
-      ),
-      home: HomePage(engineInfo: widget.engineInfo, library: _library),
+      theme: appTheme(Brightness.light),
+      darkTheme: appTheme(Brightness.dark),
+      locale: appLocale,
+      supportedLocales: const [appLocale],
+      localizationsDelegates: appLocalizationsDelegates,
+      home: _StartGate(engineInfo: widget.engineInfo, library: _library),
     );
+  }
+}
+
+/// Mở app: lần đầu (chưa xong hướng dẫn, engine chạy được) → hướng dẫn; xong thì Trang chủ, làm
+/// luôn việc người dùng chọn ở bước cuối.
+class _StartGate extends StatefulWidget {
+  const _StartGate({required this.engineInfo, required this.library});
+
+  final EngineInfo engineInfo;
+  final SongLibrary library;
+
+  @override
+  State<_StartGate> createState() => _StartGateState();
+}
+
+class _StartGateState extends State<_StartGate> {
+  bool? _onboarding;
+  OnboardingExit? _action;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!widget.engineInfo.ok) {
+      _onboarding = false; // engine lỗi: Trang chủ báo lỗi
+    } else {
+      unawaited(_load());
+    }
+  }
+
+  Future<void> _load() async {
+    var done = true;
+    try {
+      done = await AppSettings(baseDir: widget.library.baseDir)
+          .onboardingDone();
+    } catch (_) {}
+    if (mounted) setState(() => _onboarding = !done);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return switch (_onboarding) {
+      null => const Scaffold(),
+      true => OnboardingPage(
+        settings: AppSettings(baseDir: widget.library.baseDir),
+        onFinish: (exit) => setState(() {
+          _onboarding = false;
+          _action = exit;
+        }),
+      ),
+      false => HomePage(
+        engineInfo: widget.engineInfo,
+        library: widget.library,
+        initialAction: _action,
+      ),
+    };
   }
 }
 
@@ -152,10 +211,14 @@ class HomePage extends StatefulWidget {
     required this.library,
     this.takes,
     this.onSing,
+    this.initialAction,
   });
 
   final EngineInfo engineInfo;
   final SongLibrary library;
+
+  /// Việc chọn ở bước cuối của hướng dẫn lần đầu (thêm bài / hát bài mẫu).
+  final OnboardingExit? initialAction;
 
   /// Kho bản thu (null = cùng thư mục dữ liệu với [library]).
   final TakeStore? takes;
@@ -184,6 +247,17 @@ class _HomePageState extends State<HomePage> with RouteAware {
   void initState() {
     super.initState();
     unawaited(_reload());
+    final action = widget.initialAction;
+    if (action != null && action != OnboardingExit.home) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (action == OnboardingExit.addSong) {
+          unawaited(_addSong());
+        } else {
+          unawaited(_openSample(sampleSongs.first));
+        }
+      });
+    }
   }
 
   @override

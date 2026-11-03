@@ -12,6 +12,7 @@ import '../engine/labels.dart';
 import '../engine/sing_controller.dart';
 import '../widgets/analysis_widgets.dart';
 import '../widgets/coach_marks.dart';
+import '../widgets/error_text.dart';
 import '../widgets/gain_slider.dart';
 import '../widgets/lyrics_view.dart';
 import '../widgets/pitch_meter.dart';
@@ -68,9 +69,7 @@ class _SingPageState extends State<SingPage> {
     final msg = _c.message;
     if (msg != null && _c.messageId != _shownMessage) {
       _shownMessage = _c.messageId;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(msg)));
+      showErrorSnack(context, msg, details: _c.messageDetails);
     }
     // Mẹo chờ dò tone xong: chữ tone đổi kích thước làm lệch chỗ được chỉ.
     if (!_tipsChecked && _c.song != null && !_c.loading && !_c.analyzing) {
@@ -227,6 +226,7 @@ class _SingPageState extends State<SingPage> {
                     hasStems: _c.hasStems,
                     progress: _c.sepProgress,
                     error: _c.sepError,
+                    errorDetails: _c.sepErrorDetails,
                     lastResult: _c.sepResult,
                     vocalGain: _c.service.vocalGain,
                     onSeparate: () => _c.separate(
@@ -621,9 +621,10 @@ class _TransportBar extends StatelessWidget {
         : null;
     final playing = pb?.playing ?? false;
     final red = theme.colorScheme.error;
+    // Nút thu luôn đỏ chữ trắng (màu "lỗi" của giao diện tối là hồng nhạt).
     final recordStyle = FilledButton.styleFrom(
-      backgroundColor: red,
-      foregroundColor: theme.colorScheme.onError,
+      backgroundColor: const Color(0xFFD32F2F),
+      foregroundColor: Colors.white,
       minimumSize: const Size.fromHeight(56),
       textStyle: theme.textTheme.titleMedium,
     );

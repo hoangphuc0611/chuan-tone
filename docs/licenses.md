@@ -12,6 +12,8 @@ Quy tắc (CLAUDE.md mục 0.2): chỉ MIT / BSD / Apache-2.0 / Zlib / ISC. LGPL
 | Dart `ffigen` | theo pubspec | BSD-3-Clause | sinh binding (dev) | Không |
 | Flutter SDK | 3.47.7 (ghim bằng `.fvmrc`) | BSD-3-Clause | `app`, `bindings` | Có |
 | cupertino_icons | ^1.0.8 | MIT | `app` | Có |
+| flutter_localizations | theo Flutter SDK | BSD-3-Clause | `app` – chữ có sẵn của Flutter bằng tiếng Việt (M8 B5) | Có |
+| intl | theo flutter_localizations | BSD-3-Clause | phụ thuộc của flutter_localizations | Có |
 | flutter_lints | ^6.0.0 | BSD-3-Clause | kiểm tra code (dev) | Không |
 | Oboe | 1.11.0 (Gradle prefab) | Apache-2.0 | `engine/src/io/android`. Toàn văn Apache-2.0 (`app/assets/licenses/apache-2.0.txt`) hiện ở Cài đặt → Giấy phép thư viện (`registerNativeLicenses` trong `app/lib/main.dart`; giấy phép gói Dart do Flutter tự gom) | Có (Android) |
 | dr_wav / dr_mp3 / dr_flac | commit `dfe8377` (`engine/third_party/dr_libs/COMMIT`) | Public domain / MIT-0 | giải mã cho bản host (test, CI, `tcflac` của server); dr_flac từ M6 | Không |
@@ -61,6 +63,7 @@ Quyền micro tự làm trong plugin (Java + AVAudioSession), không dùng `perm
 
 | Nội dung | Nguồn | Quyền |
 |---|---|---|
+| Icon app + hình màn khởi động (M8 B5) | Vẽ bằng code của dự án: `app/tool/icon/render_icon_test.dart` (micro + sóng âm), tạo các cỡ bằng `app/tool/icon/make_icons.sh` (`sips` của macOS). Không dùng hình / bộ icon của bên thứ ba | Thuộc dự án |
 | Bài mẫu luyện giọng `app/assets/samples/*.m4a` + lời `*.lrc` (M8 B3) | Tạo hoàn toàn bằng code của dự án: `tools/samples/make_samples.dart` (tổng hợp piano / bass / trống / giai điệu dẫn, nén AAC bằng `afconvert` của macOS). Không dùng bản thu, mẫu âm thanh, giai điệu hay lời của bài hát nào | Thuộc dự án — đóng gói được (CLAUDE.md mục 8). App không kèm lời / beat của bài có bản quyền; người dùng tự nạp lời `.lrc` của họ |
 
 ## Dữ liệu test (không đóng gói vào app, không commit)

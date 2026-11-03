@@ -56,4 +56,23 @@ void main() {
     expect(find.text('Cao 80 cent'), findsOneWidget);
     expect(find.textContaining('Đang chỉnh'), findsNothing);
   });
+
+  testWidgets('đồng hồ gọn (Màn hát): lời thường, không có "cent"', (
+    tester,
+  ) async {
+    Future<void> show(double cents) => tester.pumpWidget(
+      _wrap(PitchMeter(state: _state(cents: cents), compact: true)),
+    );
+    await show(4);
+    expect(find.text('Đúng tone'), findsOneWidget);
+    await show(18);
+    expect(find.text('Hơi cao'), findsOneWidget);
+    await show(-40);
+    expect(find.text('Thấp quá'), findsOneWidget);
+    await show(-15);
+    expect(find.text('Hơi thấp'), findsOneWidget);
+    await show(30);
+    expect(find.text('Cao quá'), findsOneWidget);
+    expect(find.textContaining('cent'), findsNothing);
+  });
 }

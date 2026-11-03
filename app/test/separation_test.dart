@@ -192,11 +192,9 @@ void main() {
     await expectLater(
       client().separate(src, dir),
       throwsA(
-        isA<SeparationException>().having(
-          (e) => e.message,
-          'message',
-          contains('Boom'),
-        ),
+        isA<SeparationException>()
+            .having((e) => e.message, 'message', contains('Hãy thử lại'))
+            .having((e) => e.details, 'details', contains('Boom')),
       ),
     );
     expect(src.cancelled, isTrue);

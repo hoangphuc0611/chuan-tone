@@ -14,6 +14,7 @@ import '../widgets/separation_panel.dart';
 import 'latency_page.dart';
 import 'latency_wizard_page.dart';
 import 'mic_page.dart';
+import 'onboarding_page.dart';
 import 'test_room_page.dart';
 
 /// Phiên bản app (flutter tool truyền tên bản build lúc biên dịch).
@@ -267,6 +268,19 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           const _Header('Trợ giúp'),
+          ListTile(
+            leading: const Icon(Icons.school_outlined),
+            title: const Text('Xem lại hướng dẫn'),
+            subtitle: const Text('Micro, đo máy, tai nghe, thử giọng'),
+            enabled: _ok,
+            onTap: () => _push(
+              OnboardingPage(
+                settings: _settings,
+                service: widget.service,
+                onFinish: (_) => Navigator.of(context).pop(),
+              ),
+            ),
+          ),
           ListTile(
             leading: const Icon(Icons.tips_and_updates_outlined),
             title: const Text('Mẹo hát'),

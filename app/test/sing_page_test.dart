@@ -302,7 +302,8 @@ void main() {
     await settle(tester, () => c.message != null);
     await tester.pump();
     expect(find.byType(SnackBar), findsOneWidget);
-    expect(find.textContaining('Không mở được file'), findsOneWidget);
+    expect(find.textContaining('Không mở được bài này'), findsOneWidget);
+    expect(find.text('Chi tiết'), findsOneWidget); // chữ kỹ thuật để ở nút này
     await close(tester, c, service);
   }, skip: skip != null);
 }

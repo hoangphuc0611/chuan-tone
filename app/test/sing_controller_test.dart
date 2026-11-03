@@ -324,7 +324,8 @@ void main() {
     await c.openSong(
       SongRef(path: '${dir.path}/khong-co.mp3', name: 'khong-co.mp3', size: 1),
     );
-    expect(c.message, contains('Không mở được file'));
+    expect(c.message, contains('Không mở được bài này'));
+    expect(c.messageDetails, contains('tc_load_beat'));
     expect(c.messageId, id + 1);
     expect(c.song?.name, song.name);
     expect(c.loading, isFalse);
@@ -398,7 +399,7 @@ void main() {
     expect(await c.start(initial: song), isFalse);
     expect(c.engine, isNull);
     expect(c.starting, isFalse);
-    expect(c.startError, contains('Không mở được thiết bị âm thanh'));
+    expect(c.startError, contains('Không mở được âm thanh'));
     // Lệnh khi chưa có engine: không làm gì, không lỗi.
     c.setTranspose(1);
     c.playPause();

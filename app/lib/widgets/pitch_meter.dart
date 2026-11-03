@@ -31,6 +31,12 @@ class PitchMeter extends StatelessWidget {
       hint = 'Hãy hát để xem cao độ';
     } else if (inTune) {
       hint = 'Đúng tone';
+    } else if (compact) {
+      // Màn hát: lời thường, không dùng đơn vị "cent" (bảng thuật ngữ M8).
+      final far = s.centsOff.abs() > 25;
+      hint = s.centsOff > 0
+          ? (far ? 'Cao quá' : 'Hơi cao')
+          : (far ? 'Thấp quá' : 'Hơi thấp');
     } else {
       hint = s.centsOff > 0
           ? 'Cao ${s.centsOff.round()} cent'

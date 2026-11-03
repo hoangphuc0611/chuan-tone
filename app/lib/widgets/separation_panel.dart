@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../engine/labels.dart';
 import '../engine/separation_client.dart';
+import 'error_text.dart';
 import 'gain_slider.dart';
 
 /// Tách giọng ca sĩ cho bài đang nạp (M6): nút tách (chỉ cho bài gốc có giọng), tiến độ, thanh
@@ -21,6 +22,7 @@ class SeparationPanel extends StatelessWidget {
     required this.onVocalGain,
     this.noServerHint = 'Nhập địa chỉ máy chủ tách giọng ở cuối trang.',
     this.showTitle = true,
+    this.errorDetails,
   });
 
   final bool hasServer;
@@ -39,6 +41,9 @@ class SeparationPanel extends StatelessWidget {
   /// Câu hướng dẫn khi chưa có máy chủ tách giọng.
   final String noServerHint;
   final bool showTitle;
+
+  /// Chữ kỹ thuật của lỗi (nút "Chi tiết").
+  final String? errorDetails;
 
   @override
   Widget build(BuildContext context) {
@@ -95,7 +100,7 @@ class SeparationPanel extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             hasServer
-                ? 'Dùng cho bài gốc có giọng ca sĩ. Beat karaoke thì không cần.'
+                ? 'Dùng cho bài gốc có giọng ca sĩ. Nhạc karaoke (không lời) thì không cần.'
                 : noServerHint,
             style: theme.textTheme.bodySmall,
           ),
@@ -103,10 +108,7 @@ class SeparationPanel extends StatelessWidget {
         if (error != null)
           Padding(
             padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              error!,
-              style: TextStyle(color: theme.colorScheme.error),
-            ),
+            child: ErrorText(error!, details: errorDetails),
           ),
       ],
     );

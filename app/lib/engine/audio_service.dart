@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:tonecore_flutter/tonecore_flutter.dart';
 
 import '../data/app_settings.dart';
+import '../widgets/error_text.dart' show errorDetails;
 import 'genre_rules.dart';
 import 'labels.dart';
 
@@ -38,7 +39,10 @@ class AudioService extends ChangeNotifier {
   StreamSubscription<ToneCoreEvent>? _eventSub;
   final _events = StreamController<ToneCoreEvent>.broadcast();
 
+  /// Lỗi mở âm thanh cho người dùng (câu thường kèm việc cần làm); [lastErrorDetails] = chữ kỹ
+  /// thuật cho nút "Chi tiết".
   String? lastError;
+  String? lastErrorDetails;
   bool micGranted = false;
 
   /// Tone chọn tay cho tự chỉnh giọng, tính theo beat GỐC (mặc định La thứ – tone phổ biến của
@@ -120,8 +124,11 @@ class AudioService extends ChangeNotifier {
       _eventSub = e.events.listen(_onEngineEvent);
       _applyAutoMonitor(e.metrics.route);
       lastError = null;
-    } on ToneCoreException catch (err) {
-      lastError = 'Không mở được thiết bị âm thanh (${err.codeName}).';
+      lastErrorDetails = null;
+    } catch (err) {
+      // Thiết bị âm thanh bận / lỗi, thiếu thư viện engine…
+      lastError = 'Không mở được âm thanh. Hãy tắt hẳn app rồi mở lại; nếu vẫn lỗi, khởi động lại máy.';
+      lastErrorDetails = errorDetails(err);
     }
     notifyListeners();
     return _engine != null;

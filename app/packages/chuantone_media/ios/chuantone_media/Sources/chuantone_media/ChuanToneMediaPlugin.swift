@@ -9,6 +9,7 @@ import UIKit
 public class ChuanToneMediaPlugin: NSObject, FlutterPlugin, FlutterSceneLifeCycleDelegate {
   private var waveform: WaveformVideo?
   private var incoming: IncomingFiles?
+  private var permissions: SystemPermissions?
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(name: "chuantone/media", binaryMessenger: registrar.messenger())
@@ -16,6 +17,8 @@ public class ChuanToneMediaPlugin: NSObject, FlutterPlugin, FlutterSceneLifeCycl
     registrar.addMethodCallDelegate(instance, channel: channel)
     instance.incoming = IncomingFiles(
       channel: FlutterMethodChannel(name: "chuantone/incoming", binaryMessenger: registrar.messenger()))
+    instance.permissions = SystemPermissions(
+      channel: FlutterMethodChannel(name: "chuantone/system", binaryMessenger: registrar.messenger()))
     registrar.addApplicationDelegate(instance)
     registrar.addSceneDelegate(instance)
     registrar.register(CameraPreviewFactory(), withId: "chuantone/camera-preview")

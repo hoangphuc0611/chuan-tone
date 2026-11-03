@@ -3,6 +3,7 @@
 import 'dart:io';
 
 import 'package:chuantone/app.dart';
+import 'package:chuantone/data/app_settings.dart';
 import 'package:chuantone/data/song_library.dart';
 import 'package:chuantone/engine_info.dart';
 import 'package:flutter/material.dart';
@@ -19,6 +20,10 @@ void main() {
     tester.view.physicalSize = const Size(800, 3200); // dựng cả trang Cài đặt
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
+    // Đã xong hướng dẫn lần đầu → mở thẳng Trang chủ.
+    await tester.runAsync(
+      () => AppSettings(baseDir: dir).setOnboardingDone(true),
+    );
     await tester.pumpWidget(
       ChuanToneApp(
         engineInfo: const EngineInfo(
@@ -30,6 +35,16 @@ void main() {
         library: SongLibrary(baseDir: dir),
       ),
     );
+    for (
+      var i = 0;
+      i < 100 && find.text('Bấm bài là hát').evaluate().isEmpty;
+      i++
+    ) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 5)),
+      );
+      await tester.pump(const Duration(milliseconds: 20));
+    }
     expect(find.text('ChuẩnTone'), findsOneWidget);
     expect(find.text('Bấm bài là hát'), findsOneWidget);
     expect(find.text('ToneCore v0.1.0 – engine OK'), findsNothing);

@@ -110,7 +110,31 @@
   - Test app 154 (+11): cài đặt mới, bộ nhớ, đánh giá độ trễ + dòng CSV, trình đo từng bước, trang
     Cài đặt (lưu lựa chọn, xoá có hỏi lại, 320 px chữ 130%), tự nghe lại giọng theo đường tiếng,
     micro đã chọn tới engine, trang Micro (thanh mức, cảnh báo vỡ tiếng) với engine thật.
-- [ ] B5 — Hướng dẫn lần đầu, Việt hoá phần còn lại, icon, thông báo lỗi
+- [~] **B5** (2026-11-03, chờ thử trên iPhone ở B7): hướng dẫn lần đầu, Việt hoá, thông báo lỗi, icon,
+  giao diện tối.
+  - **Hướng dẫn lần đầu** (`pages/onboarding_page.dart`, 6 bước, nút luôn ở đáy màn hình): Chào (3 ý)
+    → Micro (giải thích trước, rồi mới hiện hộp hỏi quyền của iOS; bị từ chối thì "Mở Cài đặt" của
+    máy hoặc "Để sau") → Đo nhanh qua loa (kết quả bằng lời, lưu để căn giọng khi thu) → Tai nghe
+    (nhận ra có dây / Bluetooth / loa ngoài) → Thử giọng (thanh mức micro, nghe lại có vang của Ballad
+    rồi trả thể loại cũ; "Chưa" thì hiện mẹo) → Xong ("Thêm bài hát đầu tiên" mở bộ chọn file, "Hát
+    thử bài mẫu" vào Màn hát). Chỉ hiện lần đầu (engine chạy được); "Bỏ qua" được; xem lại ở Cài đặt
+    → Trợ giúp. Quyền micro qua kênh `chuantone/system` (iOS plugin `SystemPermissions.swift`,
+    Android `MainActivity`).
+  - **Việt hoá**: `flutter_localizations` + `Locale('vi')` (Quay lại, Huỷ, Sao chép, trang giấy phép…),
+    iOS `CFBundleDevelopmentRegion = vi`. Áp bảng thuật ngữ: bỏ "beat" còn sót (Phòng thử, ghi chú
+    tuning, khung tách giọng); đồng hồ cao độ ở Màn hát nói "Hơi cao / Cao quá / Hơi thấp / Thấp quá"
+    thay vì số cent (Phòng thử vẫn hiện số).
+  - **Thông báo lỗi**: câu thường kèm việc cần làm; chữ kỹ thuật (mã lỗi engine, lỗi máy chủ, mã
+    HTTP) để ở nút **"Chi tiết"** (thanh thông báo / dòng lỗi, sao chép được). Áp cho Màn hát / bộ điều
+    khiển phiên hát, Nghe lại & xuất, Phân tích bài, tách giọng, mở âm thanh (bắt cả lỗi thiếu thư
+    viện engine).
+  - **Icon + màn khởi động**: vẽ bằng code (micro + sóng âm trắng trên nền đỏ chuyển màu,
+    `tool/icon/`), iOS đủ cỡ (bỏ kênh trong suốt), Android icon thích ứng + icon cũ, màn khởi động
+    nền đỏ có micro (iOS storyboard, Android `launch_background` + Android 12 `values-v31`).
+  - **Giao diện tối** theo cài đặt của máy (cùng màu chủ đạo); nút Thu luôn đỏ chữ trắng.
+  - Test app 159 (+5): hướng dẫn đi hết 6 bước (micro bị từ chối, đo, tai nghe, thử giọng, bài mẫu),
+    đã có quyền → không hỏi lại, mở app lần đầu vào hướng dẫn / lần sau thẳng Trang chủ, 320 px chữ
+    130% từng bước; đồng hồ cao độ gọn không có "cent"; câu lỗi mới + nút Chi tiết.
 - [ ] B6 — Chế độ soundcard (OTG)
 - [ ] B7 — Chạy nền ngắn, nhật ký thử nghiệm, thử nội bộ 1–2 người
 - [ ] B8 — Thử với 5 người dùng → sửa → báo cáo M8

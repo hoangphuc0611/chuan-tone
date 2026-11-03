@@ -81,14 +81,18 @@ class SeparationResult {
 }
 
 class SeparationException implements Exception {
-  SeparationException(this.message, {this.status});
+  SeparationException(this.message, {this.status, this.details});
 
-  /// Câu báo lỗi tiếng Việt cho người dùng.
+  /// Câu báo lỗi tiếng Việt cho người dùng (kèm việc cần làm).
   final String message;
   final int? status;
 
+  /// Chữ kỹ thuật cho nút "Chi tiết" (mã HTTP, lỗi của máy chủ…).
+  final String? details;
+
   @override
-  String toString() => 'SeparationException($status): $message';
+  String toString() =>
+      'SeparationException($status): $message${details == null ? '' : ' — $details'}';
 }
 
 /// Huỷ một lần tách đang chạy.
@@ -131,8 +135,9 @@ class SeparationClient {
     final j = _json(r.body);
     if (r.status != 200 || j['ok'] != true) {
       throw SeparationException(
-        'Máy chủ trả lời lạ (${r.status}).',
+        'Địa chỉ này không phải máy chủ tách giọng của ChuẩnTone. Kiểm tra lại địa chỉ.',
         status: r.status,
+        details: 'GET /v1/health → ${r.status}',
       );
     }
     return ServerInfo(
@@ -232,7 +237,8 @@ class SeparationClient {
         final st = _json(r.body);
         if (st['state'] == 'failed') {
           throw SeparationException(
-            'Máy chủ tách lỗi: ${st['error'] ?? 'không rõ'}.',
+            'Máy chủ tách giọng bị lỗi khi tách bài này. Hãy thử lại sau ít phút.',
+            details: '${st['error'] ?? 'không rõ'}',
           );
         }
         serverProgress = (st['progress'] as num?)?.toDouble() ?? 0.0;
@@ -321,8 +327,9 @@ class SeparationClient {
         // Lỗi phía server (5xx): thử lại; lỗi do yêu cầu (4xx): báo ngay.
         if (res.statusCode >= 500 && a + 1 < attempts) {
           last = SeparationException(
-            'Máy chủ lỗi (${res.statusCode}).',
+            'Máy chủ tách giọng đang lỗi. Hãy thử lại sau ít phút.',
             status: res.statusCode,
+            details: 'HTTP ${res.statusCode}',
           );
           await Future<void>.delayed(Duration(milliseconds: 300 * (a + 1)));
           continue;
@@ -355,12 +362,16 @@ class SeparationClient {
   static void _expect(({int status, List<int> body}) r, int status) {
     if (r.status == status) return;
     final msg = _json(r.body)['error'];
-    throw SeparationException(switch (r.status) {
-      404 =>
-        'Máy chủ không còn giữ bài này (có thể đã khởi động lại). Thử lại.',
-      413 => msg is String ? 'Bài $msg.' : 'Bài dài quá.',
-      429 => 'Hôm nay đã tách quá nhiều bài. Thử lại vào ngày mai.',
-      _ => 'Máy chủ từ chối (${r.status}${msg is String ? ': $msg' : ''}).',
-    }, status: r.status);
+    throw SeparationException(
+      switch (r.status) {
+        404 =>
+          'Máy chủ không còn giữ bài này (có thể đã khởi động lại). Thử lại.',
+        413 => msg is String ? 'Bài $msg.' : 'Bài dài quá.',
+        429 => 'Hôm nay đã tách quá nhiều bài. Thử lại vào ngày mai.',
+        _ => 'Máy chủ tách giọng không nhận bài này. Hãy thử lại sau.',
+      },
+      status: r.status,
+      details: 'HTTP ${r.status}${msg is String ? ': $msg' : ''}',
+    );
   }
 }

@@ -23,6 +23,7 @@ import 'separation_client.dart';
 import 'song_jobs.dart';
 import 'takes.dart';
 import 'transpose_timing.dart';
+import '../widgets/error_text.dart' show errorDetails;
 
 /// Camera trước khi thu (iOS, AVFoundation native qua plugin chuantone_media). Test thay bằng bản
 /// giả.
@@ -112,6 +113,7 @@ class SingController extends ChangeNotifier {
   SongRef? _song;
   String? _title;
   String? _message;
+  String? _messageDetails;
   int _messageId = 0;
   PlaybackState? _playback;
   EngineMetrics? _metrics;
@@ -142,6 +144,7 @@ class SingController extends ChangeNotifier {
   SeparationProgress? _sepProgress;
   SeparationCancel? _sepCancel;
   String? _sepError;
+  String? _sepErrorDetails;
   SeparationResult? _sepResult;
 
   // Thu âm (M7).
@@ -174,8 +177,10 @@ class SingController extends ChangeNotifier {
   /// Tên hiển thị của bài (tên trong thư viện).
   String? get title => _title;
 
-  /// Thông báo cho người dùng (lỗi, cảnh báo); [messageId] tăng mỗi thông báo mới.
+  /// Thông báo cho người dùng (lỗi, cảnh báo): câu thường kèm việc cần làm; [messageDetails] =
+  /// chữ kỹ thuật cho nút "Chi tiết". [messageId] tăng mỗi thông báo mới.
   String? get message => _message;
+  String? get messageDetails => _messageDetails;
   int get messageId => _messageId;
   PlaybackState? get playback => _playback;
   EngineMetrics? get metrics => _metrics;
@@ -209,6 +214,7 @@ class SingController extends ChangeNotifier {
   bool get hasStems => _vocals != null;
   SeparationProgress? get sepProgress => _sepProgress;
   String? get sepError => _sepError;
+  String? get sepErrorDetails => _sepErrorDetails;
   SeparationResult? get sepResult => _sepResult;
   bool get recording => _recording;
 
@@ -238,14 +244,16 @@ class SingController extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
-  void _show(String text) {
+  void _show(String text, {Object? error}) {
     _message = text;
+    _messageDetails = error == null ? null : errorDetails(error);
     _messageId++;
     _notify();
   }
 
   void clearMessage() {
     _message = null;
+    _messageDetails = null;
     _notify();
   }
 
@@ -348,7 +356,8 @@ class SingController extends ChangeNotifier {
       case ToneCoreEventType.streamRestarted:
         if (!ev.ok) {
           _show(
-            'Thiết bị âm thanh lỗi: ${ToneCoreException.resultName(ev.code)}',
+            'Âm thanh vừa bị lỗi. Hãy rút ra cắm lại tai nghe, hoặc tắt hẳn app rồi mở lại.',
+            error: ToneCoreException('stream', ev.code),
           );
           return;
         }
@@ -404,9 +413,12 @@ class SingController extends ChangeNotifier {
       unawaited(library.touch(song.name, song.size));
       _analyze(song, vocals);
     } on ToneCoreException catch (err) {
-      _show('Không mở được file (${err.codeName}). Hãy thử MP3, M4A hoặc WAV.');
-    } on TimeoutException {
-      _show('Nạp bài quá lâu.');
+      _show(
+        'Không mở được bài này. Hãy thử file MP3, M4A hoặc WAV khác.',
+        error: err,
+      );
+    } on TimeoutException catch (err) {
+      _show('Mở bài quá lâu. Hãy thử lại.', error: err);
     }
     _loading = false;
     _notify();
@@ -465,10 +477,10 @@ class SingController extends ChangeNotifier {
       return; // đã chọn bài khác: analyzer này bị dispose giữa chừng
     } on ToneCoreException catch (err) {
       if (err.code != TcResult.cancelled) {
-        _analysisError = 'Không phân tích được bài (${err.codeName}).';
+        _analysisError = 'Chưa dò được tone của bài. Bạn vẫn hát được; sửa tone tay ở ⋮ → Sửa tone của bài.';
       }
     } on TimeoutException {
-      _analysisError = 'Phân tích bài quá lâu.';
+      _analysisError = 'Dò tone quá lâu. Bạn vẫn hát được; sửa tone tay ở ⋮ → Sửa tone của bài.';
     } finally {
       _analyzer = null;
     }
@@ -694,13 +706,11 @@ class SingController extends ChangeNotifier {
           await camera.recordStart('${dir.path}/camera.mp4');
           _cameraRecording = true;
         } on PlatformException catch (err) {
-          _show(
-            'Không quay được video: ${err.message ?? err.code}. Vẫn thu âm.',
-          );
+          _show('Không quay được video, vẫn thu âm bình thường.', error: err);
         }
       }
     } on ToneCoreException catch (err) {
-      _show('Không thu được (${err.codeName}).');
+      _show('Chưa thu được. Hãy dừng nhạc rồi bấm Thu lại.', error: err);
       return;
     }
     if (!wasPlaying) e.play();
@@ -725,14 +735,17 @@ class SingController extends ChangeNotifier {
       try {
         clip = await camera.recordStop();
       } on PlatformException catch (err) {
-        _show('Video camera lỗi: ${err.message ?? err.code}');
+        _show('Video camera bị lỗi; phần thu âm vẫn được lưu.', error: err);
       }
     }
     final Take take;
     try {
       take = await _takes.stop(e, song, camera: clip);
     } on ToneCoreException catch (err) {
-      _show('Không lưu được bản thu (${err.codeName}).');
+      _show(
+        'Không lưu được bản thu. Máy có thể đã đầy — xoá bớt ở Cài đặt → Bộ nhớ.',
+        error: err,
+      );
       return null;
     }
     final review = onTake;
@@ -760,7 +773,10 @@ class SingController extends ChangeNotifier {
         _notify();
       }
     } on PlatformException catch (err) {
-      _show('Không mở được camera: ${err.message ?? err.code}');
+      _show(
+        'Không mở được camera. Hãy cho ChuẩnTone dùng camera trong Cài đặt của máy.',
+        error: err,
+      );
     }
   }
 
@@ -780,6 +796,7 @@ class SingController extends ChangeNotifier {
     }
     final cancel = _sepCancel = SeparationCancel();
     _sepError = null;
+    _sepErrorDetails = null;
     _sepResult = null;
     _sepProgress = SeparationProgress.start;
     _notify();
@@ -808,8 +825,9 @@ class SingController extends ChangeNotifier {
       _analyze(song, vocals);
     } on SeparationException catch (err) {
       _sepError = err.message;
-    } on ToneCoreException catch (err) {
-      _sepError = 'Không nạp được giọng đã tách (${err.codeName}).';
+      _sepErrorDetails = err.details;
+    } on ToneCoreException {
+      _sepError = 'Không dùng được giọng đã tách. Hãy tách lại.';
       await _stems.delete(name: song.name, size: song.size);
     } finally {
       _sepProgress = null;
@@ -831,7 +849,7 @@ class SingController extends ChangeNotifier {
     try {
       await e.loadBeatAndWait(song.path);
     } on ToneCoreException catch (err) {
-      _show('Không nạp lại được bài (${err.codeName}).');
+      _show('Không mở lại được bài. Hãy mở bài từ Trang chủ.', error: err);
       return;
     }
     _vocals = null;
