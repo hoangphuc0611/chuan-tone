@@ -146,6 +146,7 @@ RenderSettings renderSettingsFor(
   required FxPreset preset,
   RenderFormat format = RenderFormat.m4a,
   bool normalize = true,
+  int aacBitrate = 192000,
 }) => RenderSettings(
   voiceOffsetFrames: i.voiceOffsetFrames,
   startFrame: i.trimStartFrame,
@@ -163,6 +164,7 @@ RenderSettings renderSettingsFor(
   beatGain: i.beatGain,
   normalize: normalize,
   format: format,
+  aacBitrate: aacBitrate,
 );
 
 /// Thu âm trong Phòng thử: [start] mở thư mục + bắt đầu thu, [stop] dừng + lưu `take.json`.

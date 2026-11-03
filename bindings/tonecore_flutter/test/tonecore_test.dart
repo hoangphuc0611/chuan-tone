@@ -24,7 +24,7 @@ void main() {
   test('thông tin phiên bản', () {
     expect(ToneCore.isCompatible, isTrue);
     expect(ToneCore.version, isNotEmpty);
-    expect(ToneCore.apiVersionString, '0.8.0');
+    expect(ToneCore.apiVersionString, '0.9.0');
   });
 
   test('tạo, chạy, dừng và huỷ engine', () {
@@ -140,6 +140,50 @@ void main() {
       () => engine.key = const MusicKey(0, MusicScale.chromatic),
       returnsNormally,
     );
+  });
+
+  test('mức micro (v0.9): đỉnh ~300 ms, số lần chạm 0 dBFS', () {
+    final engine = ToneCoreEngine.create(maxBlockFrames: 256);
+    addTearDown(engine.dispose);
+    engine.start();
+    expect(engine.metrics.inputPeakDb, -120);
+    final sine = Float32List(256);
+    for (var b = 0; b < 20; b++) {
+      for (var i = 0; i < 256; i++) {
+        sine[i] = 0.25 * math.sin(2 * math.pi * 440 * (b * 256 + i) / 48000);
+      }
+      engine.processOffline(sine, 256);
+    }
+    var m = engine.metrics;
+    expect(m.inputPeakDb, closeTo(-12.04, 0.1));
+    expect(m.inputClips, 0);
+    final clip = Float32List(256)..fillRange(10, 20, 1.0);
+    engine.processOffline(clip, 256);
+    engine.processOffline(clip, 256);
+    m = engine.metrics;
+    expect(m.inputClips, 2);
+    expect(m.inputPeakDb, closeTo(0, 0.01));
+  });
+
+  test('chọn micro (v0.9): lưu lựa chọn, Bluetooth không chọn được', () async {
+    final engine = ToneCoreEngine.create(maxBlockFrames: 256);
+    addTearDown(engine.dispose);
+    expect(engine.metrics.inputPreference, InputKind.auto);
+    await engine.selectInput(InputKind.usb);
+    expect(engine.inputWanted, InputKind.usb);
+    expect(engine.metrics.inputPreference, InputKind.usb);
+    expect(
+      engine.metrics.inputSource,
+      InputKind.auto,
+    ); // backend NULL: không có micro thật
+    engine.setInputPreference(InputKind.headset, deviceId: 5);
+    expect(engine.metrics.inputPreference, InputKind.headset);
+    expect(() => engine.selectInput(InputKind.bluetooth), throwsArgumentError);
+    expect(
+      () => engine.setInputPreference(InputKind.bluetooth),
+      throwsA(isA<ToneCoreException>()),
+    );
+    expect(await InputDevices.idFor(InputKind.usb), 0); // không phải Android
   });
 
   test('route Bluetooth chặn nghe lại giọng và phát sự kiện', () {

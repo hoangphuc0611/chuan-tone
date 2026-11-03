@@ -81,3 +81,37 @@ Future<SeparationResult> separateSong(
     unawaited(tmp.delete(recursive: true).then((_) {}, onError: (_) {}));
   }
 }
+
+/// Lưu địa chỉ máy chủ tách giọng sau khi kiểm tra kết nối; rỗng = xoá. Trả câu báo kết quả và
+/// [changed] = đã lưu (địa chỉ mới ở [url], null nếu đã xoá).
+Future<({String message, bool changed, String? url})> saveSeparationServer(
+  AppSettings settings,
+  String input,
+) async {
+  if (input.trim().isEmpty) {
+    await settings.setSeparationServer(null);
+    return (message: 'Đã xoá địa chỉ.', changed: true, url: null);
+  }
+  final url = normalizeServerUrl(input);
+  if (url == null) {
+    return (message: 'Địa chỉ không hợp lệ.', changed: false, url: null);
+  }
+  final c = SeparationClient(
+    baseUrl: url,
+    deviceId: await settings.deviceId(),
+    retries: 1,
+  );
+  try {
+    final info = await c.health();
+    await settings.setSeparationServer(url);
+    return (
+      message: 'Đã kết nối (bộ tách ${info.separator}).',
+      changed: true,
+      url: url,
+    );
+  } on SeparationException catch (err) {
+    return (message: err.message, changed: false, url: null);
+  } finally {
+    c.close();
+  }
+}

@@ -79,7 +79,37 @@
     chạy chữ (tô màu, lệch lời, chiều cao cố định ở 320 px chữ 130%), bộ điều khiển (lời, vị trí phát,
     lệch lời nhớ theo bài), Màn hát có lời + bảng Lời bài hát, Trang chủ (Hát tiếp, bài mẫu, Cài đặt,
     engine lỗi, 320 px chữ 130%).
-- [ ] B4 — Engine 0.9 (mức micro, chọn micro) + màn Cài đặt
+- [~] **B4** (2026-11-03, chờ thử trên iPhone ở B7): engine 0.9 + màn Cài đặt.
+  - **Engine 0.9** (API 0.9.0): `tc_metrics.input_peak_db` (đỉnh micro thô ~300 ms, hai cửa sổ nối
+    nhau, đọc qua atomic, không cấp phát), `input_clips` (số đợt mẫu ≥ −0,01 dBFS), `input_source` /
+    `input_preference`; `tc_set_input_preference(engine, TC_INPUT_AUTO | BUILTIN | HEADSET | USB,
+    device_id)`. Lựa chọn giữ cả khi chưa start, báo cho backend trước khi mở stream. iOS: tìm cổng
+    trong `availableInputs` rồi `setPreferredInput` (không giữ mutex khi đặt — đặt cổng sinh thông
+    báo đổi route), đặt lại mỗi lần đổi route (cắm soundcard sau vẫn được chọn), micro đang dùng đọc
+    từ `currentRoute.inputs`. Android: plugin Java tìm `AudioDeviceInfo` theo loại → `setDeviceId`
+    cho stream micro, đổi khi đang chạy thì mở lại stream, mở không được thì để hệ điều hành chọn;
+    `RouteMonitor` tìm lại id khi cắm / rút. Backend giả cho test qua `setBackendFactoryForTesting`.
+    Test engine 305 (+5: đỉnh / suy giảm, đếm đợt chạm 0 dBFS qua ranh giới khối, struct v0.8 vẫn
+    nhận, kiểm tra lựa chọn, lệnh tới backend giả trước / sau start).
+  - **Binding**: `InputKind`, `EngineMetrics.inputPeakDb / inputClips / inputSource /
+    inputPreference`, `setInputPreference`, `selectInput` (Android hỏi plugin id thiết bị), test 28.
+  - **Cài đặt** (bố cục mục 1): *Âm thanh* — **Đo độ trễ từng bước** (rút tai nghe, có hiện đường
+    tiếng đang dùng → đo qua loa → kết quả bằng lời: "Máy bạn hát mượt" ≤ 35 ms / "Hơi trễ, nên dùng
+    tai nghe có dây" ≤ 60 ms / "Trễ nhiều"; lưu số đo để căn giọng khi thu), **Micro** (4 lựa chọn,
+    micro đang dùng, thanh mức micro "nói a lô", cảnh báo vỡ tiếng), "Tự bật nghe lại giọng khi cắm
+    tai nghe" (tắt khi về loa ngoài để không hú; thay cho "nghe lại giọng mặc định bật / tắt");
+    *Xuất* — chất lượng âm thanh 128 / 192 / 256 kbit/s, video 720p (plugin xuất bằng preset
+    1280×720 thay vì giữ nguyên), cân bằng âm lượng −14 LUFS bật / tắt — màn Nghe lại dùng ngay;
+    *Bộ nhớ* — dung lượng bài hát / giọng đã tách / bản thu / file đã xuất, xoá từng nhóm (có hỏi
+    lại); *Trợ giúp* — mẹo hát, xem lại bong bóng mẹo ở Màn hát; *Giới thiệu* — phiên bản app +
+    engine, quyền riêng tư, giấy phép thư viện (`showLicensePage` + Oboe Apache-2.0); *Nâng cao* —
+    Phòng thử, đo độ trễ kỹ thuật, máy chủ tách giọng, trạng thái engine. "Chế độ soundcard" để B6;
+    "Xem lại hướng dẫn" để B5.
+  - Sửa kèm: ô máy chủ tách giọng tràn ngang ở 320 px chữ 130%; bấm liên tiếp nhiều lựa chọn xuất
+    chỉ lưu lựa chọn cuối.
+  - Test app 154 (+11): cài đặt mới, bộ nhớ, đánh giá độ trễ + dòng CSV, trình đo từng bước, trang
+    Cài đặt (lưu lựa chọn, xoá có hỏi lại, 320 px chữ 130%), tự nghe lại giọng theo đường tiếng,
+    micro đã chọn tới engine, trang Micro (thanh mức, cảnh báo vỡ tiếng) với engine thật.
 - [ ] B5 — Hướng dẫn lần đầu, Việt hoá phần còn lại, icon, thông báo lỗi
 - [ ] B6 — Chế độ soundcard (OTG)
 - [ ] B7 — Chạy nền ngắn, nhật ký thử nghiệm, thử nội bộ 1–2 người

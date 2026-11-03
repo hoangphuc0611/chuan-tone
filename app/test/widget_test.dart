@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:chuantone/app.dart';
 import 'package:chuantone/data/song_library.dart';
 import 'package:chuantone/engine_info.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -15,6 +16,9 @@ void main() {
   testWidgets('Trang chủ: tên app, khẩu hiệu; engine OK chỉ hiện ở Cài đặt', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(800, 3200); // dựng cả trang Cài đặt
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     await tester.pumpWidget(
       ChuanToneApp(
         engineInfo: const EngineInfo(

@@ -8,6 +8,7 @@ import 'dart:typed_data';
 import 'package:ffi/ffi.dart';
 
 import 'fx_preset.dart';
+import 'permissions.dart';
 import 'tonecore_bindings_generated.dart';
 
 /// Phiên bản major của C API mà binding này được sinh ra cho.
@@ -209,6 +210,11 @@ enum AudioRoute { unknown, speaker, wired, bluetooth, usb, receiver }
 /// API âm thanh của hệ điều hành (thứ tự khớp `tc_audio_api`).
 enum AudioApi { none, aaudio, opensles, remoteio }
 
+/// (từ v0.9) Loại micro (thứ tự khớp `tc_input_kind`): lựa chọn ([ToneCoreEngine.selectInput]) và
+/// micro đang dùng ([EngineMetrics.inputSource]). [auto]: lựa chọn = để hệ điều hành chọn; báo cáo
+/// = chưa rõ. [bluetooth] chỉ có trong báo cáo.
+enum InputKind { auto, builtin, headset, usb, bluetooth }
+
 enum EngineState { stopped, running }
 
 enum ToneCoreEventType {
@@ -402,6 +408,10 @@ class EngineMetrics {
     required this.algorithmLatencyFrames,
     this.fxLoad = 0,
     this.fxChains = 1,
+    this.inputPeakDb = -120,
+    this.inputClips = 0,
+    this.inputSource = InputKind.auto,
+    this.inputPreference = InputKind.auto,
   });
 
   final EngineState state;
@@ -432,6 +442,18 @@ class EngineMetrics {
 
   /// (từ v0.6) Số chuỗi FX đang chạy: 1 + số chuỗi cũ còn ngân đuôi vang sau khi đổi preset.
   final int fxChains;
+
+  /// (từ v0.9) Đỉnh micro (dBFS) trong ~300 ms gần nhất; −120 khi im lặng.
+  final double inputPeakDb;
+
+  /// (từ v0.9) Số lần micro chạm 0 dBFS (mỗi đợt mẫu liên tiếp tính một lần) kể từ khi tạo engine.
+  final int inputClips;
+
+  /// (từ v0.9) Micro đang dùng ([InputKind.auto] = chưa rõ).
+  final InputKind inputSource;
+
+  /// (từ v0.9) Micro đã chọn.
+  final InputKind inputPreference;
 
   double get algorithmLatencyMs =>
       sampleRate == 0 ? 0 : 1000.0 * algorithmLatencyFrames / sampleRate;
@@ -965,6 +987,35 @@ class ToneCoreEngine implements Finalizable {
   void setRouteHint(AudioRoute route) =>
       _check('tc_set_route_hint', _bindings.tc_set_route_hint(_h, route.index));
 
+  // ---- Micro (từ v0.9) ----
+
+  /// Micro người dùng chọn (để [RouteMonitor] chọn lại khi cắm / rút thiết bị trên Android).
+  InputKind inputWanted = InputKind.auto;
+
+  /// Chọn micro mức thấp: [deviceId] = id thiết bị Android (0 = để hệ điều hành chọn), iOS bỏ qua.
+  /// [InputKind.bluetooth] → [ToneCoreException].
+  void setInputPreference(InputKind kind, {int deviceId = 0}) => _check(
+    'tc_set_input_preference',
+    _bindings.tc_set_input_preference(_h, kind.index, deviceId),
+  );
+
+  /// Chọn micro. iOS: engine tự tìm cổng. Android: hỏi plugin id thiết bị theo loại (chưa cắm → 0,
+  /// hệ điều hành tự chọn; [RouteMonitor] chọn lại khi cắm vào). Micro đang dùng:
+  /// [EngineMetrics.inputSource].
+  Future<void> selectInput(InputKind kind) async {
+    if (kind == InputKind.bluetooth) {
+      throw ArgumentError.value(
+        kind,
+        'kind',
+        'không chọn được micro Bluetooth',
+      );
+    }
+    inputWanted = kind;
+    final id = Platform.isAndroid ? await InputDevices.idFor(kind) : 0;
+    if (_disposed) return;
+    setInputPreference(kind, deviceId: id);
+  }
+
   // ---- Đo độ trễ ----
 
   void startLatencyMeasurement() => _check(
@@ -1196,6 +1247,14 @@ class ToneCoreEngine implements Finalizable {
         algorithmLatencyFrames: v.algorithm_latency_frames,
         fxLoad: v.fx_load,
         fxChains: v.fx_chains,
+        inputPeakDb: v.input_peak_db,
+        inputClips: v.input_clips,
+        inputSource: _enumAt(InputKind.values, v.input_source, InputKind.auto),
+        inputPreference: _enumAt(
+          InputKind.values,
+          v.input_preference,
+          InputKind.auto,
+        ),
       );
     });
   }

@@ -303,6 +303,7 @@ class SingController extends ChangeNotifier {
     _playback = e.playback;
     position.value = _playback!.position;
     _metrics = e.metrics;
+    _monitorOn = e.monitorEnabled; // tự bật / tắt theo tai nghe (AudioService)
     _currentKey = service.currentKey;
     _rssMb = ProcessInfo.currentRss >> 20;
     _maxRssMb = ProcessInfo.maxRss >> 20;
@@ -847,30 +848,12 @@ class SingController extends ChangeNotifier {
 
   /// Lưu địa chỉ máy chủ tách giọng (kiểm tra kết nối trước); rỗng = xoá. Trả câu báo kết quả.
   Future<String> saveServer(String input) async {
-    if (input.trim().isEmpty) {
-      await settings.setSeparationServer(null);
-      _server = null;
+    final r = await saveSeparationServer(settings, input);
+    if (r.changed) {
+      _server = r.url;
       _notify();
-      return 'Đã xoá địa chỉ.';
     }
-    final url = normalizeServerUrl(input);
-    if (url == null) return 'Địa chỉ không hợp lệ.';
-    final c = SeparationClient(
-      baseUrl: url,
-      deviceId: await settings.deviceId(),
-      retries: 1,
-    );
-    try {
-      final info = await c.health();
-      await settings.setSeparationServer(url);
-      _server = url;
-      _notify();
-      return 'Đã kết nối (bộ tách ${info.separator}).';
-    } on SeparationException catch (err) {
-      return err.message;
-    } finally {
-      c.close();
-    }
+    return r.message;
   }
 
   /// Gọi nhiều lần cũng được (màn hình và người tạo cùng huỷ).

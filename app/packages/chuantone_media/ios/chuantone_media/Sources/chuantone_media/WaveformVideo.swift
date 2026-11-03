@@ -30,7 +30,7 @@ final class WaveformVideo {
 
   func cancel() { cancelled = true }
 
-  func render(audio: URL, output: URL, style: Style) throws {
+  func render(audio: URL, output: URL, style: Style, hd720: Bool = false) throws {
     let file = try AVAudioFile(forReading: audio)
     let rate = file.processingFormat.sampleRate
     let totalFrames = AVAudioFramePosition(file.length)
@@ -47,7 +47,8 @@ final class WaveformVideo {
     defer { try? FileManager.default.removeItem(at: silent) }
     try writeFrames(levels: levels, duration: Double(totalFrames) / rate, to: silent, style: style)
     if cancelled { throw MediaError.cancelled }
-    try MediaMux.mux(video: silent, videoOffset: .zero, audio: audio, trim: nil, output: output)
+    try MediaMux.mux(
+      video: silent, videoOffset: .zero, audio: audio, trim: nil, output: output, hd720: hd720)
     progress = 1
   }
 

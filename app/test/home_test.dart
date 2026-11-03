@@ -156,6 +156,9 @@ void main() {
   testWidgets('⚙ mở Cài đặt: thông tin engine, Đo độ trễ, Phòng thử', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(800, 3200); // dựng cả trang Cài đặt
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     final lib = SongLibrary(baseDir: dir);
     await tester.pumpWidget(
       MaterialApp(

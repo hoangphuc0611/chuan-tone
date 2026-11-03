@@ -11,7 +11,7 @@ abstract final class ChuanToneMedia {
   static bool supported = true;
 
   /// Dựng video 9:16 nền sóng nhạc + tên bài từ file âm thanh [audio] (M4A đã xuất) → MP4
-  /// [output]. Trả true khi xong, false khi bị [cancel]; null nếu nền tảng chưa hỗ trợ. Lỗi →
+  /// [output] (1080p; [hd720] = 720p). Trả true khi xong, false khi bị [cancel]; null nếu nền tảng chưa hỗ trợ. Lỗi →
   /// [PlatformException]. Theo dõi bằng [progress].
   static Future<bool?> renderWaveformVideo({
     required String audio,
@@ -19,6 +19,7 @@ abstract final class ChuanToneMedia {
     required String title,
     String subtitle = '',
     int color = 0xFFE5484D,
+    bool hd720 = false,
   }) async {
     try {
       return await _channel.invokeMethod<bool>('renderWaveformVideo', {
@@ -27,6 +28,7 @@ abstract final class ChuanToneMedia {
         'title': title,
         'subtitle': subtitle,
         'color': color,
+        'hd720': hd720,
       });
     } on MissingPluginException {
       supported = false;
@@ -87,16 +89,19 @@ abstract final class ChuanToneMedia {
 
   /// Ghép hình [video] (không tiếng) + tiếng [audio] → MP4 [output]. [offsetNs]: thời điểm (trên
   /// trục của file tiếng) khung hình đầu tiên khớp; âm = hình bắt đầu trước tiếng (bị cắt).
+  /// [hd720]: nén lại hình về 720p (nhẹ hơn khi gửi Zalo), mặc định giữ 1080p.
   static Future<void> muxVideo({
     required String video,
     required String audio,
     required String output,
     required int offsetNs,
+    bool hd720 = false,
   }) => _channel.invokeMethod<void>('muxVideo', {
     'video': video,
     'audio': audio,
     'output': output,
     'offsetNs': offsetNs,
+    'hd720': hd720,
   });
 
   /// Lưu video vào Ảnh. true = đã lưu, false = người dùng không cho phép; null = chưa hỗ trợ.

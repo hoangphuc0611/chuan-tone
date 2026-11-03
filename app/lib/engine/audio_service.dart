@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:tonecore_flutter/tonecore_flutter.dart';
 
+import '../data/app_settings.dart';
 import 'genre_rules.dart';
 import 'labels.dart';
 
@@ -10,15 +11,27 @@ import 'labels.dart';
 ///
 /// Mở engine khi màn đầu tiên cần, xin quyền micro trước khi mở.
 class AudioService extends ChangeNotifier {
-  AudioService._(this._create);
+  AudioService._(this._create, [this._settings]);
 
-  /// Dịch vụ cho test: engine do [create] tạo (vd backend NULL, xử lý bằng `processOffline`).
+  /// Dịch vụ cho test: engine do [create] tạo (vd backend NULL, xử lý bằng `processOffline`);
+  /// [settings] = cài đặt micro / nghe lại giọng đọc lúc mở (null = mặc định).
   @visibleForTesting
-  AudioService.test(ToneCoreEngine Function() create) : this._(create);
+  AudioService.test(ToneCoreEngine Function() create, {AppSettings? settings})
+    : this._(create, settings);
 
-  static final AudioService instance = AudioService._(ToneCoreEngine.platform);
+  static final AudioService instance = AudioService._(
+    ToneCoreEngine.platform,
+    AppSettings(),
+  );
 
   final ToneCoreEngine Function() _create;
+  final AppSettings? _settings;
+
+  /// Micro đã chọn (Cài đặt → Micro).
+  InputKind inputPreference = InputKind.auto;
+
+  /// Tự bật nghe lại giọng khi dùng tai nghe có dây / soundcard, tắt khi về loa ngoài.
+  bool autoMonitor = true;
 
   ToneCoreEngine? _engine;
   RouteMonitor? _routeMonitor;
@@ -85,8 +98,18 @@ class AudioService extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+    final settings = _settings;
+    if (settings != null) {
+      inputPreference = await settings.inputPreference();
+      autoMonitor = await settings.autoMonitor();
+    }
+    // Android: id của micro đã chọn (tìm trước khi mở để mở đúng micro ngay).
+    final deviceId = await InputDevices.idFor(inputPreference);
+    if (_engine != null) return true; // màn khác đã mở trong lúc chờ
     try {
       final e = _create();
+      e.inputWanted = inputPreference;
+      e.setInputPreference(inputPreference, deviceId: deviceId);
       e.start();
       e.key = key;
       _engine = e;
@@ -94,13 +117,56 @@ class AudioService extends ChangeNotifier {
       _syncFx();
       _syncSong();
       _routeMonitor = RouteMonitor(e)..start();
-      _eventSub = e.events.listen(_events.add);
+      _eventSub = e.events.listen(_onEngineEvent);
+      _applyAutoMonitor(e.metrics.route);
       lastError = null;
     } on ToneCoreException catch (err) {
       lastError = 'Không mở được thiết bị âm thanh (${err.codeName}).';
     }
     notifyListeners();
     return _engine != null;
+  }
+
+  void _onEngineEvent(ToneCoreEvent ev) {
+    if (ev.type == ToneCoreEventType.routeChanged) {
+      _applyAutoMonitor(
+        AudioRoute.values[ev.code.clamp(0, AudioRoute.values.length - 1)],
+      );
+    }
+    _events.add(ev);
+  }
+
+  /// Tự bật nghe lại giọng khi cắm tai nghe có dây / soundcard; tắt khi về loa ngoài (tránh hú).
+  /// Bluetooth: engine tự chặn. Không rõ đường tiếng: giữ nguyên.
+  void _applyAutoMonitor(AudioRoute route) {
+    final e = _engine;
+    if (e == null || !autoMonitor) return;
+    switch (route) {
+      case AudioRoute.wired || AudioRoute.usb:
+        e.monitorEnabled = true;
+      case AudioRoute.speaker || AudioRoute.receiver:
+        e.monitorEnabled = false;
+      default:
+        return;
+    }
+    notifyListeners();
+  }
+
+  /// Chọn micro (lưu ở Cài đặt; engine đang chạy thì đổi ngay).
+  Future<void> setInputPreference(InputKind kind) async {
+    inputPreference = kind;
+    await _settings?.setInputPreference(kind);
+    await _engine?.selectInput(kind);
+    notifyListeners();
+  }
+
+  /// Bật / tắt tự nghe lại giọng theo đường tiếng (bật thì áp ngay theo đường tiếng hiện tại).
+  /// Lưu cài đặt do người gọi làm (Cài đặt).
+  void updateAutoMonitor(bool on) {
+    autoMonitor = on;
+    final e = _engine;
+    if (on && e != null) _applyAutoMonitor(e.metrics.route);
+    notifyListeners();
   }
 
   /// Chọn tay tone đang NGHE (như hiển thị) → thôi theo bài. Beat đã đổi tone thì quy về tone

@@ -178,6 +178,15 @@ tc_result tc_get_metrics(tc_engine* engine, tc_metrics* out_metrics) {
   return TC_OK;
 }
 
+tc_result tc_set_input_preference(tc_engine* engine, int32_t preference, int32_t device_id) {
+  if (engine == nullptr) return TC_ERR_INVALID_ARG;
+  try {
+    return engine->impl.setInputPreference(preference, device_id);
+  } catch (...) {
+    return TC_ERR_INTERNAL;
+  }
+}
+
 tc_result tc_load_beat(tc_engine* engine, const char* path_utf8) {
   if (engine == nullptr || path_utf8 == nullptr) return TC_ERR_INVALID_ARG;
   try {

@@ -95,7 +95,20 @@ class OboeBackend final : public AudioBackend, public oboe::AudioStreamErrorCall
     i.api = output_->getAudioApi() == oboe::AudioApi::AAudio ? TC_AUDIO_API_AAUDIO
                                                              : TC_AUDIO_API_OPENSLES;
     i.route = TC_ROUTE_UNKNOWN;  // Kotlin báo qua tc_set_route_hint
+    // Micro đang dùng: biết chắc khi đã mở đúng thiết bị Kotlin chọn.
+    if (inputDeviceId_ > 0 && input_->getDeviceId() == inputDeviceId_) i.inputSource = inputPref_;
     return i;
+  }
+
+  // Chọn micro: Kotlin đã tìm id thiết bị theo loại; đổi khi đang chạy thì mở lại stream.
+  void setInputPreference(int32_t preference, int32_t deviceId) override {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (preference == inputPref_ && deviceId == inputDeviceId_) return;
+    inputPref_ = preference;
+    inputDeviceId_ = deviceId;
+    if (stopping_ || !output_) return;  // chưa chạy: áp khi mở stream
+    closeLocked();
+    host_.onStreamRestarted(openAndStartLocked());
   }
 
   uint32_t xruns() const override {
@@ -192,7 +205,13 @@ class OboeBackend final : public AudioBackend, public oboe::AudioStreamErrorCall
         ->setInputPreset(preset)
         ->setBufferCapacityInFrames(output_->getBufferCapacityInFrames() * 2)
         ->setErrorCallback(this);
+    if (inputDeviceId_ > 0) in.setDeviceId(inputDeviceId_);
     r = in.openStream(input_);
+    if (r != oboe::Result::OK && inputDeviceId_ > 0) {
+      // Micro đã chọn không mở được (vừa rút ra…) → để hệ điều hành chọn.
+      in.setDeviceId(oboe::kUnspecified);
+      r = in.openStream(input_);
+    }
     if (r != oboe::Result::OK) {
       closeLocked();
       return toResult(r);
@@ -239,6 +258,8 @@ class OboeBackend final : public AudioBackend, public oboe::AudioStreamErrorCall
   DuplexStream duplex_{*this};
   mutable std::mutex mutex_;  // bảo vệ mở/đóng stream (không dùng trong callback)
   bool stopping_ = false;
+  int32_t inputPref_ = TC_INPUT_AUTO;  // micro đã chọn (bảo vệ bởi mutex_)
+  int32_t inputDeviceId_ = 0;
   std::shared_ptr<oboe::AudioStream> output_;
   std::shared_ptr<oboe::AudioStream> input_;
   std::vector<float> inBuf_;

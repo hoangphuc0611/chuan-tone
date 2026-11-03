@@ -1,6 +1,3 @@
-import 'dart:io';
-
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:tonecore_flutter/tonecore_flutter.dart';
@@ -8,17 +5,17 @@ import 'package:tonecore_flutter/tonecore_flutter.dart';
 import '../data/latency_history.dart';
 import '../engine/audio_service.dart';
 import '../engine/labels.dart';
+import '../engine/latency_measure.dart';
 import '../widgets/sync_check_card.dart';
 
-/// Màn đo độ trễ round-trip (M1). Kết quả lưu trên máy và sao chép được dạng một dòng CSV để
-/// gộp báo cáo bằng tools/latency/aggregate.py.
+/// Màn đo độ trễ round-trip kỹ thuật (M1; M8: Cài đặt → Nâng cao — người dùng đo ở
+/// [LatencyWizardPage]). Kết quả lưu trên máy và sao chép được dạng một dòng CSV để gộp báo cáo bằng
+/// tools/latency/aggregate.py.
 class LatencyPage extends StatefulWidget {
   const LatencyPage({super.key});
 
   /// Thứ tự cột CSV – giữ khớp với tools/latency/aggregate.py.
-  static const csvHeader =
-      'date,brand,model,os,route,api,sample_rate,burst_frames,buffer_frames,'
-      'measured_ms,reported_ms,confidence,valid_bursts,spread_ms';
+  static const csvHeader = latencyCsvHeader;
 
   @override
   State<LatencyPage> createState() => _LatencyPageState();
@@ -32,9 +29,7 @@ class _LatencyPageState extends State<LatencyPage> {
   LatencyResult? _result;
   String? _error;
   List<String> _history = [];
-  String _brand = '';
-  String _model = '';
-  String _os = '';
+  DeviceLabel _device = const DeviceLabel();
 
   @override
   void initState() {
@@ -49,28 +44,9 @@ class _LatencyPageState extends State<LatencyPage> {
     } catch (err) {
       _error = 'Không mở được âm thanh: $err';
     }
-    try {
-      await _loadDevice();
-    } catch (_) {
-      // Thiếu tên máy không chặn việc đo.
-    }
+    _device = await DeviceLabel.load();
     _history = await _store.load();
     if (mounted) setState(() => _starting = false);
-  }
-
-  Future<void> _loadDevice() async {
-    final info = DeviceInfoPlugin();
-    if (Platform.isAndroid) {
-      final a = await info.androidInfo;
-      _brand = a.manufacturer;
-      _model = a.model;
-      _os = 'Android ${a.version.release} (API ${a.version.sdkInt})';
-    } else if (Platform.isIOS) {
-      final i = await info.iosInfo;
-      _brand = 'Apple';
-      _model = i.utsname.machine;
-      _os = 'iOS ${i.systemVersion}';
-    }
   }
 
   Future<void> _measure() async {
@@ -80,14 +56,16 @@ class _LatencyPageState extends State<LatencyPage> {
       _measuring = true;
       _error = null;
     });
-    final wasPlaying = e.playback.playing;
-    if (wasPlaying) e.pause();
     try {
-      final r = await e.measureLatency();
+      final (r, history) = await measureAndSaveLatency(
+        e,
+        store: _store,
+        history: _history,
+        device: _device,
+      );
       _result = r;
-      if (r.valid) {
-        await _save(r, e.metrics);
-      } else {
+      _history = history;
+      if (!r.valid) {
         _error =
             'Không nghe được tín hiệu đo. Hãy tăng âm lượng máy và thử lại '
             '(loa ngoài, nơi yên tĩnh) hoặc dùng dongle loopback.';
@@ -96,36 +74,6 @@ class _LatencyPageState extends State<LatencyPage> {
       _error = 'Đo thất bại: $err';
     }
     if (mounted) setState(() => _measuring = false);
-  }
-
-  String _csv(LatencyResult r, EngineMetrics m) {
-    String q(String s) => '"${s.replaceAll('"', "'")}"';
-    return [
-      DateTime.now().toIso8601String(),
-      q(_brand),
-      q(_model),
-      q(_os),
-      r.route.name,
-      m.audioApi.name,
-      m.sampleRate,
-      r.burstFrames,
-      r.bufferFrames,
-      r.latencyMs.toStringAsFixed(2),
-      r.reportedRoundTripMs.toStringAsFixed(2),
-      r.confidence.toStringAsFixed(2),
-      r.validBursts,
-      r.spreadMs.toStringAsFixed(3),
-    ].join(',');
-  }
-
-  Future<void> _save(LatencyResult r, EngineMetrics m) async {
-    final line = _csv(r, m);
-    try {
-      _history = await _store.add(line, _history);
-    } catch (_) {
-      // Không ghi được file thì vẫn giữ trong bộ nhớ để sao chép.
-      _history = [line, ..._history].take(LatencyHistory.maxEntries).toList();
-    }
   }
 
   Future<void> _copy({bool all = false}) async {
@@ -210,7 +158,7 @@ class _LatencyPageState extends State<LatencyPage> {
                   ),
                 ],
                 const SizedBox(height: 16),
-                SyncCheckCard(history: _history, model: _model),
+                SyncCheckCard(history: _history, model: _device.model),
                 const Divider(height: 32),
                 Row(
                   children: [

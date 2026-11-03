@@ -89,6 +89,7 @@ class Engine : public BackendHost {
   void fillPlayback(tc_playback_state& s) const noexcept;
 
   tc_result setRouteHint(int32_t route);
+  tc_result setInputPreference(int32_t preference, int32_t deviceId);
 
   // Tự chỉnh giọng
   tc_result setKey(int32_t root, int32_t scale) noexcept;
@@ -219,6 +220,18 @@ class Engine : public BackendHost {
   float cpuPeakAccum_ = 0.0f;         // audio thread
   uint64_t cpuPeakFrames_ = 0;        // audio thread
   std::atomic<uint32_t> inputChannelsSeen_{0};
+
+  // Mức micro (v0.9): đỉnh theo cửa sổ ~300 ms, số đợt chạm 0 dBFS.
+  void meterInput(const float* mic, uint32_t frames) noexcept;
+  float inPeakAccum_ = 0.0f;             // audio thread
+  uint32_t inPeakFrames_ = 0;            // audio thread
+  bool inClipping_ = false;              // audio thread
+  std::atomic<float> inPeakLast_{0.0f};  // đỉnh của cửa sổ vừa xong
+  std::atomic<float> inPeakCur_{0.0f};   // đỉnh của cửa sổ đang đo
+  std::atomic<uint32_t> inClips_{0};
+  // Micro đã chọn (luồng điều khiển).
+  std::atomic<int32_t> inputPref_{TC_INPUT_AUTO};
+  int32_t inputDeviceId_ = 0;
 
   // Luồng nền – khai báo cuối để bị huỷ đầu tiên (join trước khi các thành viên khác mất).
   Worker worker_;

@@ -307,8 +307,12 @@ class _HomePageState extends State<HomePage> with RouteAware {
                   tooltip: 'Cài đặt',
                   iconSize: 28,
                   icon: const Icon(Icons.settings_outlined),
-                  onPressed: () =>
-                      _push(SettingsPage(engineInfo: widget.engineInfo)),
+                  onPressed: () => _push(
+                    SettingsPage(
+                      engineInfo: widget.engineInfo,
+                      library: widget.library,
+                    ),
+                  ),
                 ),
               ],
             ),

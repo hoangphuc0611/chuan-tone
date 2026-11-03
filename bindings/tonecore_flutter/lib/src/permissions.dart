@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
+import 'tonecore.dart' show InputKind;
+
 /// Quyền micro.
 ///
 /// - Android: hỏi qua plugin Java (RECORD_AUDIO).
@@ -14,5 +16,26 @@ abstract final class MicPermission {
     if (!Platform.isAndroid) return true;
     final granted = await _channel.invokeMethod<bool>('requestMicrophone');
     return granted ?? false;
+  }
+}
+
+/// (từ v0.9) Thiết bị micro trên Android: plugin Java tìm `AudioDeviceInfo` theo loại
+/// (AudioManager.getDevices) — NDK không liệt kê được thiết bị.
+abstract final class InputDevices {
+  static const _channel = MethodChannel('tonecore_flutter/permission');
+
+  /// Id thiết bị micro loại [kind] đang cắm; 0 nếu không có / [InputKind.auto] / không phải Android.
+  static Future<int> idFor(InputKind kind) async {
+    if (!Platform.isAndroid || kind == InputKind.auto) return 0;
+    try {
+      return await _channel.invokeMethod<int>('inputDeviceId', {
+            'kind': kind.index,
+          }) ??
+          0;
+    } on PlatformException {
+      return 0;
+    } on MissingPluginException {
+      return 0;
+    }
   }
 }

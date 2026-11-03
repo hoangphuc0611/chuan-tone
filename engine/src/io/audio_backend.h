@@ -20,6 +20,7 @@ struct BackendInfo {
   double outputLatencyMs = 0.0;  // hệ điều hành báo (ước lượng)
   int32_t route = TC_ROUTE_UNKNOWN;
   int32_t api = TC_AUDIO_API_NONE;
+  int32_t inputSource = TC_INPUT_AUTO;  // (từ v0.9) micro đang dùng, tc_input_kind
 };
 
 // Phía engine mà backend gọi vào.
@@ -45,10 +46,22 @@ class AudioBackend {
   virtual void stop() = 0;        // dừng + đóng stream; sau khi trả về, không còn callback nào
   virtual BackendInfo info() const = 0;
   virtual uint32_t xruns() const = 0;
+  // (từ v0.9) Chọn micro, gọi từ luồng điều khiển — cả trước start() (chỉ ghi nhớ, áp khi mở
+  // stream). preference = tc_input_kind; deviceId = id thiết bị Android (0 = để hệ điều hành chọn),
+  // iOS bỏ qua. Micro đó chưa cắm → hệ điều hành tự chọn, áp lại khi cắm vào.
+  virtual void setInputPreference(int32_t preference, int32_t deviceId) {
+    (void)preference;
+    (void)deviceId;
+  }
 };
 
 // Tạo backend của nền tảng hiện tại (Oboe / RemoteIO). Trả nullptr nếu nền tảng chưa hỗ trợ
 // (vd. bản host macOS/Linux dùng cho test).
 std::unique_ptr<AudioBackend> createPlatformBackend(BackendHost& host, const EngineConfig& config);
+
+// Chỉ dùng trong test: thay backend nền tảng bằng backend giả (nullptr = trả về mặc định).
+using BackendFactory = std::unique_ptr<AudioBackend> (*)(BackendHost& host,
+                                                         const EngineConfig& config);
+void setBackendFactoryForTesting(BackendFactory factory);
 
 }  // namespace tonecore

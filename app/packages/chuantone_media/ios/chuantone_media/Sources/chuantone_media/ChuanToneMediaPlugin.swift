@@ -65,12 +65,14 @@ public class ChuanToneMediaPlugin: NSObject, FlutterPlugin, FlutterSceneLifeCycl
         color: UIColor(
           red: CGFloat((argb >> 16) & 0xFF) / 255, green: CGFloat((argb >> 8) & 0xFF) / 255,
           blue: CGFloat(argb & 0xFF) / 255, alpha: 1))
+      let hd720 = args["hd720"] as? Bool ?? false
       let job = WaveformVideo()
       waveform = job
       DispatchQueue.global(qos: .userInitiated).async {
         do {
           try job.render(
-            audio: URL(fileURLWithPath: audio), output: URL(fileURLWithPath: output), style: style)
+            audio: URL(fileURLWithPath: audio), output: URL(fileURLWithPath: output), style: style,
+            hd720: hd720)
           DispatchQueue.main.async { result(true) }
         } catch let e as MediaError {
           DispatchQueue.main.async {
@@ -132,12 +134,14 @@ public class ChuanToneMediaPlugin: NSObject, FlutterPlugin, FlutterSceneLifeCycl
         let output = args["output"] as? String
       else { return result(Self.argError("video / audio / output")) }
       let offsetNs = (args["offsetNs"] as? NSNumber)?.int64Value ?? 0
+      let hd720 = args["hd720"] as? Bool ?? false
       DispatchQueue.global(qos: .userInitiated).async {
         do {
           try MediaMux.mux(
             video: URL(fileURLWithPath: video),
             videoOffset: CMTime(value: offsetNs, timescale: 1_000_000_000),
-            audio: URL(fileURLWithPath: audio), trim: nil, output: URL(fileURLWithPath: output))
+            audio: URL(fileURLWithPath: audio), trim: nil, output: URL(fileURLWithPath: output),
+            hd720: hd720)
           DispatchQueue.main.async { result(true) }
         } catch {
           DispatchQueue.main.async {

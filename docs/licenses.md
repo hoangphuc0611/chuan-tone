@@ -13,7 +13,7 @@ Quy tắc (CLAUDE.md mục 0.2): chỉ MIT / BSD / Apache-2.0 / Zlib / ISC. LGPL
 | Flutter SDK | 3.47.7 (ghim bằng `.fvmrc`) | BSD-3-Clause | `app`, `bindings` | Có |
 | cupertino_icons | ^1.0.8 | MIT | `app` | Có |
 | flutter_lints | ^6.0.0 | BSD-3-Clause | kiểm tra code (dev) | Không |
-| Oboe | 1.11.0 (Gradle prefab) | Apache-2.0 | `engine/src/io/android` | Có |
+| Oboe | 1.11.0 (Gradle prefab) | Apache-2.0 | `engine/src/io/android`. Toàn văn Apache-2.0 (`app/assets/licenses/apache-2.0.txt`) hiện ở Cài đặt → Giấy phép thư viện (`registerNativeLicenses` trong `app/lib/main.dart`; giấy phép gói Dart do Flutter tự gom) | Có (Android) |
 | dr_wav / dr_mp3 / dr_flac | commit `dfe8377` (`engine/third_party/dr_libs/COMMIT`) | Public domain / MIT-0 | giải mã cho bản host (test, CI, `tcflac` của server); dr_flac từ M6 | Không |
 | file_picker | ^13.1.0 | MIT | `app` – chọn file beat | Có |
 | device_info_plus | ^13.3.0 | BSD-3-Clause | `app` – tên máy trong báo cáo độ trễ | Có |

@@ -223,22 +223,29 @@ class _ServerSettingsCardState extends State<ServerSettingsCard> {
               onSubmitted: (_) => _save(),
             ),
             const SizedBox(height: 8),
-            Row(
+            // Màn hẹp chữ to: nút và vòng chờ xuống dòng được, dòng kết quả nằm riêng bên dưới.
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 FilledButton(
                   onPressed: _busy ? null : _save,
                   child: const Text('Lưu & kiểm tra'),
                 ),
-                const SizedBox(width: 12),
                 if (_busy)
                   const SizedBox(
                     width: 18,
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   ),
-                if (!_busy && _status != null) Expanded(child: Text(_status!)),
               ],
             ),
+            if (!_busy && _status != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(_status!),
+              ),
           ],
         ),
       ),

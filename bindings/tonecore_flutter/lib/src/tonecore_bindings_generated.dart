@@ -430,6 +430,30 @@ class ToneCoreBindings {
   late final _tc_set_route_hint = _tc_set_route_hintPtr
       .asFunction<int Function(ffi.Pointer<tc_engine>, int)>();
 
+  /// ---- Micro (từ v0.9) ----
+  /// Chọn micro (tc_input_kind; TC_INPUT_BLUETOOTH không chọn được → TC_ERR_INVALID_ARG).
+  /// iOS: engine tự tìm cổng tương ứng (AVAudioSession setPreferredInput), device_id bỏ qua.
+  /// Android: lớp Kotlin tìm thiết bị theo loại (AudioManager.getDevices) rồi đưa id; 0 = để hệ điều
+  /// hành chọn; engine mở lại stream micro. Gọi lúc nào cũng được: lựa chọn được giữ, áp khi engine
+  /// chạy và khi micro đó được cắm vào; chưa có micro đó thì hệ điều hành tự chọn. Micro đang dùng
+  /// đọc ở tc_metrics.input_source.
+  int tc_set_input_preference(
+    ffi.Pointer<tc_engine> engine,
+    int preference,
+    int device_id,
+  ) {
+    return _tc_set_input_preference(engine, preference, device_id);
+  }
+
+  late final _tc_set_input_preferencePtr =
+      _lookup<
+        ffi.NativeFunction<
+          tc_result Function(ffi.Pointer<tc_engine>, ffi.Int32, ffi.Int32)
+        >
+      >('tc_set_input_preference');
+  late final _tc_set_input_preference = _tc_set_input_preferencePtr
+      .asFunction<int Function(ffi.Pointer<tc_engine>, int, int)>();
+
   /// ---- Đo độ trễ ----
   /// Engine phải đang RUNNING. Trong lúc đo (~1,5 s) beat và nghe lại giọng bị tắt tiếng.
   /// Kết thúc → sự kiện TC_EVENT_LATENCY_DONE, đọc chi tiết bằng tc_get_latency_result.
@@ -1328,6 +1352,24 @@ sealed class tc_route {
   static const TC_ROUTE_RECEIVER = 5;
 }
 
+/// (từ v0.9) Loại micro: lựa chọn (tc_set_input_preference) và micro đang dùng (tc_metrics).
+sealed class tc_input_kind {
+  /// lựa chọn: để hệ điều hành chọn; báo cáo: chưa rõ
+  static const TC_INPUT_AUTO = 0;
+
+  /// micro của máy
+  static const TC_INPUT_BUILTIN = 1;
+
+  /// micro tai nghe có dây
+  static const TC_INPUT_HEADSET = 2;
+
+  /// soundcard / micro USB (cáp OTG, Lightning / USB-C)
+  static const TC_INPUT_USB = 3;
+
+  /// chỉ có trong báo cáo, không chọn được (trễ lớn)
+  static const TC_INPUT_BLUETOOTH = 4;
+}
+
 /// Định danh node / tham số dùng cho tc_set_param. Danh sách sẽ mở rộng theo milestone.
 sealed class tc_node_id {
   /// tổng đầu ra
@@ -1556,6 +1598,22 @@ final class tc_metrics extends ffi.Struct {
   /// số chuỗi FX đang chạy: 1 + số chuỗi cũ còn ngân sau khi đổi preset
   @ffi.Int32()
   external int fx_chains;
+
+  /// đỉnh micro (dBFS) trong ~300 ms gần nhất; -120 khi im lặng
+  @ffi.Float()
+  external double input_peak_db;
+
+  /// số lần micro chạm 0 dBFS (mỗi đợt mẫu liên tiếp tính một lần)
+  @ffi.Uint32()
+  external int input_clips;
+
+  /// tc_input_kind micro đang dùng (TC_INPUT_AUTO = chưa rõ)
+  @ffi.Int32()
+  external int input_source;
+
+  /// tc_input_kind đã chọn bằng tc_set_input_preference
+  @ffi.Int32()
+  external int input_preference;
 }
 
 final class tc_playback_state extends ffi.Struct {
@@ -2321,8 +2379,8 @@ final class tc_renderer extends ffi.Opaque {}
 
 const int TC_API_VERSION_MAJOR = 0;
 
-const int TC_API_VERSION_MINOR = 8;
+const int TC_API_VERSION_MINOR = 9;
 
 const int TC_API_VERSION_PATCH = 0;
 
-const int TC_API_VERSION = 2048;
+const int TC_API_VERSION = 2304;

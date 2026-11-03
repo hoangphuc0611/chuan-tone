@@ -2,13 +2,16 @@ import AVFoundation
 
 /// Ghép hình (không tiếng) + tiếng thành MP4 bằng AVMutableComposition + xuất nguyên dạng (không nén
 /// lại hình lẫn tiếng → nhanh, giữ chất lượng). Dùng cho video sóng nhạc (B5) và video camera (B6).
+/// Chọn 720p (M8 B4, Cài đặt → Xuất) thì nén lại hình về 720×1280 — file nhẹ hơn khi gửi Zalo.
 enum MediaMux {
   /// - videoOffset: thời điểm (trên trục của file tiếng) mà khung hình đầu tiên khớp; âm = hình bắt
   ///   đầu trước tiếng (phần thừa bị cắt).
   /// - trim: đoạn của file tiếng giữ lại (nil = cả file); hình cắt theo cùng trục.
-  static func mux(video: URL, videoOffset: CMTime, audio: URL, trim: CMTimeRange?, output: URL)
-    throws
-  {
+  /// - hd720: nén lại hình về 720p (mặc định giữ nguyên 1080p).
+  static func mux(
+    video: URL, videoOffset: CMTime, audio: URL, trim: CMTimeRange?, output: URL,
+    hd720: Bool = false
+  ) throws {
     let audioAsset = AVURLAsset(url: audio)
     let videoAsset = AVURLAsset(url: video)
     guard let audioTrack = audioAsset.tracks(withMediaType: .audio).first else {
@@ -40,7 +43,8 @@ enum MediaMux {
     let tmp = output.deletingLastPathComponent()
       .appendingPathComponent(".ghep-\(UUID().uuidString).mp4")
     defer { try? FileManager.default.removeItem(at: tmp) }
-    guard let export = AVAssetExportSession(asset: comp, presetName: AVAssetExportPresetPassthrough)
+    let preset = hd720 ? AVAssetExportPreset1280x720 : AVAssetExportPresetPassthrough
+    guard let export = AVAssetExportSession(asset: comp, presetName: preset)
     else { throw MediaError.failed("không xuất được bản ghép") }
     export.outputURL = tmp
     export.outputFileType = .mp4

@@ -14,6 +14,15 @@ String routeLabel(AudioRoute r) => switch (r) {
   AudioRoute.receiver => 'Loa thoại',
 };
 
+/// Tên micro cho người dùng (Cài đặt → Micro).
+String inputKindLabel(InputKind k) => switch (k) {
+  InputKind.auto => 'Tự động',
+  InputKind.builtin => 'Micro của máy',
+  InputKind.headset => 'Micro tai nghe',
+  InputKind.usb => 'Soundcard / micro USB',
+  InputKind.bluetooth => 'Micro Bluetooth',
+};
+
 String apiLabel(AudioApi a) => switch (a) {
   AudioApi.none => '—',
   AudioApi.aaudio => 'AAudio',

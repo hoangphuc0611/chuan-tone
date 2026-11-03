@@ -50,6 +50,38 @@ int32_t routeFromSession(AVAudioSession* session) {
   return TC_ROUTE_UNKNOWN;
 }
 
+// Micro đang dùng (cổng vào đầu tiên của route hiện tại).
+int32_t inputSourceFromSession(AVAudioSession* session) {
+  AVAudioSessionRouteDescription* route = session.currentRoute;
+  if (route.inputs.count == 0) return TC_INPUT_AUTO;
+  NSString* port = route.inputs.firstObject.portType;
+  if ([port isEqualToString:AVAudioSessionPortBuiltInMic]) return TC_INPUT_BUILTIN;
+  if ([port isEqualToString:AVAudioSessionPortHeadsetMic] ||
+      [port isEqualToString:AVAudioSessionPortLineIn]) {
+    return TC_INPUT_HEADSET;
+  }
+  if ([port isEqualToString:AVAudioSessionPortUSBAudio]) return TC_INPUT_USB;
+  if ([port isEqualToString:AVAudioSessionPortBluetoothHFP] ||
+      [port isEqualToString:AVAudioSessionPortBluetoothLE]) {
+    return TC_INPUT_BLUETOOTH;
+  }
+  return TC_INPUT_AUTO;
+}
+
+// Loại cổng iOS ứng với lựa chọn micro; nil = để hệ điều hành chọn.
+NSString* portTypeForPreference(int32_t preference) {
+  switch (preference) {
+    case TC_INPUT_BUILTIN:
+      return AVAudioSessionPortBuiltInMic;
+    case TC_INPUT_HEADSET:
+      return AVAudioSessionPortHeadsetMic;
+    case TC_INPUT_USB:
+      return AVAudioSessionPortUSBAudio;
+    default:
+      return nil;
+  }
+}
+
 AudioStreamBasicDescription floatFormat(double rate, UInt32 channels) {
   AudioStreamBasicDescription f{};
   f.mSampleRate = rate;
@@ -81,6 +113,7 @@ class RemoteIOBackend final : public AudioBackend {
     if (unit_ != nullptr) return TC_ERR_INVALID_STATE;
     tc_result r = configureSession();
     if (r != TC_OK) return r;
+    applyInputPreference();
     r = createUnit();
     if (r != TC_OK) {
       disposeUnit();
@@ -112,10 +145,18 @@ class RemoteIOBackend final : public AudioBackend {
     i.outputLatencyMs = s.outputLatency * 1000.0;
     i.route = routeFromSession(s);
     i.api = TC_AUDIO_API_REMOTEIO;
+    i.inputSource = inputSourceFromSession(s);
     return i;
   }
 
   uint32_t xruns() const override { return xruns_.load(std::memory_order_relaxed); }
+
+  // Không giữ mutex_ khi đặt cổng: setPreferredInput sinh thông báo đổi route, khối xử lý thông
+  // báo cũng gọi applyInputPreference.
+  void setInputPreference(int32_t preference, int32_t /*deviceId*/) override {
+    inputPref_.store(preference, std::memory_order_relaxed);
+    if (running_.load(std::memory_order_acquire)) applyInputPreference();
+  }
 
  private:
   tc_result configureSession() {
@@ -151,6 +192,27 @@ class RemoteIOBackend final : public AudioBackend {
         break;
     }
     return TC_OK;
+  }
+
+  // Chọn cổng micro theo lựa chọn (session phải đang bật). Cổng đó không có (chưa cắm) hoặc chọn
+  // "Tự động" → để hệ điều hành chọn. Gọi lại mỗi lần đổi route: cắm soundcard / tai nghe vào sau
+  // vẫn được chọn. Đã đúng thì không đặt lại (đặt lại cũng sinh thông báo đổi route).
+  void applyInputPreference() {
+    AVAudioSession* s = [AVAudioSession sharedInstance];
+    NSString* want = portTypeForPreference(inputPref_.load(std::memory_order_relaxed));
+    AVAudioSessionPortDescription* port = nil;
+    if (want != nil) {
+      for (AVAudioSessionPortDescription* p in s.availableInputs) {
+        if ([p.portType isEqualToString:want]) {
+          port = p;
+          break;
+        }
+      }
+    }
+    AVAudioSessionPortDescription* current = s.preferredInput;
+    if (port == nil && current == nil) return;
+    if (port != nil && current != nil && [port.UID isEqualToString:current.UID]) return;
+    [s setPreferredInput:port error:nil];
   }
 
   tc_result createUnit() {
@@ -194,10 +256,12 @@ class RemoteIOBackend final : public AudioBackend {
     lastSampleTime_ = -1.0;
     if (AudioUnitInitialize(unit_) != noErr) return TC_ERR_DEVICE;
     if (AudioOutputUnitStart(unit_) != noErr) return TC_ERR_DEVICE;
+    running_.store(true, std::memory_order_release);
     return TC_OK;
   }
 
   void disposeUnit() {
+    running_.store(false, std::memory_order_release);
     if (unit_ == nullptr) return;
     AudioOutputUnitStop(unit_);  // sau khi trả về, không còn callback nào
     AudioUnitUninitialize(unit_);
@@ -257,6 +321,9 @@ class RemoteIOBackend final : public AudioBackend {
                                      object:s
                                       queue:nil
                                  usingBlock:^(NSNotification* /*note*/) {
+                                   if (self->running_.load(std::memory_order_acquire)) {
+                                     self->applyInputPreference();
+                                   }
                                    host->onRouteChanged(routeFromSession(s));
                                  }];
 
@@ -311,8 +378,10 @@ class RemoteIOBackend final : public AudioBackend {
   AudioComponentInstance unit_ = nullptr;
   std::vector<float> inBuf_;
   std::atomic<bool> micAllowed_{true};
-  double lastSampleTime_ = -1.0;  // chỉ audio thread
-  uint32_t timebaseNumer_ = 0;    // mach_absolute_time → ns (đặt một lần lúc tạo)
+  std::atomic<int32_t> inputPref_{TC_INPUT_AUTO};
+  std::atomic<bool> running_{false};  // unit đang chạy (đọc được ngoài mutex_)
+  double lastSampleTime_ = -1.0;      // chỉ audio thread
+  uint32_t timebaseNumer_ = 0;        // mach_absolute_time → ns (đặt một lần lúc tạo)
   uint32_t timebaseDenom_ = 0;
   std::atomic<uint32_t> xruns_{0};
   id routeObserver_ = nil;

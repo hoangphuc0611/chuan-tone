@@ -86,6 +86,11 @@ public class ToneCoreFlutterPlugin
 
   @Override
   public void onMethodCall(@NonNull MethodCall call, @NonNull MethodChannel.Result result) {
+    if ("inputDeviceId".equals(call.method)) {
+      Integer kind = call.argument("kind");
+      result.success(findInputDevice(kind == null ? 0 : kind));
+      return;
+    }
     if (!"requestMicrophone".equals(call.method)) {
       result.notImplemented();
       return;
@@ -102,6 +107,35 @@ public class ToneCoreFlutterPlugin
     }
     pendingMicResult = result;
     activity.requestPermissions(new String[] {Manifest.permission.RECORD_AUDIO}, MIC_REQUEST_CODE);
+  }
+
+  // ---- Chọn micro (v0.9) ----
+
+  /** Id micro theo loại (tc_input_kind: 1 máy, 2 tai nghe có dây, 3 USB / soundcard); 0 = không có. */
+  private int findInputDevice(int kind) {
+    if (kind <= 0) return 0;
+    for (AudioDeviceInfo d : audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)) {
+      int t = d.getType();
+      boolean match;
+      switch (kind) {
+        case 1:
+          match = t == AudioDeviceInfo.TYPE_BUILTIN_MIC;
+          break;
+        case 2:
+          match = t == AudioDeviceInfo.TYPE_WIRED_HEADSET;
+          break;
+        case 3:
+          match =
+              t == AudioDeviceInfo.TYPE_USB_DEVICE
+                  || t == AudioDeviceInfo.TYPE_USB_HEADSET
+                  || t == AudioDeviceInfo.TYPE_USB_ACCESSORY;
+          break;
+        default:
+          match = false;
+      }
+      if (match) return d.getId();
+    }
+    return 0;
   }
 
   @Override

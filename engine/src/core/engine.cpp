@@ -56,12 +56,23 @@ Engine::~Engine() {
 // ---------------------------------------------------------------------------
 // Vòng đời
 
+namespace {
+BackendFactory g_backendFactory = nullptr;  // test thay backend nền tảng
+}  // namespace
+
+void setBackendFactoryForTesting(BackendFactory factory) {
+  g_backendFactory = factory;
+}
+
 tc_result Engine::start() {
   if (state() != TC_STATE_STOPPED) return TC_ERR_INVALID_STATE;
 
   if (config_.backend == TC_BACKEND_PLATFORM) {
-    backend_ = createPlatformBackend(*this, config_);
+    backend_ = g_backendFactory != nullptr ? g_backendFactory(*this, config_)
+                                           : createPlatformBackend(*this, config_);
     if (!backend_) return TC_ERR_NOT_SUPPORTED;
+    // Micro đã chọn: báo trước khi mở stream để mở đúng micro ngay lần đầu.
+    backend_->setInputPreference(inputPref_.load(std::memory_order_relaxed), inputDeviceId_);
     const tc_result r = backend_->start();
     if (r != TC_OK) {
       backend_.reset();
@@ -533,6 +544,16 @@ tc_result Engine::setRouteHint(int32_t route) {
   return TC_OK;
 }
 
+tc_result Engine::setInputPreference(int32_t preference, int32_t deviceId) {
+  if (preference < TC_INPUT_AUTO || preference > TC_INPUT_USB || deviceId < 0) {
+    return TC_ERR_INVALID_ARG;
+  }
+  inputPref_.store(preference, std::memory_order_relaxed);
+  inputDeviceId_ = deviceId;
+  if (backend_) backend_->setInputPreference(preference, deviceId);
+  return TC_OK;
+}
+
 void Engine::onRouteChanged(int32_t route) {
   const int32_t old = route_.exchange(route, std::memory_order_relaxed);
   updateMonitorTarget();
@@ -741,6 +762,7 @@ void Engine::processChunk(const float* in, uint32_t inChannels, float* out, uint
                           uint32_t frames, int64_t hostTimeNs) noexcept {
   float* mic = micBuf_.data();
   for (uint32_t i = 0; i < frames; ++i) mic[i] = in != nullptr ? in[i * inChannels] : 0.0f;
+  meterInput(mic, frames);
 
   // Đang đo độ trễ: chỉ phát tín hiệu kích thích.
   float* stim = stimBuf_.data();
@@ -821,6 +843,35 @@ void Engine::processChunk(const float* in, uint32_t inChannels, float* out, uint
   }
 }
 
+// [RT] Mức micro thô (trước mọi xử lý): đỉnh trị tuyệt đối theo cửa sổ ~300 ms — luồng điều khiển
+// đọc max(cửa sổ vừa xong, cửa sổ đang đo) nên luôn phủ 300–600 ms gần nhất; đếm số đợt chạm
+// 0 dBFS (mẫu ≥ 0,999, tức ≥ -0,01 dBFS; một chuỗi mẫu chạm liên tiếp tính một lần) để app cảnh
+// báo soundcard / micro để gain quá to.
+void Engine::meterInput(const float* mic, uint32_t frames) noexcept {
+  constexpr float kClipLevel = 0.999f;
+  float peak = inPeakAccum_;
+  uint32_t clips = 0;
+  bool clipping = inClipping_;
+  for (uint32_t i = 0; i < frames; ++i) {
+    const float a = std::fabs(mic[i]);
+    peak = std::max(peak, a);
+    const bool c = a >= kClipLevel;
+    if (c && !clipping) ++clips;
+    clipping = c;
+  }
+  inClipping_ = clipping;
+  if (clips > 0) inClips_.fetch_add(clips, std::memory_order_relaxed);
+  inPeakCur_.store(peak, std::memory_order_relaxed);
+  inPeakFrames_ += frames;
+  if (inPeakFrames_ >= config_.sampleRate * 3 / 10) {
+    inPeakLast_.store(peak, std::memory_order_relaxed);
+    inPeakAccum_ = 0.0f;
+    inPeakFrames_ = 0;
+  } else {
+    inPeakAccum_ = peak;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Đo lường
 
@@ -838,6 +889,12 @@ void Engine::fillMetrics(tc_metrics& m) const noexcept {
   m.algorithm_latency_frames = pitch_.algorithmLatency() + limiter_.lookahead();
   m.fx_load = fxLoad_.load(std::memory_order_relaxed);
   m.fx_chains = fxRack_.audioChains();
+  const float peak = std::max(inPeakLast_.load(std::memory_order_relaxed),
+                              inPeakCur_.load(std::memory_order_relaxed));
+  m.input_peak_db = peak > 1e-6f ? 20.0f * std::log10(peak) : -120.0f;
+  m.input_clips = inClips_.load(std::memory_order_relaxed);
+  m.input_preference = inputPref_.load(std::memory_order_relaxed);
+  m.input_source = TC_INPUT_AUTO;
   if (backend_) {
     const BackendInfo info = backend_->info();
     m.xruns = backend_->xruns();
@@ -846,6 +903,7 @@ void Engine::fillMetrics(tc_metrics& m) const noexcept {
     m.reported_input_latency_ms = info.inputLatencyMs;
     m.reported_output_latency_ms = info.outputLatencyMs;
     m.audio_api = info.api;
+    m.input_source = info.inputSource;
   } else {
     m.xruns = 0;
     m.buffer_frames = config_.maxBlockFrames;

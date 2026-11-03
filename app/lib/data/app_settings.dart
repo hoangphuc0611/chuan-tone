@@ -1,11 +1,54 @@
 import 'dart:io';
 import 'dart:math';
 
+import 'package:tonecore_flutter/tonecore_flutter.dart';
+
 import 'library_db.dart';
+
+/// Lựa chọn xuất (Cài đặt → Xuất, M8 B4).
+class ExportPrefs {
+  const ExportPrefs({
+    this.aacBitrate = 192000,
+    this.hd720 = false,
+    this.normalize = true,
+  });
+
+  /// Chất lượng âm thanh: 128 / 192 / 256 kbit/s.
+  final int aacBitrate;
+
+  /// Video 720p (nhẹ hơn khi gửi Zalo) thay vì 1080p.
+  final bool hd720;
+
+  /// "Cân bằng âm lượng cho mạng xã hội": chuẩn hoá −14 LUFS, đỉnh thật ≤ −1 dBTP.
+  final bool normalize;
+
+  static const bitrates = [128000, 192000, 256000];
+
+  ExportPrefs copyWith({int? aacBitrate, bool? hd720, bool? normalize}) =>
+      ExportPrefs(
+        aacBitrate: aacBitrate ?? this.aacBitrate,
+        hd720: hd720 ?? this.hd720,
+        normalize: normalize ?? this.normalize,
+      );
+
+  @override
+  bool operator ==(Object other) =>
+      other is ExportPrefs &&
+      other.aacBitrate == aacBitrate &&
+      other.hd720 == hd720 &&
+      other.normalize == normalize;
+
+  @override
+  int get hashCode => Object.hash(aacBitrate, hd720, normalize);
+
+  @override
+  String toString() =>
+      'ExportPrefs($aacBitrate bit/s, 720p: $hd720, chuẩn hoá: $normalize)';
+}
 
 /// Cài đặt chung của app (bảng `settings` của [LibraryDb]; trước M8 là `settings.json`): máy chủ
 /// tách giọng, lựa chọn "không hỏi lại" khi gửi bài, mã máy ngẫu nhiên (server dùng để giới hạn
-/// số lần tách và giữ job riêng của máy).
+/// số lần tách và giữ job riêng của máy); từ M8 B4: micro, tự bật nghe lại giọng, lựa chọn xuất.
 class AppSettings {
   AppSettings({this.baseDir});
 
@@ -32,6 +75,43 @@ class AppSettings {
 
   Future<void> setSeparationConsent(bool remember) =>
       _set('separationConsent', remember ? true : null);
+
+  /// Micro đã chọn (Cài đặt → Micro); mặc định để hệ điều hành chọn.
+  Future<InputKind> inputPreference() async {
+    final v = await _get('inputPreference');
+    return v is int && v > 0 && v <= InputKind.usb.index
+        ? InputKind.values[v]
+        : InputKind.auto;
+  }
+
+  Future<void> setInputPreference(InputKind kind) =>
+      _set('inputPreference', kind == InputKind.auto ? null : kind.index);
+
+  /// Tự bật nghe lại giọng khi cắm tai nghe có dây / soundcard, tắt khi về loa ngoài (mặc định bật).
+  Future<bool> autoMonitor() async => await _get('autoMonitor') != false;
+
+  Future<void> setAutoMonitor(bool on) =>
+      _set('autoMonitor', on ? null : false);
+
+  Future<ExportPrefs> exportPrefs() async {
+    final v = await _get('export');
+    if (v is! Map) return const ExportPrefs();
+    final rate = v['aacBitrate'];
+    return ExportPrefs(
+      aacBitrate: ExportPrefs.bitrates.contains(rate) ? rate as int : 192000,
+      hd720: v['hd720'] == true,
+      normalize: v['normalize'] != false,
+    );
+  }
+
+  Future<void> setExportPrefs(ExportPrefs p) => _set('export', {
+    'aacBitrate': p.aacBitrate,
+    'hd720': p.hd720,
+    'normalize': p.normalize,
+  });
+
+  /// Cho mẹo [id] hiện lại (Cài đặt → Trợ giúp).
+  Future<void> resetTip(String id) => _set('tipShown.$id', null);
 
   /// Mẹo [id] (vd "sing": bong bóng mẹo ở Màn hát) chưa hiện lần nào → true và đánh dấu đã hiện;
   /// các lần sau false.

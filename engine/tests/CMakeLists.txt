@@ -40,6 +40,7 @@ add_executable(tonecore_tests
   unit/beat_transpose_test.cpp
   unit/engine_m4_test.cpp
   unit/engine_m5_test.cpp
+  unit/engine_m8_test.cpp
   unit/peak_limiter_test.cpp
   unit/fx_eval_test.cpp
   unit/fx_eq_test.cpp

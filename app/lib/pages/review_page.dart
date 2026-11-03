@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:tonecore_flutter/tonecore_flutter.dart';
 
+import '../data/app_settings.dart';
 import '../data/take_store.dart';
 import '../engine/audio_service.dart';
 import '../engine/labels.dart';
@@ -50,6 +51,8 @@ class _ReviewPageState extends State<ReviewPage> {
   String? _audioKey;
   String? _videoPath;
   String? _exportError;
+  // Cài đặt → Xuất (đọc lại mỗi lần xuất: người dùng có thể vừa đổi).
+  late final AppSettings _settings = AppSettings(baseDir: _store.baseDir);
 
   Take get _take => widget.take;
 
@@ -151,7 +154,12 @@ class _ReviewPageState extends State<ReviewPage> {
 
   /// File M4A của lựa chọn hiện tại (render nếu chưa có / thông số đã đổi). null = lỗi / huỷ.
   Future<String?> _ensureAudio() async {
-    final key = jsonEncode(_info.toJson());
+    final prefs = await _settings.exportPrefs();
+    final key = jsonEncode({
+      ..._info.toJson(),
+      'aacBitrate': prefs.aacBitrate,
+      'normalize': prefs.normalize,
+    });
     final cached = _audioPath;
     if (cached != null && _audioKey == key && File(cached).existsSync()) {
       return cached;
@@ -168,7 +176,12 @@ class _ReviewPageState extends State<ReviewPage> {
         _take.beatPath,
         _take.dryPath,
         out,
-        renderSettingsFor(_info, preset: _service.presetOf(_info.genre)),
+        renderSettingsFor(
+          _info,
+          preset: _service.presetOf(_info.genre),
+          normalize: prefs.normalize,
+          aacBitrate: prefs.aacBitrate,
+        ),
         onProgress: (s) {
           if (mounted) setState(() => _progress = s.progress);
         },
@@ -216,6 +229,7 @@ class _ReviewPageState extends State<ReviewPage> {
         audio: audio,
         output: out,
         offsetNs: cameraOffsetNs(_info),
+        hd720: (await _settings.exportPrefs()).hd720,
       );
       final old = _videoPath;
       if (old != null) {
@@ -259,6 +273,7 @@ class _ReviewPageState extends State<ReviewPage> {
         subtitle:
             '${genreLabel(_info.genre)} · ${formatTakeDate(_info.createdAt)}',
         color: genreColor(_info.genre),
+        hd720: (await _settings.exportPrefs()).hd720,
       );
       if (ok == true) {
         final old = _videoPath;

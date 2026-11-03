@@ -31,7 +31,7 @@ extern "C" {
 /* Phiên bản API: (major << 16) | (minor << 8) | patch.
  * Tăng major khi phá vỡ ABI; tăng minor khi thêm hàm. */
 #define TC_API_VERSION_MAJOR 0
-#define TC_API_VERSION_MINOR 8
+#define TC_API_VERSION_MINOR 9
 #define TC_API_VERSION_PATCH 0
 #define TC_API_VERSION \
   ((TC_API_VERSION_MAJOR << 16) | (TC_API_VERSION_MINOR << 8) | TC_API_VERSION_PATCH)
@@ -79,6 +79,15 @@ typedef enum tc_route {
   TC_ROUTE_USB = 4,       /* soundcard / micro USB (OTG) */
   TC_ROUTE_RECEIVER = 5   /* loa thoại */
 } tc_route;
+
+/* (từ v0.9) Loại micro: lựa chọn (tc_set_input_preference) và micro đang dùng (tc_metrics). */
+typedef enum tc_input_kind {
+  TC_INPUT_AUTO = 0,     /* lựa chọn: để hệ điều hành chọn; báo cáo: chưa rõ */
+  TC_INPUT_BUILTIN = 1,  /* micro của máy */
+  TC_INPUT_HEADSET = 2,  /* micro tai nghe có dây */
+  TC_INPUT_USB = 3,      /* soundcard / micro USB (cáp OTG, Lightning / USB-C) */
+  TC_INPUT_BLUETOOTH = 4 /* chỉ có trong báo cáo, không chọn được (trễ lớn) */
+} tc_input_kind;
 
 /* Định danh node / tham số dùng cho tc_set_param. Danh sách sẽ mở rộng theo milestone. */
 typedef enum tc_node_id {
@@ -184,6 +193,11 @@ typedef struct tc_metrics {
   /* ---- từ v0.6 ---- */
   float fx_load;     /* 0..1 – phần thời gian của block dành cho chuỗi FX giọng (block gần nhất) */
   int32_t fx_chains; /* số chuỗi FX đang chạy: 1 + số chuỗi cũ còn ngân sau khi đổi preset */
+  /* ---- từ v0.9 ---- */
+  float input_peak_db;      /* đỉnh micro (dBFS) trong ~300 ms gần nhất; -120 khi im lặng */
+  uint32_t input_clips;     /* số lần micro chạm 0 dBFS (mỗi đợt mẫu liên tiếp tính một lần) */
+  int32_t input_source;     /* tc_input_kind micro đang dùng (TC_INPUT_AUTO = chưa rõ) */
+  int32_t input_preference; /* tc_input_kind đã chọn bằng tc_set_input_preference */
 } tc_metrics;
 
 typedef struct tc_playback_state {
@@ -512,6 +526,16 @@ TC_EXPORT tc_result tc_get_tempo(tc_engine* engine, float* out_bpm);
 /* ---- Route ----
  * Android: lớp Kotlin báo loại thiết bị (NDK không đọc được). iOS: engine tự phát hiện. */
 TC_EXPORT tc_result tc_set_route_hint(tc_engine* engine, int32_t route);
+
+/* ---- Micro (từ v0.9) ----
+ * Chọn micro (tc_input_kind; TC_INPUT_BLUETOOTH không chọn được → TC_ERR_INVALID_ARG).
+ * iOS: engine tự tìm cổng tương ứng (AVAudioSession setPreferredInput), device_id bỏ qua.
+ * Android: lớp Kotlin tìm thiết bị theo loại (AudioManager.getDevices) rồi đưa id; 0 = để hệ điều
+ * hành chọn; engine mở lại stream micro. Gọi lúc nào cũng được: lựa chọn được giữ, áp khi engine
+ * chạy và khi micro đó được cắm vào; chưa có micro đó thì hệ điều hành tự chọn. Micro đang dùng
+ * đọc ở tc_metrics.input_source. */
+TC_EXPORT tc_result tc_set_input_preference(tc_engine* engine, int32_t preference,
+                                            int32_t device_id);
 
 /* ---- Đo độ trễ ----
  * Engine phải đang RUNNING. Trong lúc đo (~1,5 s) beat và nghe lại giọng bị tắt tiếng.
