@@ -5,10 +5,10 @@ import '../data/song_import.dart';
 import '../data/song_library.dart';
 import '../engine/labels.dart';
 import 'analysis_page.dart';
+import 'sing_page.dart';
 
 /// "Bài hát của tôi" (M8 B1): thư viện bài, mới dùng nhất trước; tìm theo tên (gõ không dấu cũng
-/// được), thêm bài, đổi tên, xoá. Bấm bài → màn Phân tích bài (kết quả đã lưu hiện ngay, có nút
-/// "Hát").
+/// được), thêm bài, đổi tên, xoá. Bấm bài → Màn hát (B3; tone / thể loại / lời như lần trước).
 class SongsPage extends StatefulWidget {
   const SongsPage({super.key, this.library, this.engineVersion, this.onOpen});
 
@@ -17,7 +17,7 @@ class SongsPage extends StatefulWidget {
   /// Phiên bản engine để lấy kết quả phân tích đã lưu (null = engine đang chạy).
   final String? engineVersion;
 
-  /// Mở bài (mặc định: màn Phân tích bài); test thay bằng hàm giả.
+  /// Mở bài (mặc định: Màn hát); test thay bằng hàm giả.
   final Future<void> Function(BuildContext context, LibrarySong song)? onOpen;
 
   @override
@@ -58,9 +58,9 @@ class _SongsPageState extends State<SongsPage> {
     if (open != null) {
       await open(context, song);
     } else {
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => AnalysisPage(song: song.ref)),
-      );
+      await Navigator.of(
+        context,
+      ).push(MaterialPageRoute<void>(builder: (_) => SingPage(song: song.ref)));
     }
     await _reload();
   }
@@ -69,7 +69,10 @@ class _SongsPageState extends State<SongsPage> {
     try {
       final song = await pickSongIntoLibrary(_library);
       if (song == null || !mounted) return;
-      await _open(song);
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => AnalysisPage(song: song.ref)),
+      );
+      await _reload();
     } catch (_) {
       _snack('Không thêm được file này. Hãy thử file MP3, M4A hoặc WAV.');
     }
@@ -184,16 +187,17 @@ class _SongsPageState extends State<SongsPage> {
   }
 }
 
-/// Dòng phụ của một bài: "Sol thứ (Gm) · 85 BPM · tone +2".
+/// Dòng phụ của một bài: "Sol thứ (Gm) · 85 BPM · tone +2 · có lời".
 String songSubtitle(LibrarySong s) {
-  final parts = <String>[];
-  final k = s.key0;
-  if (k != null) parts.add(keyLabel(k));
-  final bpm = s.analysis?.bpm;
-  if (bpm != null) parts.add('${bpm.round()} BPM');
-  if (s.transpose != 0) parts.add('tone ${transposeLabel(s.transpose)}');
   if (s.missing) return 'File nhạc không còn trên máy';
-  return parts.isEmpty ? 'Chưa dò tone' : parts.join(' · ');
+  final k = s.key0;
+  final bpm = s.analysis?.bpm;
+  return [
+    k == null ? 'Chưa dò tone' : keyLabel(k),
+    if (bpm != null) '${bpm.round()} BPM',
+    if (s.transpose != 0) 'tone ${transposeLabel(s.transpose)}',
+    if (s.hasLyrics) 'có lời',
+  ].join(' · ');
 }
 
 class _SongTile extends StatelessWidget {

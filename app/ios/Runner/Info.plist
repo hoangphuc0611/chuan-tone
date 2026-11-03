@@ -40,6 +40,40 @@
 				<string>org.xiph.flac</string>
 			</array>
 		</dict>
+		<dict>
+			<!-- Lời bài hát .lrc (M8 B3): gửi cùng file nhạc hoặc riêng -->
+			<key>CFBundleTypeName</key>
+			<string>Lời bài hát</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>vn.chuantone.lrc</string>
+			</array>
+		</dict>
+	</array>
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<!-- .lrc không có kiểu hệ thống: khai báo để "Mở bằng" và bộ chọn file nhận ra -->
+			<key>UTTypeIdentifier</key>
+			<string>vn.chuantone.lrc</string>
+			<key>UTTypeDescription</key>
+			<string>Lời bài hát LRC</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.plain-text</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>lrc</string>
+				</array>
+			</dict>
+		</dict>
 	</array>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<false/>

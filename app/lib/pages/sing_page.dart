@@ -4,6 +4,8 @@ import 'package:chuantone_media/chuantone_media.dart';
 import 'package:flutter/material.dart';
 import 'package:tonecore_flutter/tonecore_flutter.dart';
 
+import '../data/lrc.dart';
+import '../data/song_import.dart';
 import '../data/song_ref.dart';
 import '../data/take_store.dart';
 import '../engine/labels.dart';
@@ -11,6 +13,7 @@ import '../engine/sing_controller.dart';
 import '../widgets/analysis_widgets.dart';
 import '../widgets/coach_marks.dart';
 import '../widgets/gain_slider.dart';
+import '../widgets/lyrics_view.dart';
 import '../widgets/pitch_meter.dart';
 import '../widgets/separation_panel.dart';
 import '../widgets/transpose_control.dart';
@@ -18,9 +21,9 @@ import 'review_page.dart';
 
 /// Màn hát (CLAUDE.md mục 5 màn 3; M8 B2, bố cục ở docs/m8-plan.md mục 1): tone thật to, tone nhạc
 /// − / + (nhớ theo bài), đồng hồ cao độ, mức chỉnh giọng, chip thể loại, "Vang", "Giữ giọng ca sĩ
-/// gốc" (bài đã tách giọng); thanh phát + nút Thu luôn ở đáy. Nút loa: âm lượng / nghe lại giọng;
-/// menu ⋮: tách giọng, sửa tone. Lần đầu vào: 3 bong bóng mẹo. Logic ở [SingController] (dùng
-/// chung với Phòng thử).
+/// gốc" (bài đã tách giọng), lời chạy chữ (`.lrc`, B3); thanh phát + nút Thu luôn ở đáy. Nút loa:
+/// âm lượng / nghe lại giọng; menu ⋮: lời bài hát, tách giọng, sửa tone. Lần đầu vào: 3 bong bóng
+/// mẹo. Logic ở [SingController] (dùng chung với Phòng thử).
 class SingPage extends StatefulWidget {
   const SingPage({super.key, required this.song, this.controller});
 
@@ -33,7 +36,7 @@ class SingPage extends StatefulWidget {
   State<SingPage> createState() => _SingPageState();
 }
 
-enum _Menu { separate, editKey }
+enum _Menu { lyrics, separate, editKey }
 
 class _SingPageState extends State<SingPage> {
   late final SingController _c = widget.controller ?? SingController();
@@ -126,11 +129,62 @@ class _SingPageState extends State<SingPage> {
 
   void _onMenu(_Menu m) {
     switch (m) {
+      case _Menu.lyrics:
+        _showLyrics();
       case _Menu.separate:
         _showSeparation();
       case _Menu.editKey:
         unawaited(_editKey());
     }
+  }
+
+  /// Chọn file lời cho bài; file không đúng dạng thì báo.
+  Future<void> _pickLyrics() async {
+    final String? path;
+    try {
+      path = await pickLyricsFile();
+    } catch (_) {
+      _snack('Không mở được bộ chọn file.');
+      return;
+    }
+    if (path == null) return;
+    try {
+      await _c.setLyricsFile(path);
+      _snack('Đã nạp lời: ${_c.lyrics!.lines.length} dòng.');
+    } on FormatException {
+      _snack(
+        'File này không phải lời bài hát dạng .lrc (cần có mốc thời gian như [00:12.30]).',
+      );
+    } catch (_) {
+      _snack('Không đọc được file lời.');
+    }
+  }
+
+  void _snack(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(text)));
+  }
+
+  void _showLyrics() {
+    unawaited(
+      showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        isScrollControlled: true,
+        builder: (sheet) => ListenableBuilder(
+          listenable: _c,
+          builder: (sheet, _) => _LyricsSheet(
+            c: _c,
+            onPick: () {
+              Navigator.pop(sheet);
+              unawaited(_pickLyrics());
+            },
+          ),
+        ),
+      ),
+    );
   }
 
   void _showVolume() {
@@ -219,6 +273,14 @@ class _SingPageState extends State<SingPage> {
                   onSelected: _onMenu,
                   itemBuilder: (_) => [
                     PopupMenuItem(
+                      value: _Menu.lyrics,
+                      enabled: c.song != null,
+                      child: const ListTile(
+                        leading: Icon(Icons.lyrics_outlined),
+                        title: Text('Lời bài hát'),
+                      ),
+                    ),
+                    PopupMenuItem(
                       value: _Menu.separate,
                       enabled: c.song != null,
                       child: const ListTile(
@@ -293,6 +355,15 @@ class _SingPageState extends State<SingPage> {
                   builder: (context, pitch, _) =>
                       PitchMeter(state: pitch, compact: true),
                 ),
+                if (c.lyrics case final lyrics?)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: LyricsView(
+                      lyrics: lyrics,
+                      offsetMs: c.lyricsOffsetMs,
+                      position: c.position,
+                    ),
+                  ),
                 const SizedBox(height: 12),
                 KeyedSubtree(
                   key: _correctionKey,
@@ -662,6 +733,86 @@ class _TransportBar extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Lời bài hát: nạp / đổi file `.lrc`, lời sớm / muộn 0,5 s, bỏ lời.
+class _LyricsSheet extends StatelessWidget {
+  const _LyricsSheet({required this.c, required this.onPick});
+
+  final SingController c;
+  final VoidCallback onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final lyrics = c.lyrics;
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Lời bài hát', style: theme.textTheme.titleLarge),
+            const SizedBox(height: 4),
+            Text(
+              lyrics == null
+                  ? 'Chọn file lời .lrc của bài (có mốc thời gian từng câu). App không kèm sẵn '
+                        'lời bài nào.'
+                  : 'Đã có lời: ${lyrics.lines.length} dòng.',
+            ),
+            const SizedBox(height: 12),
+            FilledButton.tonalIcon(
+              onPressed: onPick,
+              icon: const Icon(Icons.file_open_outlined),
+              label: Text(lyrics == null ? 'Chọn file lời' : 'Đổi file lời'),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(52),
+              ),
+            ),
+            if (lyrics != null) ...[
+              const SizedBox(height: 16),
+              Text(
+                lyricsOffsetLabel(c.lyricsOffsetMs),
+                key: const ValueKey('lyrics-offset'),
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton(
+                    onPressed: () => c.nudgeLyrics(-500),
+                    child: const Text('Lời muộn hơn'),
+                  ),
+                  OutlinedButton(
+                    onPressed: () => c.nudgeLyrics(500),
+                    child: const Text('Lời sớm hơn'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Mỗi lần bấm dời lời 0,5 giây.',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall,
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: c.removeLyrics,
+                  child: const Text('Bỏ lời'),
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );

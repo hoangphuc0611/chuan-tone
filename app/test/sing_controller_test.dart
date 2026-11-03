@@ -346,6 +346,51 @@ void main() {
     expect(await stems.vocalsFor(name: song.name, size: song.size), isNull);
   }, skip: skip);
 
+  test(
+    'lời bài hát: nạp theo bài, vị trí phát, lệch lời nhớ theo bài',
+    () async {
+      final lrc = File('${dir.path}/loi.lrc')
+        ..writeAsStringSync('[00:01.00]Câu một\n[00:05.00]Câu hai\n');
+      await SongLibrary(baseDir: dir).setLyrics(song.name, song.size, lrc.path);
+      final c = make();
+      await c.start(initial: song);
+      expect(c.lyrics?.lines, hasLength(2));
+      expect(c.lyricsOffsetMs, 0);
+
+      c.seek(const Duration(seconds: 6));
+      expect(c.position.value, const Duration(seconds: 6));
+      c.playPause();
+      run(200); // ~1 s ở 48 kHz
+      c.pitchTick();
+      expect(c.position.value.inMilliseconds, closeTo(7067, 30));
+
+      c.nudgeLyrics(500);
+      c.nudgeLyrics(500);
+      expect(c.lyricsOffsetMs, 1000);
+      c.nudgeLyrics(-20000);
+      expect(c.lyricsOffsetMs, -10000);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(
+        (await SongLibrary(
+          baseDir: dir,
+        ).lyricsFor(song.name, song.size))!.offsetMs,
+        -10000,
+      );
+
+      final bad = File('${dir.path}/x.txt')..writeAsStringSync('không có mốc');
+      await expectLater(c.setLyricsFile(bad.path), throwsFormatException);
+      expect(c.lyrics?.lines, hasLength(2));
+
+      await c.removeLyrics();
+      expect(c.lyrics, isNull);
+      await c.openSong(song);
+      expect(c.lyrics, isNull);
+      await c.setLyricsFile(lrc.path);
+      expect(c.lyrics?.lines.first.text, 'Câu một');
+    },
+    skip: skip,
+  );
+
   test('không mở được thiết bị âm thanh → false + lỗi', () async {
     final bad = AudioService.test(() => ToneCoreEngine.create(sampleRate: 10));
     final c = SingController(service: bad, baseDir: dir, autoTick: false);

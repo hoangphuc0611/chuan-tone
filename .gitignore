@@ -33,6 +33,8 @@ datasets/private/
 *.mp3
 *.m4a
 !engine/tests/golden/**/*.wav
+# Bài mẫu luyện giọng do tools/samples/make_samples.dart tạo (nhạc của dự án, đóng gói trong app)
+!app/assets/samples/*.m4a
 
 # FVM Version Cache
 .fvm/

@@ -10,6 +10,7 @@ import 'package:chuantone/data/song_ref.dart';
 import 'package:chuantone/engine/audio_service.dart';
 import 'package:chuantone/engine/sing_controller.dart';
 import 'package:chuantone/pages/sing_page.dart';
+import 'package:chuantone/widgets/lyrics_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tonecore_flutter/tonecore_flutter.dart';
@@ -53,9 +54,15 @@ void main() {
   Future<(SingController, AudioService)> open(
     WidgetTester tester, {
     bool tips = false,
+    String? lyrics,
   }) async {
     final song = await tester.runAsync(() async {
-      final s = await SongLibrary(baseDir: dir).add(wav);
+      final lib = SongLibrary(baseDir: dir);
+      final s = await lib.add(wav);
+      if (lyrics != null) {
+        final f = File('${dir.path}/loi.lrc')..writeAsStringSync(lyrics);
+        await lib.setLyrics(s.name, s.size, f.path);
+      }
       if (!tips) {
         // Đã xem mẹo: không che màn khi test các nút.
         await LibraryDb.setSetting(dir, 'tipShown.sing', true);
@@ -203,6 +210,39 @@ void main() {
     }
     expect(find.textContaining('Tiếp ('), findsNothing);
     await close(tester, c2, s2);
+  }, skip: skip != null);
+
+  testWidgets('lời chạy chữ + menu Lời bài hát (lời sớm / muộn, bỏ lời)', (
+    tester,
+  ) async {
+    final (c, s) = await open(
+      tester,
+      lyrics: '[00:00.00]Câu đầu tiên\n[00:08.00]Câu thứ hai\n',
+    );
+    expect(find.byType(LyricsView), findsOneWidget);
+    c.seek(const Duration(seconds: 1));
+    await tester.pump();
+    expect(find.textContaining('Câu đầu tiên'), findsOneWidget);
+    expect(find.text('Câu thứ hai'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Thêm'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Lời bài hát'));
+    await tester.pumpAndSettle();
+    expect(find.text('Đã có lời: 2 dòng.'), findsOneWidget);
+    expect(find.text('Lời đúng như file'), findsOneWidget);
+    await tester.tap(find.text('Lời sớm hơn'));
+    await tester.pump();
+    expect(find.text('Lời sớm hơn 0,5 s'), findsOneWidget);
+    expect(c.lyricsOffsetMs, 500);
+    await tester.tap(find.text('Bỏ lời'));
+    await settle(tester, () => c.lyrics == null);
+    await tester.pumpAndSettle();
+    expect(find.text('Chọn file lời'), findsOneWidget);
+    await tester.tapAt(const Offset(10, 10)); // đóng bảng
+    await tester.pumpAndSettle();
+    expect(find.byType(LyricsView), findsNothing);
+    await close(tester, c, s);
   }, skip: skip != null);
 
   for (final width in [320.0, 375.0]) {

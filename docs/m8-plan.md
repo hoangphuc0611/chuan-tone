@@ -52,7 +52,33 @@
     camera giả, bài hỏng, bản tách hỏng, không mở được thiết bị; Màn hát ở 320 / 375 px chữ 130%
     (cả lúc đang thu), mẹo chỉ hiện một lần, menu sửa tone, nút loa. CI chạy test app với
     `TONECORE_LIB` (thiếu thì test engine bị bỏ qua khi chạy tay, CI bắt buộc có).
-- [ ] B3 — Lời bài hát (.lrc), bài mẫu, Trang chủ mới
+- [~] **B3** (2026-11-03, chờ thử trên iPhone ở B7): lời `.lrc`, bài mẫu, Trang chủ mới.
+  - **Bộ đọc LRC tự viết** (`data/lrc.dart`): mốc dòng (phần lẻ 1–3 chữ số), nhiều mốc một dòng
+    (điệp khúc), mốc từng chữ `<mm:ss.xx>` (và `[mm:ss.xx]` giữa dòng), thẻ `ti` / `ar` / `offset`,
+    BOM, CRLF, UTF-16 có BOM, byte hỏng; không có mốc nào → báo không phải file lời. Tô màu theo số
+    ký tự đã hát (không cắt giữa chữ cái và dấu rời); dòng chỉ có mốc dòng tô dần tới câu sau nhưng
+    không chậm hơn ~0,35 s / ký tự.
+  - **Lời trong thư viện**: chép vào `<dữ liệu app>/library/<băm>.lrc` (cột `lrc_file`), lệch lời
+    nhớ theo bài (`lrc_offset_ms`), xoá bài xoá cả lời. Nạp lời: chọn kèm file `.lrc` khi thêm bài
+    (ghép theo tên, hoặc một nhạc + một lời), "Mở bằng" gửi nhạc + lời cùng lúc / gửi riêng file lời
+    (gắn cho bài cùng tên; iOS khai báo kiểu `.lrc`), hoặc ⋮ → **Lời bài hát** ở Màn hát.
+  - **Màn hát**: lời chạy chữ dưới đồng hồ cao độ — dòng đang hát to, phần đã hát tô màu; dòng sau
+    mờ; chiều cao cố định (các nút không nhảy khi đổi câu); cập nhật ~30 lần/giây riêng phần lời.
+    Bảng "Lời bài hát": chọn / đổi file, "Lời sớm hơn / muộn hơn" mỗi lần 0,5 s (±10 s), bỏ lời.
+  - **Bài mẫu**: `tools/samples/make_samples.dart` tạo 2 bài luyện giọng (piano + bass + trống nhẹ
+    + giai điệu dẫn, nén AAC 96 kbit/s): "Luyện giọng: Đô Rê Mi" (Đô trưởng, 80 BPM, 58 s, 654 KB) và
+    "Luyện giọng: La thứ" (La thứ, 72 BPM, 65 s, 716 KB), kèm lời có mốc từng chữ. Engine dò đúng
+    tone + nhịp cả hai (keylab: C 80,0 BPM; Am 72,0 BPM; một tone suốt bài). Bấm ở Trang chủ thì
+    chép vào thư viện (đánh dấu bài mẫu) rồi vào hát.
+  - **Trang chủ mới** (bố cục mục 1): "Thêm bài hát" to nhất, "Hát tiếp" (3 bài mới dùng — bấm là
+    vào Màn hát với tone / thể loại / lời như lần trước), "Tất cả bài hát (N)", Bài mẫu, "Bản thu của
+    tôi (N)", ⚙. Tự cập nhật khi quay về từ màn khác. Thẻ "engine OK" chuyển vào **Cài đặt** (khung
+    đầu: Đo độ trễ, Phòng thử ở Nâng cao, Giới thiệu); Trang chủ chỉ báo khi engine lỗi. "Bài hát của
+    tôi" bấm bài → Màn hát; dòng phụ thêm "có lời".
+  - Test app 143 (+28): bộ đọc LRC, lời trong thư viện, ghép file lời, bài mẫu (asset thật), lời
+    chạy chữ (tô màu, lệch lời, chiều cao cố định ở 320 px chữ 130%), bộ điều khiển (lời, vị trí phát,
+    lệch lời nhớ theo bài), Màn hát có lời + bảng Lời bài hát, Trang chủ (Hát tiếp, bài mẫu, Cài đặt,
+    engine lỗi, 320 px chữ 130%).
 - [ ] B4 — Engine 0.9 (mức micro, chọn micro) + màn Cài đặt
 - [ ] B5 — Hướng dẫn lần đầu, Việt hoá phần còn lại, icon, thông báo lỗi
 - [ ] B6 — Chế độ soundcard (OTG)

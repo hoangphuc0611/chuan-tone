@@ -57,6 +57,12 @@ Quyền micro tự làm trong plugin (Java + AVAudioSession), không dùng `perm
 
 **Phụ thuộc gián tiếp cần lưu ý:** `dbus` (MPL-2.0) bị kéo vào bởi `file_picker_linux` – chỉ dùng cho bản Linux desktop, **không** được build vào app Android/iOS. Toàn bộ phụ thuộc Dart khác là MIT/BSD/Apache-2.0 (kiểm tra ngày 2026-10-20).
 
+## Nội dung đóng gói trong app
+
+| Nội dung | Nguồn | Quyền |
+|---|---|---|
+| Bài mẫu luyện giọng `app/assets/samples/*.m4a` + lời `*.lrc` (M8 B3) | Tạo hoàn toàn bằng code của dự án: `tools/samples/make_samples.dart` (tổng hợp piano / bass / trống / giai điệu dẫn, nén AAC bằng `afconvert` của macOS). Không dùng bản thu, mẫu âm thanh, giai điệu hay lời của bài hát nào | Thuộc dự án — đóng gói được (CLAUDE.md mục 8). App không kèm lời / beat của bài có bản quyền; người dùng tự nạp lời `.lrc` của họ |
+
 ## Dữ liệu test (không đóng gói vào app, không commit)
 
 Tải bằng `tools/pitch/fetch_datasets.sh` / `tools/keytest/fetch_guitarset.sh` vào `testdata/` (đã `.gitignore`). Chỉ dùng để chấm điểm và thử nghiệm trên máy dev và CI.

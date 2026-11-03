@@ -10,6 +10,7 @@ import '../data/analysis_cache.dart';
 import '../data/app_settings.dart';
 import '../data/latency_history.dart';
 import '../data/library_db.dart';
+import '../data/lrc.dart';
 import '../data/song_library.dart';
 import '../data/song_prefs.dart';
 import '../data/song_ref.dart';
@@ -98,6 +99,9 @@ class SingController extends ChangeNotifier {
   /// Cao độ đang hát (~30 lần/giây).
   final pitch = ValueNotifier<PitchState?>(null);
 
+  /// Vị trí phát (~30 lần/giây) — lời chạy chữ.
+  final position = ValueNotifier<Duration>(Duration.zero);
+
   Timer? _ticker;
   Timer? _pitchTicker;
   StreamSubscription<ToneCoreEvent>? _sub;
@@ -124,6 +128,10 @@ class SingController extends ChangeNotifier {
   String? _analysisError;
   Duration? _analysisTime;
   MusicKey? _manualKey;
+
+  // Lời bài hát (.lrc) của bài đang nạp.
+  Lyrics? _lyrics;
+  int _lyricsOffsetMs = 0;
 
   // Thể loại đang chọn có từ đâu (null: giữ thể loại chọn lần trước).
   GenreSource? _genreSource;
@@ -190,6 +198,12 @@ class SingController extends ChangeNotifier {
   /// Tone của bài gốc người dùng đã sửa tay (null = theo máy dò).
   MusicKey? get manualKey => _manualKey;
   SongAnalysis? get analysis => service.songAnalysis;
+
+  /// Lời của bài (null = chưa nạp).
+  Lyrics? get lyrics => _lyrics;
+
+  /// Lệch lời (ms, dương = lời hiện sớm hơn).
+  int get lyricsOffsetMs => _lyricsOffsetMs;
   GenreSource? get genreSource => _genreSource;
   String? get server => _server;
   bool get hasStems => _vocals != null;
@@ -287,6 +301,7 @@ class SingController extends ChangeNotifier {
       }
     }
     _playback = e.playback;
+    position.value = _playback!.position;
     _metrics = e.metrics;
     _currentKey = service.currentKey;
     _rssMb = ProcessInfo.currentRss >> 20;
@@ -294,14 +309,16 @@ class SingController extends ChangeNotifier {
     _notify();
   }
 
-  /// Nhịp nhanh (33 ms): đồng hồ cao độ; đo thời gian đổi tone khi vừa bấm tone ±.
+  /// Nhịp nhanh (33 ms): đồng hồ cao độ, vị trí phát cho lời; đo thời gian đổi tone khi vừa bấm
+  /// tone ±.
   void pitchTick() {
     final e = engine;
     if (e == null || _disposed) return;
     pitch.value = e.pitchState;
+    final pb = e.playback;
+    position.value = pb.position;
     final now = _clock.elapsed;
     if (timing.pending || !watch.done(now)) {
-      final pb = e.playback;
       watch.observe(at: now, position: pb.position, playing: pb.playing);
       if (timing.observe(pb.audibleTranspose, now)) {
         _playback = pb;
@@ -371,6 +388,9 @@ class SingController extends ChangeNotifier {
         timing.requested(saved, _clock.elapsed);
       }
       _manualKey = await _prefs.keyFor(name: song.name, size: song.size);
+      final ly = await library.lyricsFor(song.name, song.size);
+      _lyrics = ly?.lyrics;
+      _lyricsOffsetMs = ly?.offsetMs ?? 0;
       // Thể loại: đã chọn cho bài → theo tên file; theo nhịp thì chờ phân tích xong.
       _applySuggestion(
         suggestGenre(
@@ -379,6 +399,7 @@ class SingController extends ChangeNotifier {
         ),
       );
       _playback = e.playback;
+      position.value = _playback!.position;
       unawaited(library.touch(song.name, song.size));
       _analyze(song, vocals);
     } on ToneCoreException catch (err) {
@@ -599,6 +620,7 @@ class SingController extends ChangeNotifier {
     if (e == null) return;
     e.seek(to < Duration.zero ? Duration.zero : to);
     _playback = e.playback;
+    position.value = _playback!.position;
     _notify();
   }
 
@@ -608,6 +630,36 @@ class SingController extends ChangeNotifier {
     if (p == null || !p.hasBeat) return;
     final to = p.position + delta;
     seek(to > p.duration ? p.duration : to);
+  }
+
+  // ---- lời bài hát ----
+
+  /// Nạp lời `.lrc` cho bài đang hát (nhớ theo bài). File không phải lời có mốc thời gian →
+  /// [FormatException].
+  Future<void> setLyricsFile(String path) async {
+    final s = _song;
+    if (s == null) return;
+    _lyrics = await library.setLyrics(s.name, s.size, path);
+    _lyricsOffsetMs = 0;
+    _notify();
+  }
+
+  Future<void> removeLyrics() async {
+    final s = _song;
+    if (s == null) return;
+    await library.removeLyrics(s.name, s.size);
+    _lyrics = null;
+    _lyricsOffsetMs = 0;
+    _notify();
+  }
+
+  /// Dời lời [deltaMs] (dương = sớm hơn), trong ±10 s, nhớ theo bài.
+  void nudgeLyrics(int deltaMs) {
+    final s = _song;
+    if (s == null || _lyrics == null) return;
+    _lyricsOffsetMs = (_lyricsOffsetMs + deltaMs).clamp(-10000, 10000);
+    _notify();
+    unawaited(library.setLyricsOffset(s.name, s.size, _lyricsOffsetMs));
   }
 
   // ---- thu âm ----
@@ -845,6 +897,7 @@ class SingController extends ChangeNotifier {
     if (_camera) unawaited(camera.stop().then((_) {}, onError: (_) {}));
     engine?.pause();
     pitch.dispose();
+    position.dispose();
     super.dispose();
   }
 }

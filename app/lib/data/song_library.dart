@@ -6,6 +6,7 @@ import 'package:tonecore_flutter/tonecore_flutter.dart';
 import 'analysis_cache.dart';
 import 'app_dirs.dart';
 import 'library_db.dart';
+import 'lrc.dart';
 import 'song_ref.dart';
 import 'stem_store.dart';
 
@@ -24,6 +25,8 @@ class LibrarySong {
     this.manualKey,
     this.analysis,
     this.missing = false,
+    this.hasLyrics = false,
+    this.lyricsOffsetMs = 0,
   });
 
   /// Tên file gốc lúc thêm (một nửa khoá bài).
@@ -51,6 +54,12 @@ class LibrarySong {
 
   /// File nhạc không còn trên máy (cần thêm lại).
   final bool missing;
+
+  /// Đã nạp lời `.lrc`.
+  final bool hasLyrics;
+
+  /// Lệch lời người dùng chỉnh (ms, dương = lời hiện sớm hơn).
+  final int lyricsOffsetMs;
 
   String get key => songKey(name, size);
 
@@ -82,6 +91,7 @@ class SongLibrary {
     String source, {
     String? name,
     bool move = false,
+    bool sample = false,
   }) async {
     final src = File(source);
     final fileName = name ?? source.split(Platform.pathSeparator).last;
@@ -114,7 +124,7 @@ class SongLibrary {
       await db.transaction((txn) async {
         final n = await txn.update(
           'songs',
-          {'file': rel},
+          {'file': rel, 'sample': ?(sample ? 1 : null)},
           where: 'key = ?',
           whereArgs: [key],
         );
@@ -127,6 +137,7 @@ class SongLibrary {
             'file': rel,
             'added_at': t,
             'last_used_at': t,
+            'sample': sample ? 1 : 0,
           });
         }
       });
@@ -201,6 +212,8 @@ class SongLibrary {
           manualKey: _keyOf(r['key_root'], r['key_scale']),
           analysis: _analysisOf(r['analysis_json']),
           missing: !await File(path).exists(),
+          hasLyrics: r['lrc_file'] != null,
+          lyricsOffsetMs: r['lrc_offset_ms'] as int? ?? 0,
         ),
       );
     }
@@ -227,6 +240,7 @@ class SongLibrary {
   /// Xoá bài: file nhạc, giọng đã tách, kết quả phân tích, lựa chọn theo bài. Bản thu giữ nguyên.
   Future<void> delete(LibrarySong song) async {
     await _deleteQuietly(File(song.path));
+    await _deleteQuietly(_lyricsFile(song.key));
     await _stems.delete(name: song.name, size: song.size);
     await AnalysisCache(
       engineVersion: '',
@@ -234,6 +248,80 @@ class SongLibrary {
     ).remove(name: song.name, size: song.size);
     await (await LibraryDb.open(baseDir))
         .delete('songs', where: 'key = ?', whereArgs: [song.key]);
+  }
+
+  // ---- lời bài hát (.lrc) ----
+
+  File _lyricsFile(String key) => File('${dir.path}/${stableHash(key)}.lrc');
+
+  /// Gắn lời cho bài: đọc thử (không phải LRC có mốc → [FormatException]) rồi chép vào thư viện
+  /// (`<băm khoá>.lrc`), lệch lời về 0. Bài chưa có trong thư viện → [StateError].
+  Future<Lyrics> setLyrics(String name, int size, String lrcPath) async {
+    final bytes = await File(lrcPath).readAsBytes();
+    final lyrics = decodeLrc(bytes);
+    final key = songKey(name, size);
+    final db = await LibraryDb.open(baseDir);
+    final f = _lyricsFile(key);
+    await dir.create(recursive: true);
+    await f.writeAsBytes(bytes, flush: true);
+    final n = await db.update(
+      'songs',
+      {'lrc_file': f.uri.pathSegments.last, 'lrc_offset_ms': 0},
+      where: 'key = ? AND file IS NOT NULL',
+      whereArgs: [key],
+    );
+    if (n == 0) {
+      await _deleteQuietly(f);
+      throw StateError('Bài chưa có trong thư viện');
+    }
+    return lyrics;
+  }
+
+  /// Bỏ lời của bài.
+  Future<void> removeLyrics(String name, int size) async {
+    final key = songKey(name, size);
+    await _deleteQuietly(_lyricsFile(key));
+    await (await LibraryDb.open(baseDir)).update(
+      'songs',
+      {'lrc_file': null, 'lrc_offset_ms': 0},
+      where: 'key = ?',
+      whereArgs: [key],
+    );
+  }
+
+  /// Lệch lời (ms, dương = lời hiện sớm hơn), nhớ theo bài.
+  Future<void> setLyricsOffset(String name, int size, int ms) async {
+    await (await LibraryDb.open(baseDir)).update(
+      'songs',
+      {'lrc_offset_ms': ms},
+      where: 'key = ?',
+      whereArgs: [songKey(name, size)],
+    );
+  }
+
+  /// Lời đã nạp của bài + lệch lời; null nếu chưa có lời / file lời hỏng / mất.
+  Future<({Lyrics lyrics, int offsetMs})?> lyricsFor(
+    String name,
+    int size,
+  ) async {
+    final rows = await (await LibraryDb.open(baseDir)).query(
+      'songs',
+      columns: ['lrc_file', 'lrc_offset_ms'],
+      where: 'key = ?',
+      whereArgs: [songKey(name, size)],
+    );
+    if (rows.isEmpty) return null;
+    final file = rows.first['lrc_file'];
+    if (file is! String) return null;
+    try {
+      final lyrics = decodeLrc(await File('${dir.path}/$file').readAsBytes());
+      return (
+        lyrics: lyrics,
+        offsetMs: rows.first['lrc_offset_ms'] as int? ?? 0,
+      );
+    } on Object {
+      return null;
+    }
   }
 
   /// Tổng dung lượng file nhạc trong thư viện (byte).
