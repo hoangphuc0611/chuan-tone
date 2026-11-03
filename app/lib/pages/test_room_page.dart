@@ -8,6 +8,7 @@ import '../data/song_import.dart';
 import '../data/song_library.dart';
 import '../data/song_ref.dart';
 import '../data/take_store.dart';
+import '../data/test_log.dart';
 import '../engine/labels.dart';
 import '../engine/playback_watch.dart';
 import '../engine/sing_controller.dart';
@@ -44,6 +45,7 @@ class _TestRoomPageState extends State<TestRoomPage> {
   @override
   void initState() {
     super.initState();
+    TestLog.screen('test_room');
     _c.onTake = _review;
     unawaited(_c.start(initial: widget.initialSong));
   }
@@ -218,6 +220,9 @@ class _TestRoomPageState extends State<TestRoomPage> {
             progress: c.sepProgress,
             error: c.sepError,
             errorDetails: c.sepErrorDetails,
+            hasPending: c.sepPending != null,
+            onResume: c.resumeSeparation,
+            onDiscard: c.discardSeparation,
             lastResult: c.sepResult,
             vocalGain: c.service.vocalGain,
             onSeparate: () =>

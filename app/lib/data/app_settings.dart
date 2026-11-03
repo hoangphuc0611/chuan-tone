@@ -136,6 +136,11 @@ class AppSettings {
     'normalize': p.normalize,
   });
 
+  /// Ghi nhật ký thử nghiệm (Cài đặt → Nâng cao, M8 B7).
+  Future<bool> testLog() async => await _get('testLog') == true;
+
+  Future<void> setTestLog(bool on) => _set('testLog', on ? true : null);
+
   /// Đã xong (hoặc bỏ qua) hướng dẫn lần đầu.
   Future<bool> onboardingDone() async => await _get('onboardingDone') == true;
 

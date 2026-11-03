@@ -117,6 +117,12 @@ Mọi thuật toán trong ToneCore được viết từ các nguồn công khai 
 - Ước lượng độ trễ bằng tương quan chéo chuẩn hoá — C. H. Knapp, G. C. Carter, *The generalized correlation method for estimation of time delay*, IEEE Trans. ASSP 24(4), 1976 (dạng không lọc trọng số); A. V. Oppenheim, R. W. Schafer, *Discrete-Time Signal Processing*, 3rd ed., mục hạ mẫu (lọc thông thấp trung bình trượt rồi lấy 1/M mẫu) — dò nhạc lọt vào micro khi soundcard bật Loopback, r² = phần năng lượng giọng khô giải thích được bằng beat trễ (`app/lib/engine/beat_leak.dart`, B6).
 - Tổng hợp cộng (additive synthesis) và bộ dao động đệ quy y[n] = 2·cos(ω)·y[n−1] − y[n−2] — J. O. Smith III, *Physical Audio Signal Processing* / *Mathematics of the DFT* (CCRMA, online), mục "digital sinusoid generators"; tắt dần theo hoạ âm như mô hình dây đàn đơn giản — dùng tạo bài mẫu `tools/samples/make_samples.dart` (không chạy trong app).
 
+## Thử với người dùng (M8)
+
+- J. Brooke, *SUS: A "quick and dirty" usability scale*, trong *Usability Evaluation in Industry*, Taylor & Francis, 1996 — 10 câu, cách tính điểm 0–100; bản dịch tiếng Việt của nhóm ở `docs/m8-usability.md`.
+- A. Bangor, P. Kortum, J. Miller, *Determining what individual SUS scores mean: adding an adjective rating scale*, Journal of Usability Studies 4(3), 2009 — ngưỡng "tốt" ≈ 70, trung bình ≈ 68.
+- Phương pháp "nói to khi làm" (think-aloud) — J. Nielsen, *Usability Engineering*, Academic Press, 1993, ch. 6.
+
 ## Fingerprint
 
 - A. Wang, *An Industrial-Strength Audio Search Algorithm*, ISMIR 2003 — cần ghi vào `patent-review.md`.

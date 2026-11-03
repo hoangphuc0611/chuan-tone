@@ -7,6 +7,7 @@ import 'package:tonecore_flutter/tonecore_flutter.dart';
 
 import '../data/app_settings.dart';
 import '../data/latency_history.dart';
+import '../data/test_log.dart';
 import '../engine/audio_service.dart';
 import '../engine/latency_measure.dart';
 import '../widgets/input_level_meter.dart';
@@ -72,6 +73,12 @@ class _OnboardingPageState extends State<OnboardingPage> {
   _savedVoice;
 
   @override
+  void initState() {
+    super.initState();
+    TestLog.screen('onboarding');
+  }
+
+  @override
   void dispose() {
     _timer?.cancel();
     _restoreVoice();
@@ -81,6 +88,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
   Future<void> _go(_Step s) async {
     if (_step == _Step.voice) _restoreVoice();
     setState(() => _step = s);
+    TestLog.event('onboarding.step', {'step': s.name});
     switch (s) {
       case _Step.mic:
         final st = await (widget.micStatus ?? SystemPermissions.micStatus)();
@@ -179,6 +187,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 
   Future<void> _finish(OnboardingExit exit) async {
+    TestLog.event('onboarding.done', {'exit': exit.name, 'step': _step.name});
     _restoreVoice();
     await _settings.setOnboardingDone(true);
     widget.onFinish(exit);

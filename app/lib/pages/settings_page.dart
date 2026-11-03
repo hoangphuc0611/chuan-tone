@@ -1,13 +1,16 @@
 import 'dart:async';
 
+import 'package:chuantone_media/chuantone_media.dart';
 import 'package:flutter/material.dart';
 import 'package:tonecore_flutter/tonecore_flutter.dart';
 
 import '../data/app_settings.dart';
 import '../data/song_library.dart';
 import '../data/storage_usage.dart';
+import '../data/test_log.dart';
 import '../engine/audio_service.dart';
 import '../engine/labels.dart';
+import '../engine/latency_measure.dart';
 import '../engine/song_jobs.dart';
 import '../engine_info.dart';
 import '../widgets/separation_panel.dart';
@@ -23,6 +26,12 @@ const appVersion = String.fromEnvironment(
   'FLUTTER_BUILD_NAME',
   defaultValue: '1.0.0',
 );
+
+/// Mốc phiên của nhật ký thử nghiệm: phiên bản app, tên máy (không có gì định danh người dùng).
+Future<Map<String, Object?>> testLogSession() async {
+  final d = await DeviceLabel.load();
+  return {'version': appVersion, 'model': d.model, 'os': d.os};
+}
 
 /// Cài đặt (M8 B4, docs/m8-plan.md mục 1): Âm thanh (đo độ trễ từng bước, micro, tự nghe lại
 /// giọng, chế độ soundcard — B6), Xuất (chất lượng âm thanh, video 720p, cân bằng âm lượng), Bộ nhớ (dung lượng, xoá từng
@@ -55,6 +64,8 @@ class _SettingsPageState extends State<SettingsPage> {
   bool? _soundcard;
   SoundcardFx _soundcardFx = SoundcardFx.soundcard;
   InputKind _input = InputKind.auto;
+  bool _testLog = TestLog.enabled;
+  int _logBytes = 0;
   String? _server;
   StorageUsage? _usage;
 
@@ -63,6 +74,7 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void initState() {
     super.initState();
+    TestLog.screen('settings');
     unawaited(_load());
   }
 
@@ -73,6 +85,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final soundcardFx = await _settings.soundcardFx();
     final input = await _settings.inputPreference();
     final server = await _settings.separationServer();
+    final logBytes = await TestLog.size();
     if (!mounted) return;
     setState(() {
       _export = export;
@@ -81,6 +94,7 @@ class _SettingsPageState extends State<SettingsPage> {
       _soundcardFx = soundcardFx;
       _input = input;
       _server = server;
+      _logBytes = logBytes;
     });
     await _measure();
   }
@@ -122,6 +136,26 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() => _soundcardFx = fx);
     _service.updateSoundcard(fx: fx);
     await _settings.setSoundcardFx(fx);
+  }
+
+  Future<void> _setTestLog(bool on) async {
+    setState(() => _testLog = on);
+    await TestLog.setEnabled(on, session: await testLogSession());
+    final bytes = await TestLog.size();
+    if (mounted) setState(() => _logBytes = bytes);
+  }
+
+  /// Bảng chia sẻ của máy (AirDrop sang Mac để `tools/usability/` tính thời gian từng nhiệm vụ).
+  Future<void> _shareLog() async {
+    await TestLog.flush();
+    final f = TestLog.file;
+    if (!await f.exists()) return;
+    final ok = await ChuanToneMedia.share(f.path);
+    if (ok == null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Máy này chưa chia sẻ được. File: ${f.path}')),
+      );
+    }
   }
 
   Future<void> _confirmDelete({
@@ -387,6 +421,38 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           if (!_ok) EngineStatusCard(info: widget.engineInfo),
           const _Header('Nâng cao'),
+          SwitchListTile(
+            secondary: const Icon(Icons.assignment_outlined),
+            title: const Text('Ghi nhật ký thử nghiệm'),
+            subtitle: const Text(
+              'Cho buổi thử app: ghi màn hình đã vào, thao tác, lỗi vào file trên máy — không gửi '
+              'lên mạng',
+            ),
+            value: _testLog,
+            onChanged: _setTestLog,
+          ),
+          if (_testLog || _logBytes > 0)
+            ListTile(
+              contentPadding: const EdgeInsets.fromLTRB(72, 0, 8, 0),
+              title: const Text('Chia sẻ nhật ký'),
+              subtitle: Text(formatBytes(_logBytes)),
+              enabled: _logBytes > 0,
+              onTap: _shareLog,
+              trailing: IconButton(
+                tooltip: 'Xoá nhật ký',
+                icon: const Icon(Icons.delete_outline),
+                onPressed: _logBytes == 0
+                    ? null
+                    : () => _confirmDelete(
+                        title: 'Xoá nhật ký thử nghiệm?',
+                        body: 'Xoá mọi dòng đã ghi trên máy này.',
+                        delete: () async {
+                          await TestLog.clear();
+                          if (mounted) setState(() => _logBytes = 0);
+                        },
+                      ),
+              ),
+            ),
           ListTile(
             leading: const Icon(Icons.science_outlined),
             title: const Text('Phòng thử'),

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:tonecore_flutter/tonecore_flutter.dart';
 
+import '../data/test_log.dart';
+
 /// Chữ kỹ thuật của một lỗi, để ở nút "Chi tiết" (M8 B5: người dùng chỉ thấy câu thường kèm việc
 /// cần làm).
 String errorDetails(Object error) => switch (error) {
@@ -35,6 +37,7 @@ Future<void> showErrorDetails(BuildContext context, String details) =>
 
 /// Thanh thông báo lỗi; có chi tiết thì kèm nút "Chi tiết".
 void showErrorSnack(BuildContext context, String text, {String? details}) {
+  TestLog.error(text, details: details);
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(

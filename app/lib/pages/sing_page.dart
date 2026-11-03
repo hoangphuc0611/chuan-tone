@@ -9,6 +9,7 @@ import '../data/lrc.dart';
 import '../data/song_import.dart';
 import '../data/song_ref.dart';
 import '../data/take_store.dart';
+import '../data/test_log.dart';
 import '../engine/labels.dart';
 import '../engine/sing_controller.dart';
 import '../widgets/analysis_widgets.dart';
@@ -29,9 +30,17 @@ import 'review_page.dart';
 /// mẹo. Cắm thiết bị USB lần đầu: hỏi chế độ soundcard (B6). Logic ở [SingController] (dùng chung
 /// với Phòng thử).
 class SingPage extends StatefulWidget {
-  const SingPage({super.key, required this.song, this.controller});
+  const SingPage({
+    super.key,
+    required this.song,
+    this.controller,
+    this.resumeSeparation = false,
+  });
 
   final SongRef song;
+
+  /// Mở xong thì tiếp tục lần tách giọng dở (Trang chủ → "Tiếp tục", M8 B7).
+  final bool resumeSeparation;
 
   /// Bộ điều khiển phiên hát (test truyền vào; null = tạo mới, huỷ khi rời màn).
   final SingController? controller;
@@ -42,7 +51,7 @@ class SingPage extends StatefulWidget {
 
 enum _Menu { lyrics, separate, editKey }
 
-class _SingPageState extends State<SingPage> {
+class _SingPageState extends State<SingPage> with WidgetsBindingObserver {
   late final SingController _c = widget.controller ?? SingController();
   final _toneKey = GlobalKey();
   final _correctionKey = GlobalKey();
@@ -54,13 +63,28 @@ class _SingPageState extends State<SingPage> {
   @override
   void initState() {
     super.initState();
+    TestLog.screen('sing');
     _c.onTake = _review;
     _c.addListener(_onChange);
-    unawaited(_c.start(initial: widget.song));
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(
+      _c.start(initial: widget.song).then((_) {
+        if (widget.resumeSeparation && mounted) {
+          unawaited(_c.resumeSeparation());
+        }
+      }),
+    );
+  }
+
+  /// Quay lại từ nền: việc bị ngắt (tách giọng) tự tiếp tục.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _c.onAppResumed();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _c.removeListener(_onChange);
     _c.onTake = null;
     if (widget.controller == null) _c.dispose();
@@ -240,6 +264,9 @@ class _SingPageState extends State<SingPage> {
                     progress: _c.sepProgress,
                     error: _c.sepError,
                     errorDetails: _c.sepErrorDetails,
+                    hasPending: _c.sepPending != null,
+                    onResume: _c.resumeSeparation,
+                    onDiscard: _c.discardSeparation,
                     lastResult: _c.sepResult,
                     vocalGain: _c.service.vocalGain,
                     onSeparate: () => _c.separate(
@@ -248,7 +275,7 @@ class _SingPageState extends State<SingPage> {
                     onCancel: _c.cancelSeparation,
                     onDelete: _c.deleteStems,
                     onVocalGain: _c.setVocalGain,
-                    noServerHint: 'Cần địa chỉ máy chủ tách giọng — nhập ở Phòng thử (cuối trang).',
+                    noServerHint: 'Cần địa chỉ máy chủ tách giọng — nhập ở Cài đặt → Nâng cao.',
                   ),
                 ],
               ),
@@ -399,6 +426,32 @@ class _SingPageState extends State<SingPage> {
                     label: 'Giữ giọng ca sĩ gốc',
                     value: c.service.vocalGain,
                     onChanged: c.setVocalGain,
+                  ),
+                if (sep == null && c.sepPending != null)
+                  Card(
+                    key: const ValueKey('sing-sep-pending'),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 12, 4, 4),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Text('Tách giọng ca sĩ chưa xong.'),
+                          Wrap(
+                            alignment: WrapAlignment.end,
+                            children: [
+                              TextButton(
+                                onPressed: c.discardSeparation,
+                                child: const Text('Bỏ'),
+                              ),
+                              TextButton(
+                                onPressed: c.resumeSeparation,
+                                child: const Text('Tiếp tục tách'),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 if (sep != null)
                   Card(

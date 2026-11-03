@@ -10,6 +10,7 @@ public class ChuanToneMediaPlugin: NSObject, FlutterPlugin, FlutterSceneLifeCycl
   private var waveform: WaveformVideo?
   private var incoming: IncomingFiles?
   private var permissions: SystemPermissions?
+  private let background = BackgroundTasks()
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(name: "chuantone/media", binaryMessenger: registrar.messenger())
@@ -155,6 +156,11 @@ public class ChuanToneMediaPlugin: NSObject, FlutterPlugin, FlutterSceneLifeCycl
     case "saveVideoToPhotos":
       guard let path = args["path"] as? String else { return result(Self.argError("path")) }
       saveVideo(URL(fileURLWithPath: path), result: result)
+    case "beginBackground":
+      result(background.begin(name: args["name"] as? String ?? "ChuanTone"))
+    case "endBackground":
+      if let id = args["id"] as? Int { background.end(id) }
+      result(nil)
     default:
       result(FlutterMethodNotImplemented)
     }

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:tonecore_flutter/tonecore_flutter.dart';
 
+import '../data/test_log.dart';
 import '../engine/audio_service.dart';
 import '../engine/labels.dart';
 import '../widgets/input_level_meter.dart';
@@ -29,6 +30,7 @@ class _MicPageState extends State<MicPage> {
   @override
   void initState() {
     super.initState();
+    TestLog.screen('mic');
     unawaited(_init());
   }
 

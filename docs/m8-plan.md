@@ -173,7 +173,44 @@
     loa); thu một bài có / không Loopback → cảnh báo đúng; micro chỉ ở một kênh (iOS lấy kênh đầu,
     Android trộn) → nếu mất tiếng thì thêm chọn kênh micro; vang soundcard + "Hiệu ứng của app" có
     chồng vang không; ghi tên soundcard đã thử.
-- [ ] B7 — Chạy nền ngắn, nhật ký thử nghiệm, thử nội bộ 1–2 người
+- [~] **B7** (2026-11-03, code xong; chờ vòng thử nhỏ trên iPhone): chạy nền ngắn, tự tiếp tục việc
+  dở, nhật ký thử nghiệm, kịch bản thử.
+  - **Chạy nền ngắn**: kênh `chuantone/media` thêm `beginBackground` / `endBackground` (iOS
+    `beginBackgroundTask`, `BackgroundTasks.swift`; Android chưa cần — tiến trình vẫn chạy một lúc ở
+    nền, dịch vụ nền để M9); `inBackground()` bọc quanh xuất (M4A, video sóng nhạc, video camera)
+    và tách giọng.
+  - **Tách giọng dở**: client có "tạm dừng" (giữ job trên máy chủ) khác "huỷ" (xoá job); lỗi mạng /
+    5xx đánh dấu `resumable` → giữ job. `StemStore` lưu `pending.json` (máy chủ, mã job, số đoạn,
+    lúc bắt đầu; quá 24 giờ thì bỏ). Tiếp tục: hỏi máy chủ đã nhận bao nhiêu đoạn (`chunks_received`)
+    → chỉ gửi đoạn còn thiếu (gửi trùng máy chủ bỏ qua), đếm đoạn giọng đã có trong thư mục → tải
+    tiếp; đã gửi đủ thì không giải mã lại bài (`NativeChunkSource` chỉ chạy khi cần). Máy chủ mất job
+    (khởi động lại, 404) → "Hãy tách lại". Rời Màn hát khi đang tách → tạm dừng; mở lại bài → thẻ
+    "Tách giọng ca sĩ chưa xong — Tiếp tục tách / Bỏ"; Trang chủ nhắc "Đang tách giọng dở: <bài>" →
+    bấm là vào Màn hát và tách tiếp; bị ngắt vì mất mạng / app vào nền → quay lại app thì tự tách
+    tiếp.
+  - **Xuất bị ngắt**: dấu `export.pending` (loại + lúc bắt đầu) ghi trước khi xuất, xoá khi xong.
+    Mở lại bản thu còn dấu (app bị đóng giữa chừng) → xoá file xuất dở của lần đó, báo "Lần xuất
+    trước bị ngắt giữa chừng nên đang xuất lại" và xuất lại. Lỗi xuất khi app đã vào nền → xuất lại
+    một lần khi quay lại. Xuất lỗi thì xoá file dở.
+  - **Nhật ký thử nghiệm** (`data/test_log.dart`, Cài đặt → Nâng cao): mỗi dòng một sự kiện JSON
+    (màn đã vào, bước hướng dẫn, thêm bài, phát / dừng kèm mức chỉnh giọng, tone, thể loại, Vang,
+    nghe lại giọng, thu, tách giọng, xuất, lưu Ảnh, chia sẻ, app vào nền / quay lại, lỗi người dùng
+    thấy + lỗi chưa bắt), thanh trượt chỉ ghi lần đầu trong 0,5 s; không ghi tên bài, không gửi lên
+    mạng; "Chia sẻ nhật ký" (AirDrop) / xoá. `tools/usability/task_times.py`: tách phiên, đoán mốc
+    6 nhiệm vụ, thời gian mở app → câu hát đầu tiên, danh sách lỗi (`python3 -m unittest discover
+    tools/usability/tests`).
+  - **Kịch bản thử** `docs/m8-usability.md`: vòng nhỏ (14 mục kiểm tra kỹ thuật gồm phần M7 còn
+    treo: khớp tiếng, video camera, TikTok; chạy nền / tắt app khi xuất; tách giọng bị ngắt;
+    soundcard nếu có), lời giới thiệu, 6 nhiệm vụ với lời giao và gợi ý được phép, phiếu ghi, phiếu
+    SUS tiếng Việt + cách tính điểm, bảng tổng hợp và vấn đề.
+  - Sửa kèm: chỗ nhập máy chủ tách giọng ghi đúng "Cài đặt → Nâng cao" (Màn hát, Phân tích bài).
+  - Test app 189 (+16): tạm dừng / mất kết nối rồi tiếp tục chỉ gửi đoạn thiếu, đã gửi đủ thì không
+    đọc lại bài, máy chủ mất job; `pending.json` (lưu, hết hạn 24 giờ, tách xong thì xoá, file hỏng);
+    với engine thật: rời màn → mở lại → tiếp tục → tách xong, mất mạng → quay lại app tự tách tiếp,
+    bỏ phần dở; Trang chủ nhắc tách dở; dấu xuất (xoá đúng file dở, giữ file cũ); mở lại bản thu bị
+    ngắt lúc xuất → tự xuất lại có báo (engine thật); nhật ký (tắt không ghi, mốc phiên, chặn thanh
+    trượt, tắt / xoá), Cài đặt bật nhật ký; chạy nền ngắn (báo xong cả khi lỗi, không xin được vẫn
+    làm). Python 3 test cho công cụ tính thời gian.
 - [ ] B8 — Thử với 5 người dùng → sửa → báo cáo M8
 
 ---

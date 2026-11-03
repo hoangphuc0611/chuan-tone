@@ -3,6 +3,7 @@ import 'package:tonecore_flutter/tonecore_flutter.dart';
 
 import '../data/song_import.dart';
 import '../data/song_library.dart';
+import '../data/test_log.dart';
 import '../engine/labels.dart';
 import 'analysis_page.dart';
 import 'sing_page.dart';
@@ -33,6 +34,7 @@ class _SongsPageState extends State<SongsPage> {
   @override
   void initState() {
     super.initState();
+    TestLog.screen('songs');
     _reload();
   }
 
@@ -69,6 +71,7 @@ class _SongsPageState extends State<SongsPage> {
     try {
       final song = await pickSongIntoLibrary(_library);
       if (song == null || !mounted) return;
+      TestLog.event('song.add', {'source': 'pick', 'lyrics': song.hasLyrics});
       await Navigator.of(context).push(
         MaterialPageRoute<void>(builder: (_) => AnalysisPage(song: song.ref)),
       );

@@ -6,7 +6,7 @@ import 'error_text.dart';
 import 'gain_slider.dart';
 
 /// Tách giọng ca sĩ cho bài đang nạp (M6): nút tách (chỉ cho bài gốc có giọng), tiến độ, thanh
-/// "Giữ giọng ca sĩ gốc" khi đã tách.
+/// "Giữ giọng ca sĩ gốc" khi đã tách; lần tách dở thì "Tiếp tục tách" / "Bỏ" (M8 B7).
 class SeparationPanel extends StatelessWidget {
   const SeparationPanel({
     super.key,
@@ -23,6 +23,9 @@ class SeparationPanel extends StatelessWidget {
     this.noServerHint = 'Nhập địa chỉ máy chủ tách giọng ở cuối trang.',
     this.showTitle = true,
     this.errorDetails,
+    this.hasPending = false,
+    this.onResume,
+    this.onDiscard,
   });
 
   final bool hasServer;
@@ -44,6 +47,11 @@ class SeparationPanel extends StatelessWidget {
 
   /// Chữ kỹ thuật của lỗi (nút "Chi tiết").
   final String? errorDetails;
+
+  /// Có lần tách dở (bị ngắt) để tiếp tục.
+  final bool hasPending;
+  final VoidCallback? onResume;
+  final VoidCallback? onDiscard;
 
   @override
   Widget build(BuildContext context) {
@@ -86,6 +94,24 @@ class SeparationPanel extends StatelessWidget {
             child: TextButton(
               onPressed: onDelete,
               child: const Text('Xoá bản tách'),
+            ),
+          ),
+        ] else if (hasPending) ...[
+          const Text('Lần trước tách giọng chưa xong.'),
+          const SizedBox(height: 6),
+          FilledButton.tonalIcon(
+            onPressed: onResume,
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('Tiếp tục tách'),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(52),
+            ),
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: onDiscard,
+              child: const Text('Bỏ phần tách dở'),
             ),
           ),
         ] else ...[

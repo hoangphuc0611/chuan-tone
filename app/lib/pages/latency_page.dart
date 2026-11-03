@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:tonecore_flutter/tonecore_flutter.dart';
 
 import '../data/latency_history.dart';
+import '../data/test_log.dart';
 import '../engine/audio_service.dart';
 import '../engine/labels.dart';
 import '../engine/latency_measure.dart';
@@ -34,6 +35,7 @@ class _LatencyPageState extends State<LatencyPage> {
   @override
   void initState() {
     super.initState();
+    TestLog.screen('latency_tech');
     _init();
   }
 

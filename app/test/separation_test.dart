@@ -17,13 +17,21 @@ class FakeServer {
   int flakyStatusLeft = 0; // số lần GET trạng thái trả 500 trước khi trả đúng
   bool failSeparation = false;
   int chunks = 0;
+  final puts = <int>[]; // thứ tự các đoạn nhận được (kể cả gửi lại)
+  bool lost = false; // "khởi động lại": không còn job nào
+  bool holdVocals = false; // chưa trả đoạn giọng nào
+  bool echoVocals =
+      false; // giọng = đúng nội dung đoạn (FLAC thật → engine nạp được)
 
   String get url => 'http://127.0.0.1:${_server.port}';
 
-  Future<void> start() async {
-    _server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+  /// [port] = 0: cổng bất kỳ; cổng cũ: "mở lại máy chủ" cùng địa chỉ.
+  Future<void> start({int port = 0}) async {
+    _server = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
     _server.listen(_handle);
   }
+
+  int get port => _server.port;
 
   Future<void> stop() => _server.close(force: true);
 
@@ -55,7 +63,10 @@ class FakeServer {
         chunks = (jsonDecode(utf8.decode(body)) as Map)['chunks'] as int;
         json(200, {'id': 'job1', 'state': 'uploading'});
       }
+    } else if (lost && p.length >= 3 && p[1] == 'jobs') {
+      json(404, {'error': 'không có job này (có thể đã hết hạn)'});
     } else if (req.method == 'PUT' && p.length == 5 && p[3] == 'chunks') {
+      puts.add(int.parse(p[4]));
       uploaded[int.parse(p[4])] = body;
       res.statusCode = 204;
     } else if (req.method == 'GET' && p.length == 3 && p[1] == 'jobs') {
@@ -69,10 +80,12 @@ class FakeServer {
           'vocals_ready': 0,
         });
       } else {
-        final r = ready;
+        final r = holdVocals ? 0 : ready;
         json(200, {
           'state': r == chunks ? 'done' : 'separating',
           'progress': chunks == 0 ? 0 : r / chunks,
+          'chunks': chunks,
+          'chunks_received': uploaded.length,
           'vocals_ready': r,
           'timing': {'separate': 1.5},
         });
@@ -81,7 +94,9 @@ class FakeServer {
       final i = int.parse(p[4]);
       res.statusCode = 200;
       res.headers.contentType = ContentType('audio', 'flac');
-      res.add([...utf8.encode('v'), ...uploaded[i]!]);
+      res.add(
+        echoVocals ? uploaded[i]! : [...utf8.encode('v'), ...uploaded[i]!],
+      );
     } else if (req.method == 'DELETE') {
       deleted.add(p[2]);
       res.statusCode = 204;
@@ -123,6 +138,29 @@ class FakeSource implements ChunkSource {
 
   @override
   void dispose() => disposed = true;
+}
+
+/// Nguồn không được dùng tới (máy chủ đã có đủ đoạn).
+class _NoSource implements ChunkSource {
+  bool used = false;
+
+  @override
+  Future<ChunkLayout> layout() async {
+    used = true;
+    throw StateError('không được đọc lại bài');
+  }
+
+  @override
+  Future<File> chunk(int index) async {
+    used = true;
+    throw StateError('không được đọc lại bài');
+  }
+
+  @override
+  void cancel() {}
+
+  @override
+  void dispose() {}
 }
 
 void main() {
@@ -240,6 +278,115 @@ void main() {
     expect(server.deleted, ['job1']);
   });
 
+  test('tạm dừng giữa chừng: giữ job; tiếp tục chỉ gửi đoạn còn thiếu, tải tiếp giọng', () async {
+    final out = Directory('${dir.path}/out')..createSync();
+    final cancel = SeparationCancel();
+    SeparationJob? job;
+    final src = FakeSource(dir, 6, delay: const Duration(milliseconds: 15));
+    await expectLater(
+      client().separate(
+        src,
+        out,
+        cancel: cancel,
+        onJob: (j) async => job = j,
+        onProgress: (p) {
+          if (p.uploaded >= 3) cancel.pause();
+        },
+      ),
+      throwsA(
+        isA<SeparationException>().having(
+          (e) => e.resumable,
+          'resumable',
+          isTrue,
+        ),
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(server.deleted, isEmpty); // job còn trên máy chủ
+    expect(job!.id, 'job1');
+    expect(job!.chunks, 6);
+    final sentBefore = server.puts.length;
+    final r = await client().separate(FakeSource(dir, 6), out, resume: job);
+    expect(r.vocals, hasLength(6));
+    expect(r.vocals[5].readAsStringSync(), 'vdoan-5');
+    final resent = server.puts.sublist(sentBefore);
+    expect(resent.first, greaterThanOrEqualTo(3)); // không gửi lại từ đầu
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(server.deleted, ['job1']);
+  });
+
+  test('đã gửi đủ đoạn: tiếp tục không cần đọc lại bài', () async {
+    final out = Directory('${dir.path}/out')..createSync();
+    await client().separate(FakeSource(dir, 3), out); // máy chủ đã có đủ 3 đoạn
+    server.deleted.clear();
+    for (final f in out.listSync()) {
+      f.deleteSync(); // như chưa tải đoạn giọng nào
+    }
+    final src = _NoSource();
+    final r = await client().separate(
+      src,
+      out,
+      resume: const SeparationJob(id: 'job1', chunks: 3),
+    );
+    expect(r.vocals, hasLength(3));
+    expect(src.used, isFalse);
+  });
+
+  test(
+    'máy chủ đã mất job (khởi động lại) → báo tách lại, không tiếp tục',
+    () async {
+      server.lost = true;
+      await expectLater(
+        client().separate(
+          FakeSource(dir, 2),
+          dir,
+          resume: const SeparationJob(id: 'job1', chunks: 2),
+        ),
+        throwsA(
+          isA<SeparationException>()
+              .having((e) => e.status, 'status', 404)
+              .having((e) => e.resumable, 'resumable', isFalse)
+              .having((e) => e.message, 'message', contains('tách lại')),
+        ),
+      );
+    },
+  );
+
+  test('mất kết nối giữa chừng → lỗi tiếp tục được, giữ job; có mạng lại thì tách tiếp', () async {
+    final out = Directory('${dir.path}/out')..createSync();
+    final port = server.port;
+    SeparationJob? job;
+    var stopped = false;
+    final c = SeparationClient(
+      baseUrl: server.url,
+      deviceId: 'may-1',
+      pollInterval: const Duration(milliseconds: 5),
+      retries: 1,
+    );
+    await expectLater(
+      c.separate(
+        FakeSource(dir, 6, delay: const Duration(milliseconds: 15)),
+        out,
+        onJob: (j) async => job = j,
+        onProgress: (p) {
+          if (p.uploaded >= 2 && !stopped) {
+            stopped = true;
+            server.stop();
+          }
+        },
+      ),
+      throwsA(
+        isA<SeparationException>()
+            .having((e) => e.resumable, 'resumable', isTrue)
+            .having((e) => e.message, 'message', contains('Wi-Fi')),
+      ),
+    );
+    expect(server.deleted, isEmpty);
+    await server.start(port: port);
+    final r = await client().separate(FakeSource(dir, 6), out, resume: job);
+    expect(r.vocals, hasLength(6));
+  });
+
   test('không có server → báo kiểm tra Wi-Fi', () async {
     final url = server.url;
     await server.stop();
@@ -285,6 +432,57 @@ void main() {
       expect(await again.separationConsent(), isTrue);
       expect(await again.deviceId(), id);
     });
+
+    test(
+      'lần tách dở: lưu, đọc lại, quá 24 giờ thì bỏ, tách xong thì xoá',
+      () async {
+        final store = StemStore(baseDir: dir);
+        final t0 = DateTime(2026, 11, 3, 10);
+        PendingSeparation pending(String name) => PendingSeparation(
+          name: name,
+          size: 1,
+          server: 'http://may-chu:8000',
+          job: const SeparationJob(id: 'j1', chunks: 3),
+          startedAt: t0,
+        );
+        await store.prepare(name: 'a.m4a', size: 1);
+        await store.savePending(pending('a.m4a'));
+        final p = (await store.pendingFor(
+          name: 'a.m4a',
+          size: 1,
+          now: t0.add(const Duration(hours: 1)),
+        ))!;
+        expect(p.job.id, 'j1');
+        expect(p.job.chunks, 3);
+        expect(p.server, 'http://may-chu:8000');
+        expect(p.startedAt, t0);
+        expect(await store.vocalsFor(name: 'a.m4a', size: 1), isNull);
+        await store.savePending(pending('b.m4a'));
+        expect(
+          (await store.pending(now: t0.add(const Duration(hours: 1))))
+              .map((p) => p.name),
+          unorderedEquals(['a.m4a', 'b.m4a']),
+        );
+        // Tách xong → hết dở.
+        await store.markDone(name: 'a.m4a', size: 1, chunks: 3);
+        expect(await store.pendingFor(name: 'a.m4a', size: 1, now: t0), isNull);
+        // Quá 24 giờ: máy chủ đã xoá job → bỏ cả phần đã tải.
+        expect(
+          await store.pendingFor(
+            name: 'b.m4a',
+            size: 1,
+            now: t0.add(const Duration(hours: 25)),
+          ),
+          isNull,
+        );
+        expect(store.dirFor(name: 'b.m4a', size: 1).existsSync(), isFalse);
+        // File hỏng → coi như không có.
+        File('${store.dirFor(name: 'c.m4a', size: 1).path}/pending.json')
+          ..createSync(recursive: true)
+          ..writeAsStringSync('{');
+        expect(await store.pendingFor(name: 'c.m4a', size: 1), isNull);
+      },
+    );
 
     test('stem chỉ dùng được khi đủ đoạn và có meta', () async {
       final store = StemStore(baseDir: dir);

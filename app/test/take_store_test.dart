@@ -263,6 +263,35 @@ void main() {
     setUp(() => dir = Directory.systemTemp.createTempSync('takes'));
     tearDown(() => dir.deleteSync(recursive: true));
 
+    test('xuất bị ngắt (M8 B7): mở lại thì xoá file dở của lần đó, giữ file cũ, trả việc cần xuất lại', () async {
+      final take = Take(dir, _info());
+      expect(
+        await take.recoverInterruptedExport(),
+        isNull,
+      ); // chưa xuất lần nào
+      final old = File('${dir.path}/xuat-090000.m4a')..writeAsStringSync('cũ');
+      old.setLastModifiedSync(
+        DateTime.now().subtract(const Duration(hours: 1)),
+      );
+      await take.beginExport(ExportKind.waveformVideo);
+      final partAudio = File('${dir.path}/xuat-100000.m4a')
+        ..writeAsStringSync('dở');
+      final partVideo = File('${dir.path}/video-100001.mp4')
+        ..writeAsStringSync('dở');
+      File('${dir.path}/dry.wav').writeAsStringSync('giọng');
+      // App bị đóng giữa chừng → lần mở sau:
+      expect(await take.recoverInterruptedExport(), ExportKind.waveformVideo);
+      expect(partAudio.existsSync(), isFalse);
+      expect(partVideo.existsSync(), isFalse);
+      expect(old.existsSync(), isTrue);
+      expect(File('${dir.path}/dry.wav').existsSync(), isTrue);
+      expect(await take.recoverInterruptedExport(), isNull); // đã dọn
+      // Xuất xong bình thường: không còn dấu.
+      await take.beginExport(ExportKind.audio);
+      await take.endExport();
+      expect(await take.recoverInterruptedExport(), isNull);
+    });
+
     Future<Take> make(TakeStore store, DateTime at) async {
       final d = await store.newTakeDir(at);
       for (final f in ['dry.wav', 'wet.wav', 'beat.wav']) {

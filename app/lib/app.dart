@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'data/sample_songs.dart';
 import 'data/song_import.dart';
 import 'data/song_library.dart';
+import 'data/stem_store.dart';
+import 'data/test_log.dart';
 import 'data/take_store.dart';
 import 'engine/labels.dart';
 import 'engine_info.dart';
@@ -98,6 +100,7 @@ class _ChuanToneAppState extends State<ChuanToneApp> {
     }
     final song = last;
     if (song == null || !widget.engineInfo.ok) return;
+    TestLog.event('song.add', {'source': 'incoming', 'lyrics': song.hasLyrics});
     await _navigator.currentState?.push(
       MaterialPageRoute<void>(builder: (_) => AnalysisPage(song: song.ref)),
     );
@@ -203,7 +206,8 @@ class _StartGateState extends State<_StartGate> {
 
 /// Trang chủ (M8 B3, bố cục ở docs/m8-plan.md mục 1): nút "Thêm bài hát" to nhất, "Hát tiếp" (bài
 /// mới dùng — bấm là vào Màn hát với tone / thể loại / lời như lần trước), "Tất cả bài hát", bài
-/// mẫu, bản thu, Cài đặt. Engine lỗi thì báo ngay đầu trang.
+/// mẫu, bản thu, Cài đặt. Engine lỗi thì báo ngay đầu trang. Có bài đang tách giọng dở (bị ngắt) thì
+/// nhắc "Tiếp tục" (M8 B7).
 class HomePage extends StatefulWidget {
   const HomePage({
     super.key,
@@ -223,8 +227,14 @@ class HomePage extends StatefulWidget {
   /// Kho bản thu (null = cùng thư mục dữ liệu với [library]).
   final TakeStore? takes;
 
-  /// Mở Màn hát cho bài (mặc định [SingPage]); test thay bằng hàm giả.
-  final Future<void> Function(BuildContext context, LibrarySong song)? onSing;
+  /// Mở Màn hát cho bài (mặc định [SingPage]; [resume] = tiếp tục tách giọng dở); test thay bằng
+  /// hàm giả.
+  final Future<void> Function(
+    BuildContext context,
+    LibrarySong song, {
+    bool resume,
+  })?
+  onSing;
 
   /// Số bài ở "Hát tiếp".
   static const recentCount = 3;
@@ -237,6 +247,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
   List<LibrarySong>? _songs;
   int _takeCount = 0;
   String? _installing; // id bài mẫu đang chép vào thư viện
+  List<LibrarySong> _pendingSep = const []; // bài đang tách giọng dở
 
   late final TakeStore _takes =
       widget.takes ?? TakeStore(baseDir: widget.library.baseDir);
@@ -246,6 +257,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
   @override
   void initState() {
     super.initState();
+    TestLog.screen('home');
     unawaited(_reload());
     final action = widget.initialAction;
     if (action != null && action != OnboardingExit.home) {
@@ -274,7 +286,10 @@ class _HomePageState extends State<HomePage> with RouteAware {
   }
 
   @override
-  void didPopNext() => unawaited(_reload());
+  void didPopNext() {
+    TestLog.screen('home');
+    unawaited(_reload());
+  }
 
   Future<void> _reload() async {
     try {
@@ -282,10 +297,18 @@ class _HomePageState extends State<HomePage> with RouteAware {
         engineVersion: _ok ? widget.engineInfo.version : null,
       );
       final takes = await _takes.list();
+      final pending = <LibrarySong>[];
+      for (final p in await StemStore(
+        baseDir: widget.library.baseDir,
+      ).pending()) {
+        final s = await widget.library.find(p.name, p.size);
+        if (s != null && !s.missing) pending.add(s);
+      }
       if (!mounted) return;
       setState(() {
         _songs = songs;
         _takeCount = takes.length;
+        _pendingSep = pending;
       });
     } catch (_) {
       if (mounted) setState(() => _songs = const []);
@@ -301,7 +324,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
   Future<void> _push(Widget page) =>
       Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
 
-  Future<void> _sing(LibrarySong song) async {
+  Future<void> _sing(LibrarySong song, {bool resume = false}) async {
     if (song.missing) {
       _snack(
         'File nhạc của bài này không còn trên máy. Hãy xoá rồi thêm lại bài.',
@@ -310,9 +333,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
     }
     final sing = widget.onSing;
     if (sing != null) {
-      await sing(context, song);
+      await sing(context, song, resume: resume);
     } else {
-      await _push(SingPage(song: song.ref));
+      await _push(SingPage(song: song.ref, resumeSeparation: resume));
     }
   }
 
@@ -327,6 +350,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
       return;
     }
     if (song == null || !mounted) return;
+    TestLog.event('song.add', {'source': 'pick', 'lyrics': song.hasLyrics});
     await _push(AnalysisPage(song: song.ref));
   }
 
@@ -341,7 +365,10 @@ class _HomePageState extends State<HomePage> with RouteAware {
     }
     if (!mounted) return;
     setState(() => _installing = null);
-    if (song != null) await _sing(song);
+    if (song != null) {
+      TestLog.event('song.add', {'source': 'sample'});
+      await _sing(song);
+    }
     unawaited(_reload());
   }
 
@@ -402,6 +429,19 @@ class _HomePageState extends State<HomePage> with RouteAware {
               enabled: _ok,
               onTap: _addSong,
             ),
+            for (final s in _pendingSep)
+              Card(
+                key: ValueKey('home-sep-pending-${s.name}'),
+                margin: const EdgeInsets.only(top: 12),
+                child: ListTile(
+                  leading: const Icon(Icons.record_voice_over),
+                  title: Text('Đang tách giọng dở: ${s.title}'),
+                  subtitle: const Text('Bị ngắt giữa chừng — bấm để tách tiếp'),
+                  trailing: const Icon(Icons.play_arrow),
+                  enabled: _ok,
+                  onTap: () => _sing(s, resume: true),
+                ),
+              ),
             if (recent.isNotEmpty) ...[
               const _SectionTitle('Hát tiếp'),
               for (final s in recent)

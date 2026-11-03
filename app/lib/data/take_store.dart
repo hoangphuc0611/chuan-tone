@@ -343,6 +343,63 @@ class Take {
     return File(path).existsSync() ? path : null;
   }
 
+  File get _exportMarker => File('${dir.path}/export.pending');
+
+  /// Ghi dấu "đang xuất [kind]" (M8 B7) — còn dấu lúc mở lại bản thu nghĩa là lần xuất trước bị
+  /// ngắt (app bị đóng giữa chừng).
+  Future<void> beginExport(ExportKind kind, {DateTime? now}) => writeFileAtomic(
+    _exportMarker,
+    jsonEncode({
+      'kind': kind.name,
+      'started': (now ?? DateTime.now()).toIso8601String(),
+    }),
+  );
+
+  /// Xuất xong (được hay không): xoá dấu.
+  Future<void> endExport() async {
+    try {
+      await _exportMarker.delete();
+    } on FileSystemException {
+      // không có dấu
+    }
+  }
+
+  /// Lần xuất bị ngắt: xoá các file xuất dở (tạo từ lúc bắt đầu lần đó) và dấu; trả việc cần xuất
+  /// lại (null = không có lần nào bị ngắt).
+  Future<ExportKind?> recoverInterruptedExport() async {
+    final f = _exportMarker;
+    if (!await f.exists()) return null;
+    ExportKind? kind;
+    DateTime? started;
+    try {
+      final j = jsonDecode(await f.readAsString());
+      if (j is Map) {
+        kind = ExportKind.values.where((k) => k.name == j['kind']).firstOrNull;
+        started = DateTime.tryParse('${j['started']}');
+      }
+    } catch (_) {
+      // dấu hỏng: vẫn xoá
+    }
+    if (started != null) {
+      final since = started.subtract(const Duration(seconds: 2));
+      for (final e in dir.listSync().whereType<File>()) {
+        final name = e.uri.pathSegments.last;
+        final exported =
+            (name.startsWith('xuat-') || name.startsWith('video-')) &&
+            !name.endsWith('.json');
+        if (exported && !e.lastModifiedSync().isBefore(since)) {
+          try {
+            e.deleteSync();
+          } on FileSystemException {
+            // bỏ qua
+          }
+        }
+      }
+    }
+    await endExport();
+    return kind;
+  }
+
   /// Tổng dung lượng thư mục (byte).
   int sizeBytes() {
     var n = 0;
@@ -352,6 +409,9 @@ class Take {
     return n;
   }
 }
+
+/// Việc xuất của màn Nghe lại (M8 B7: tự xuất lại khi bị ngắt).
+enum ExportKind { audio, waveformVideo, cameraVideo }
 
 /// Các bản thu trong `<dữ liệu app>/takes/<thời điểm>/`.
 class TakeStore {

@@ -9,7 +9,9 @@ import 'package:tonecore_flutter/tonecore_flutter.dart';
 
 import '../data/app_settings.dart';
 import '../data/take_store.dart';
+import '../data/test_log.dart';
 import '../engine/audio_service.dart';
+import '../engine/background.dart';
 import '../engine/beat_leak.dart';
 import '../engine/labels.dart';
 import '../engine/takes.dart';
@@ -20,7 +22,8 @@ import '../widgets/gain_slider.dart';
 /// Màn Nghe lại & chỉnh (CLAUDE.md mục 5 màn 4, M7): phát bản thu với giọng khô đi qua chuỗi giọng
 /// real-time (đổi preset / mức chỉnh giọng nghe ngay), to nhỏ giọng / nhạc, giọng sớm / muộn, cắt
 /// đầu đuôi; xuất M4A (−14 LUFS) và chia sẻ. Bản thu qua soundcard: báo nếu nhạc lọt vào micro
-/// (Loopback bật khi thu, M8 B6).
+/// (Loopback bật khi thu, M8 B6). Xuất chạy nền ngắn khi app vào nền; bị ngắt (app bị đóng, lỗi vì
+/// vào nền) thì bỏ file dở và tự xuất lại (M8 B7).
 class ReviewPage extends StatefulWidget {
   const ReviewPage({super.key, required this.take, this.store, this.service});
 
@@ -34,7 +37,7 @@ class ReviewPage extends StatefulWidget {
   State<ReviewPage> createState() => _ReviewPageState();
 }
 
-class _ReviewPageState extends State<ReviewPage> {
+class _ReviewPageState extends State<ReviewPage> with WidgetsBindingObserver {
   static const _nudgeStepMs = 5.0;
 
   late final AudioService _service = widget.service ?? AudioService.instance;
@@ -60,6 +63,11 @@ class _ReviewPageState extends State<ReviewPage> {
   String? _videoPath;
   String? _exportError;
   String? _exportDetails;
+  // Tự xuất lại khi bị ngắt (B7).
+  String? _notice;
+  bool _paused = false; // app đang ở nền
+  bool _pausedDuringExport = false;
+  ExportKind? _retryOnResume;
   // Cài đặt → Xuất (đọc lại mỗi lần xuất: người dùng có thể vừa đổi).
   late final AppSettings _settings = AppSettings(baseDir: _store.baseDir);
 
@@ -68,7 +76,23 @@ class _ReviewPageState extends State<ReviewPage> {
   @override
   void initState() {
     super.initState();
+    TestLog.screen('review');
+    WidgetsBinding.instance.addObserver(this);
     _init();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _paused = false;
+      final k = _retryOnResume;
+      _retryOnResume = null;
+      if (k != null) unawaited(_export(k, retry: true));
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _paused = true;
+      if (_busyLabel != null) _pausedDuringExport = true;
+    }
   }
 
   Future<void> _init() async {
@@ -91,6 +115,11 @@ class _ReviewPageState extends State<ReviewPage> {
       gateOn: _info.gateOn,
     );
     await _load();
+    // Lần xuất trước bị ngắt (app bị đóng giữa chừng): bỏ file dở, xuất lại.
+    final again = await _take.recoverInterruptedExport();
+    if (again != null && mounted && _error == null) {
+      unawaited(_export(again, retry: true));
+    }
     // Bản thu qua soundcard: tìm nhạc lọt vào micro ở isolate riêng.
     if (_info.route == AudioRoute.usb) {
       unawaited(
@@ -148,7 +177,16 @@ class _ReviewPageState extends State<ReviewPage> {
   }
 
   /// Chuỗi giọng đổi trên AudioService (chip thể loại, nút chỉnh giọng…) → ghi vào bản thu.
-  void _syncVoice() => _update(
+  void _syncVoice() {
+    TestLog.event('review.voice', {
+      'genre': _service.genre.name,
+      'correction': _service.correction?.name,
+      'fxmix': _service.fxMix,
+    }, true);
+    _updateVoice();
+  }
+
+  void _updateVoice() => _update(
     _info.copyWith(
       genre: _service.genre,
       correction: () => _service.correction,
@@ -159,6 +197,7 @@ class _ReviewPageState extends State<ReviewPage> {
   );
 
   Future<void> _nudge(double deltaMs) async {
+    TestLog.event('review.nudge', {'ms': _info.nudgeMs + deltaMs});
     final pb = _service.engine?.playback;
     _update(
       _info.copyWith(nudgeMs: (_info.nudgeMs + deltaMs).clamp(-100, 100)),
@@ -219,6 +258,7 @@ class _ReviewPageState extends State<ReviewPage> {
         _exportError = 'Xuất chưa được. Hãy thử lại; nếu vẫn lỗi, xoá bớt file ở Cài đặt → Bộ nhớ.';
         _exportDetails = errorDetails(err);
       }
+      unawaited(File(out).delete().then((_) {}, onError: (_) {}));
       return null;
     } finally {
       r.dispose();
@@ -230,6 +270,50 @@ class _ReviewPageState extends State<ReviewPage> {
   Future<void> _exportAudio() async {
     await _ensureAudio();
     if (mounted) setState(() {});
+  }
+
+  /// Một lần xuất: dấu "đang xuất" trên đĩa + chạy nền ngắn. Lỗi vì app vào nền giữa chừng → xuất
+  /// lại một lần khi quay lại app (hoặc ngay nếu đã quay lại). [retry]: lần xuất lại, có báo.
+  Future<void> _export(ExportKind kind, {bool retry = false}) async {
+    if (_busyLabel != null || !mounted) return;
+    _pausedDuringExport = _paused;
+    if (retry) {
+      setState(
+        () => _notice = 'Lần xuất trước bị ngắt giữa chừng nên đang xuất lại.',
+      );
+    }
+    await _take.beginExport(kind);
+    final clock = Stopwatch()..start();
+    TestLog.event('export.start', {'kind': kind.name, 'retry': retry});
+    try {
+      await inBackground(
+        'Xuất bản thu',
+        () => switch (kind) {
+          ExportKind.audio => _exportAudio(),
+          ExportKind.waveformVideo => _exportVideo(),
+          ExportKind.cameraVideo => _exportCameraVideo(),
+        },
+      );
+    } finally {
+      await _take.endExport();
+    }
+    TestLog.event(_exportError == null ? 'export.done' : 'export.fail', {
+      'kind': kind.name,
+      'seconds': clock.elapsedMilliseconds / 1000,
+      'error': ?_exportError,
+    });
+    if (!mounted) return;
+    if (_exportError != null && _pausedDuringExport && !retry) {
+      _exportError = null;
+      _exportDetails = null;
+      if (_paused) {
+        _retryOnResume = kind;
+      } else {
+        unawaited(_export(kind, retry: true));
+      }
+      return;
+    }
+    setState(() => _notice = null);
   }
 
   /// Video camera trước (B6): ghép hình đã quay với file M4A theo mốc đồng hồ máy.
@@ -262,6 +346,7 @@ class _ReviewPageState extends State<ReviewPage> {
     } on PlatformException catch (err) {
       _exportError = 'Ghép video chưa được. Hãy thử lại.';
       _exportDetails = errorDetails(err);
+      unawaited(File(out).delete().then((_) {}, onError: (_) {}));
     } on MissingPluginException {
       _exportError = 'Máy này chưa ghép được video.';
     } finally {
@@ -312,6 +397,7 @@ class _ReviewPageState extends State<ReviewPage> {
     } on PlatformException catch (err) {
       _exportError = 'Dựng video chưa được. Hãy thử lại.';
       _exportDetails = errorDetails(err);
+      unawaited(File(out).delete().then((_) {}, onError: (_) {}));
     } finally {
       poll.cancel();
       if (mounted) {
@@ -330,6 +416,7 @@ class _ReviewPageState extends State<ReviewPage> {
 
   Future<void> _share(String path) async {
     final ok = await ChuanToneMedia.share(path);
+    TestLog.event('share', {'ok': ok});
     if (ok == null && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Máy này chưa chia sẻ được. File: $path')),
@@ -341,6 +428,7 @@ class _ReviewPageState extends State<ReviewPage> {
     String msg;
     try {
       final ok = await ChuanToneMedia.saveVideoToPhotos(path);
+      TestLog.event('photos.save', {'ok': ok});
       msg = switch (ok) {
         true => 'Đã lưu video vào Ảnh.',
         false => 'Chưa được phép lưu vào Ảnh (Cài đặt → ChuẩnTone → Ảnh).',
@@ -387,6 +475,7 @@ class _ReviewPageState extends State<ReviewPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _ticker?.cancel();
     _cancelExport();
     final e = _service.engine;
@@ -493,6 +582,7 @@ class _ReviewPageState extends State<ReviewPage> {
           max: 2,
           onChanged: (v) {
             e?.monitorGain = v;
+            TestLog.event('review.voice_gain', {'value': v}, true);
             _update(_info.copyWith(voiceGain: v));
           },
         ),
@@ -502,6 +592,7 @@ class _ReviewPageState extends State<ReviewPage> {
           max: 2,
           onChanged: (v) {
             e?.beatGain = v;
+            TestLog.event('review.beat_gain', {'value': v}, true);
             _update(_info.copyWith(beatGain: v));
           },
         ),
@@ -548,6 +639,7 @@ class _ReviewPageState extends State<ReviewPage> {
             final start = (v.start * rate / 1000).round();
             var end = (v.end * rate / 1000).round();
             if (end >= _info.frames) end = 0;
+            TestLog.event('review.trim');
             _update(_info.copyWith(trimStartFrame: start, trimEndFrame: end));
           },
         ),
@@ -614,10 +706,21 @@ class _ReviewPageState extends State<ReviewPage> {
         const Divider(height: 32),
         // ---- Xuất ----
         Text('Xuất', style: theme.textTheme.titleLarge),
+        if (_notice case final n?)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              n,
+              key: const ValueKey('review-export-notice'),
+              style: TextStyle(color: theme.colorScheme.primary),
+            ),
+          ),
         const SizedBox(height: 8),
         if (_take.videoPath != null) ...[
           FilledButton.icon(
-            onPressed: busy || _loading ? null : _exportCameraVideo,
+            onPressed: busy || _loading
+                ? null
+                : () => _export(ExportKind.cameraVideo),
             icon: const Icon(Icons.videocam),
             label: const Text('Xuất video camera (9:16)'),
             style: FilledButton.styleFrom(
@@ -627,14 +730,16 @@ class _ReviewPageState extends State<ReviewPage> {
           const SizedBox(height: 8),
         ],
         FilledButton.icon(
-          onPressed: busy || _loading ? null : _exportVideo,
+          onPressed: busy || _loading
+              ? null
+              : () => _export(ExportKind.waveformVideo),
           icon: const Icon(Icons.movie),
           label: const Text('Xuất video sóng nhạc (9:16)'),
           style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
         ),
         const SizedBox(height: 8),
         OutlinedButton.icon(
-          onPressed: busy || _loading ? null : _exportAudio,
+          onPressed: busy || _loading ? null : () => _export(ExportKind.audio),
           icon: const Icon(Icons.audio_file),
           label: const Text('Xuất âm thanh (M4A)'),
           style: OutlinedButton.styleFrom(

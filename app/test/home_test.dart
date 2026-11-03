@@ -5,6 +5,8 @@ import 'package:chuantone/data/analysis_cache.dart';
 import 'package:chuantone/data/library_db.dart';
 import 'package:chuantone/data/song_library.dart';
 import 'package:chuantone/data/song_prefs.dart';
+import 'package:chuantone/data/stem_store.dart';
+import 'package:chuantone/engine/separation_client.dart';
 import 'package:chuantone/engine_info.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -103,7 +105,8 @@ void main() {
         home: HomePage(
           engineInfo: _ok,
           library: lib,
-          onSing: (_, s) async => sung.add(s.title),
+          onSing: (_, s, {resume = false}) async =>
+              sung.add('${s.title}${resume ? ' (tách tiếp)' : ''}'),
         ),
       ),
     );
@@ -128,6 +131,44 @@ void main() {
     await closeDb(tester);
   });
 
+  testWidgets(
+    'bài đang tách giọng dở: nhắc ở Trang chủ, bấm → hát + tách tiếp',
+    (tester) async {
+      final lib = await library(tester);
+      await tester.runAsync(() async {
+        final b = (await lib.songs()).firstWhere((s) => s.title == 'Bài B');
+        await StemStore(baseDir: dir).savePending(
+          PendingSeparation(
+            name: b.name,
+            size: b.size,
+            server: 'http://may-chu',
+            job: const SeparationJob(id: 'job1', chunks: 3),
+            startedAt: DateTime.now(),
+          ),
+        );
+      });
+      final sung = <String>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HomePage(
+            engineInfo: _ok,
+            library: lib,
+            onSing: (_, s, {resume = false}) async =>
+                sung.add('${s.title}${resume ? ' (tách tiếp)' : ''}'),
+          ),
+        ),
+      );
+      await settle(
+        tester,
+        () => find.text('Đang tách giọng dở: Bài B').evaluate().isNotEmpty,
+      );
+      await tester.tap(find.text('Đang tách giọng dở: Bài B'));
+      await tester.pump();
+      expect(sung, ['Bài B (tách tiếp)']);
+      await closeDb(tester);
+    },
+  );
+
   testWidgets('bấm bài mẫu: chép vào thư viện kèm lời rồi vào hát', (
     tester,
   ) async {
@@ -138,7 +179,8 @@ void main() {
         home: HomePage(
           engineInfo: _ok,
           library: lib,
-          onSing: (_, s) async => sung.add('${s.title} ${s.hasLyrics}'),
+          onSing: (_, s, {resume = false}) async =>
+              sung.add('${s.title} ${s.hasLyrics}'),
         ),
       ),
     );

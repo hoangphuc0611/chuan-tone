@@ -6,29 +6,36 @@ import 'package:tonecore_flutter/tonecore_flutter.dart';
 import 'separation_client.dart';
 
 /// Nguồn đoạn của app: engine giải mã bài bằng codec của máy, nén FLAC 44,1 kHz (tần số model) theo
-/// đoạn 20 s ở luồng nền ([FlacExporter]); đoạn nào xong là gửi được ngay.
+/// đoạn 20 s ở luồng nền ([FlacExporter]); đoạn nào xong là gửi được ngay. Chỉ bắt đầu giải mã khi
+/// cần đoạn đầu tiên (tiếp tục lần tách đã gửi đủ đoạn thì không giải mã lại, M8 B7).
 class NativeChunkSource implements ChunkSource {
-  NativeChunkSource(String songPath, Directory tmpDir)
-    : _prefix = '${tmpDir.path}/up',
-      _x = FlacExporter.create() {
-    _x.start(
-      songPath,
-      _prefix,
-      sampleRate: sampleRate,
-      chunkSeconds: chunkSeconds,
-      maxSeconds: maxSeconds,
-    );
-  }
+  NativeChunkSource(this._songPath, Directory tmpDir)
+    : _prefix = '${tmpDir.path}/up';
 
   static const sampleRate = 44100;
   static const chunkSeconds = 20.0;
   static const maxSeconds = 600.0; // giới hạn của server (spec mục 4)
 
+  final String _songPath;
   final String _prefix;
-  final FlacExporter _x;
+  FlacExporter? _exporter;
   bool _disposed = false;
 
+  FlacExporter get _x {
+    final x = _exporter;
+    if (x != null) return x;
+    return _exporter = FlacExporter.create()
+      ..start(
+        _songPath,
+        _prefix,
+        sampleRate: sampleRate,
+        chunkSeconds: chunkSeconds,
+        maxSeconds: maxSeconds,
+      );
+  }
+
   ExportStatus _status() {
+    if (_disposed) throw SeparationException('Đã huỷ tách giọng.');
     final s = _x.status;
     if (s.state == AnalysisState.failed || s.state == AnalysisState.cancelled) {
       throw SeparationException(switch (s.result) {
@@ -71,13 +78,13 @@ class NativeChunkSource implements ChunkSource {
 
   @override
   void cancel() {
-    if (!_disposed) _x.cancel();
+    if (!_disposed) _exporter?.cancel();
   }
 
   @override
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _x.dispose();
+    _exporter?.dispose();
   }
 }

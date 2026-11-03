@@ -7,6 +7,7 @@ import '../data/analysis_cache.dart';
 import '../data/app_settings.dart';
 import '../data/song_ref.dart';
 import '../data/stem_store.dart';
+import 'background.dart';
 import 'native_chunk_source.dart';
 import 'separation_client.dart';
 
@@ -41,7 +42,9 @@ Future<(SongAnalysis, Duration?)> analyzeSong(
 }
 
 /// Tách giọng ca sĩ của [song] qua máy chủ [server] (docs/adr/006-vocal-separation.md), lưu các
-/// đoạn giọng vào [store]. Lỗi → [SeparationException] (đã xoá phần tải dở).
+/// đoạn giọng vào [store]. Chạy nền ngắn khi app vào nền (M8 B7). [resume]: tiếp tục lần tách dở
+/// (máy chủ của lần đó). Bị ngắt ([SeparationException.resumable]: mất mạng, tạm dừng) → giữ job +
+/// phần đã tải để tiếp tục; lỗi khác → xoá phần tải dở.
 Future<SeparationResult> separateSong(
   SongRef song, {
   required String server,
@@ -49,20 +52,39 @@ Future<SeparationResult> separateSong(
   required StemStore store,
   SeparationCancel? cancel,
   void Function(SeparationProgress p)? onProgress,
+  PendingSeparation? resume,
 }) async {
   final tmp = await Directory.systemTemp.createTemp('tach');
   final source = NativeChunkSource(song.path, tmp);
+  final url = resume?.server ?? server;
   final client = SeparationClient(
-    baseUrl: server,
+    baseUrl: url,
     deviceId: await settings.deviceId(),
   );
   try {
-    final out = await store.prepare(name: song.name, size: song.size);
-    final r = await client.separate(
-      source,
-      out,
-      cancel: cancel,
-      onProgress: onProgress,
+    final out = resume != null
+        ? await store
+              .dirFor(name: song.name, size: song.size)
+              .create(recursive: true)
+        : await store.prepare(name: song.name, size: song.size);
+    final r = await inBackground(
+      'Tách giọng',
+      () => client.separate(
+        source,
+        out,
+        cancel: cancel,
+        onProgress: onProgress,
+        resume: resume?.job,
+        onJob: (job) => store.savePending(
+          PendingSeparation(
+            name: song.name,
+            size: song.size,
+            server: url,
+            job: job,
+            startedAt: DateTime.now(),
+          ),
+        ),
+      ),
     );
     await store.markDone(
       name: song.name,
@@ -72,6 +94,12 @@ Future<SeparationResult> separateSong(
       serverSeconds: r.serverSeconds,
     );
     return r;
+  } on SeparationException catch (e) {
+    final keep =
+        e.resumable &&
+        await store.pendingFor(name: song.name, size: song.size) != null;
+    if (!keep) await store.delete(name: song.name, size: song.size);
+    rethrow;
   } catch (_) {
     await store.delete(name: song.name, size: song.size);
     rethrow;
@@ -80,6 +108,25 @@ Future<SeparationResult> separateSong(
     client.close();
     unawaited(tmp.delete(recursive: true).then((_) {}, onError: (_) {}));
   }
+}
+
+/// Bỏ lần tách dở: xoá job trên máy chủ (lỗi thì thôi, máy chủ tự xoá sau 24 giờ) và phần đã tải.
+Future<void> discardSeparationJob(
+  PendingSeparation p, {
+  required AppSettings settings,
+  required StemStore store,
+}) async {
+  final client = SeparationClient(
+    baseUrl: p.server,
+    deviceId: await settings.deviceId(),
+    retries: 1,
+  );
+  try {
+    await client.deleteJob(p.job.id);
+  } finally {
+    client.close();
+  }
+  await store.delete(name: p.name, size: p.size);
 }
 
 /// Lưu địa chỉ máy chủ tách giọng sau khi kiểm tra kết nối; rỗng = xoá. Trả câu báo kết quả và

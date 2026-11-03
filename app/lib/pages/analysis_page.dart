@@ -8,6 +8,7 @@ import '../data/app_settings.dart';
 import '../data/song_prefs.dart';
 import '../data/song_ref.dart';
 import '../data/stem_store.dart';
+import '../data/test_log.dart';
 import '../engine/labels.dart';
 import '../engine/separation_client.dart';
 import '../engine/song_jobs.dart';
@@ -54,6 +55,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
   @override
   void initState() {
     super.initState();
+    TestLog.screen('analysis');
     _init();
   }
 
@@ -190,7 +192,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
                   : 'Đã tách — dò tone trên phần nhạc')
             : _sepError ??
                   (_server == null
-                      ? 'Không bắt buộc. Cần máy chủ tách giọng (nhập ở Phòng thử).'
+                      ? 'Không bắt buộc. Cần máy chủ tách giọng (nhập ở Cài đặt → Nâng cao).'
                       : 'Không bắt buộc — dùng cho bài gốc có giọng ca sĩ.'),
         progress: p?.fraction,
         action: p != null

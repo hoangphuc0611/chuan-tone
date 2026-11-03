@@ -116,6 +116,31 @@ abstract final class ChuanToneMedia {
     }
   }
 
+  // ---- Chạy nền ngắn (M8 B7) ----
+
+  /// Xin hệ điều hành cho chạy tiếp một lúc khi app vào nền (iOS `beginBackgroundTask`, thường ~30
+  /// giây) — bọc quanh xuất và tách giọng. Trả mã việc để gọi [endBackground]; null = nền tảng
+  /// chưa hỗ trợ / iOS không cho lúc này.
+  static Future<int?> beginBackground(String name) async {
+    try {
+      final id = await _channel.invokeMethod<int>('beginBackground', {
+        'name': name,
+      });
+      return id == null || id <= 0 ? null : id;
+    } on MissingPluginException {
+      return null;
+    }
+  }
+
+  /// Báo xong việc nền [id] (từ [beginBackground]).
+  static Future<void> endBackground(int id) async {
+    try {
+      await _channel.invokeMethod<void>('endBackground', {'id': id});
+    } on MissingPluginException {
+      // nền tảng chưa hỗ trợ
+    }
+  }
+
   /// Mở bảng chia sẻ của hệ điều hành với file [path]. Trả true nếu người dùng đã chọn một đích,
   /// false nếu đóng bảng; null nếu nền tảng chưa hỗ trợ.
   static Future<bool?> share(String path) async {

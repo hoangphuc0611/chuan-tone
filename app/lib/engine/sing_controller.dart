@@ -16,6 +16,7 @@ import '../data/song_prefs.dart';
 import '../data/song_ref.dart';
 import '../data/stem_store.dart';
 import '../data/take_store.dart';
+import '../data/test_log.dart';
 import 'audio_service.dart';
 import 'genre_rules.dart';
 import 'playback_watch.dart';
@@ -146,6 +147,9 @@ class SingController extends ChangeNotifier {
   String? _sepError;
   String? _sepErrorDetails;
   SeparationResult? _sepResult;
+  PendingSeparation? _sepPending; // lần tách dở của bài đang nạp (M8 B7)
+  bool _sepInterrupted =
+      false; // bị ngắt trong phiên này → quay lại app thì tự tiếp tục
 
   // Thu âm (M7).
   bool _recording = false;
@@ -216,6 +220,9 @@ class SingController extends ChangeNotifier {
   String? get sepError => _sepError;
   String? get sepErrorDetails => _sepErrorDetails;
   SeparationResult? get sepResult => _sepResult;
+
+  /// Lần tách dở của bài đang nạp (bị ngắt: rời màn, mất mạng, iOS dừng app ở nền) — "Tiếp tục".
+  PendingSeparation? get sepPending => _sepPending;
   bool get recording => _recording;
 
   /// 3…1 khi đang đếm ngược trước khi thu.
@@ -247,6 +254,7 @@ class SingController extends ChangeNotifier {
   void _show(String text, {Object? error}) {
     _message = text;
     _messageDetails = error == null ? null : errorDetails(error);
+    TestLog.error(text, details: _messageDetails);
     _messageId++;
     _notify();
   }
@@ -386,9 +394,14 @@ class SingController extends ChangeNotifier {
           titleFromFileName(song.name);
       _vocals = vocals;
       _sepError = null;
+      _sepErrorDetails = null;
+      _sepInterrupted = false;
       _sepResult = vocals == null
           ? null
           : await _stems.resultFor(name: song.name, size: song.size);
+      _sepPending = vocals == null
+          ? await _stems.pendingFor(name: song.name, size: song.size)
+          : null;
       service.setVocalGain(0); // bài mới: karaoke
       // Nạp nhạc mới → engine về tone gốc; đặt lại tone người dùng đã chọn cho bài này.
       final saved = await _prefs.transposeFor(name: song.name, size: song.size);
@@ -411,6 +424,11 @@ class SingController extends ChangeNotifier {
       _playback = e.playback;
       position.value = _playback!.position;
       unawaited(library.touch(song.name, song.size));
+      TestLog.event('song.open', {
+        'stems': vocals != null,
+        'lyrics': _lyrics != null,
+        'transpose': saved,
+      });
       _analyze(song, vocals);
     } on ToneCoreException catch (err) {
       _show(
@@ -510,6 +528,7 @@ class SingController extends ChangeNotifier {
     if (e == null || _recording || !service.setTranspose(semitones)) return;
     timing.requested(service.transpose, _clock.elapsed);
     watch.restart(_clock.elapsed);
+    TestLog.event('transpose', {'value': service.transpose});
     _playback = e.playback;
     _notify();
     final s = _song;
@@ -530,6 +549,7 @@ class SingController extends ChangeNotifier {
     if (s == null) return;
     await _prefs.setKey(name: s.name, size: s.size, key: key);
     _manualKey = key;
+    TestLog.event('key.edit', {'reset': key == null});
     if (key != null) {
       service.setBaseKey(key);
     } else {
@@ -558,6 +578,7 @@ class SingController extends ChangeNotifier {
   /// Mức chỉnh giọng (null = tắt); giữ tới khi chọn thể loại khác.
   void setCorrection(CorrectionPreset? p) {
     service.setCorrection(p);
+    TestLog.event('correction', {'level': p?.name});
     _notify();
   }
 
@@ -573,6 +594,10 @@ class SingController extends ChangeNotifier {
   /// thể loại mặc định lần mở app sau.
   void pickGenre(Genre g) {
     service.setGenre(g);
+    TestLog.event('genre', {
+      'genre': g.name,
+      'correction': service.correction?.name,
+    });
     final s = _song;
     _genreSource = s != null ? GenreSource.saved : null;
     _notify();
@@ -584,6 +609,7 @@ class SingController extends ChangeNotifier {
 
   void setFxMix(double v) {
     service.setFxMix(v);
+    TestLog.event('fxmix', {'value': service.fxMix}, true);
     _notify();
   }
 
@@ -608,6 +634,7 @@ class SingController extends ChangeNotifier {
 
   void setMonitorOn(bool on) {
     _monitorOn = on;
+    TestLog.event('monitor', {'on': on});
     engine?.monitorEnabled = on;
     _notify();
   }
@@ -639,7 +666,13 @@ class SingController extends ChangeNotifier {
   void playPause() {
     final e = engine;
     if (e == null || !e.playback.hasBeat) return;
-    e.playback.playing ? e.pause() : e.play();
+    final play = !e.playback.playing;
+    play ? e.play() : e.pause();
+    TestLog.event(play ? 'play' : 'pause', {
+      'correction': service.correction?.name,
+      'genre': service.genre.name,
+      'monitor': e.monitorEnabled,
+    });
     _playback = e.playback;
     _notify();
   }
@@ -730,6 +763,11 @@ class SingController extends ChangeNotifier {
       return;
     }
     if (!wasPlaying) e.play();
+    TestLog.event('record.start', {
+      'camera': _cameraRecording,
+      'correction': service.correction?.name,
+      'route': service.route.name,
+    });
     _recording = true;
     _recStatus = e.recordStatus;
     _playback = e.playback;
@@ -743,6 +781,9 @@ class SingController extends ChangeNotifier {
     final song = _song;
     if (e == null || song == null || !_recording) return null;
     _recording = false;
+    TestLog.event('record.stop', {
+      'seconds': e.recordStatus.duration.inMilliseconds / 1000,
+    });
     _notify();
     e.pause();
     CameraClip? clip;
@@ -799,13 +840,24 @@ class SingController extends ChangeNotifier {
   // ---- tách giọng ca sĩ ----
 
   /// Tách giọng ca sĩ của bài đang nạp qua máy chủ. Chưa đồng ý gửi bài thì hỏi [askConsent]
-  /// (null = không đồng ý → không gửi; true = nhớ lựa chọn).
-  Future<void> separate({required Future<bool?> Function() askConsent}) async {
+  /// (null = không đồng ý → không gửi; true = nhớ lựa chọn). [resume]: tiếp tục lần tách dở
+  /// ([sepPending], đã đồng ý từ trước).
+  Future<void> separate({
+    required Future<bool?> Function() askConsent,
+    bool resume = false,
+  }) async {
     final e = engine;
     final song = _song;
-    final server = _server;
-    if (e == null || song == null || server == null || _recording) return;
-    if (!await settings.separationConsent()) {
+    final pending = resume ? _sepPending : null;
+    final server = pending?.server ?? _server;
+    if (e == null ||
+        song == null ||
+        server == null ||
+        _recording ||
+        _sepProgress != null) {
+      return;
+    }
+    if (pending == null && !await settings.separationConsent()) {
       final remember = await askConsent();
       if (remember == null || _disposed) return;
       if (remember) await settings.setSeparationConsent(true);
@@ -814,8 +866,11 @@ class SingController extends ChangeNotifier {
     _sepError = null;
     _sepErrorDetails = null;
     _sepResult = null;
+    _sepPending = null;
+    _sepInterrupted = false;
     _sepProgress = SeparationProgress.start;
     _notify();
+    TestLog.event('separation.start', {'resume': pending != null});
     try {
       final r = await separateSong(
         song,
@@ -823,6 +878,7 @@ class SingController extends ChangeNotifier {
         settings: settings,
         store: _stems,
         cancel: cancel,
+        resume: pending,
         onProgress: (p) {
           _sepProgress = p;
           _notify();
@@ -834,6 +890,9 @@ class SingController extends ChangeNotifier {
       await e.loadBeatWithVocalsAndWait(song.path, vocals);
       _vocals = vocals;
       _sepResult = r;
+      TestLog.event('separation.done', {
+        'seconds': r.elapsed.inMilliseconds / 1000,
+      });
       timing.reset();
       if (transpose != 0 && service.setTranspose(transpose)) {
         timing.requested(transpose, _clock.elapsed);
@@ -842,6 +901,17 @@ class SingController extends ChangeNotifier {
     } on SeparationException catch (err) {
       _sepError = err.message;
       _sepErrorDetails = err.details;
+      TestLog.event('separation.fail', {
+        'message': err.message,
+        'resumable': err.resumable,
+      });
+      if (err.resumable && !_disposed && _isCurrent(song)) {
+        _sepPending = await _stems.pendingFor(name: song.name, size: song.size);
+        if (_sepPending != null) {
+          _sepInterrupted = true;
+          _sepError = 'Tách giọng bị ngắt (mất mạng hoặc app vào nền). Bấm "Tiếp tục" để tách tiếp.';
+        }
+      }
     } on ToneCoreException {
       _sepError = 'Không dùng được giọng đã tách. Hãy tách lại.';
       await _stems.delete(name: song.name, size: song.size);
@@ -854,6 +924,31 @@ class SingController extends ChangeNotifier {
   }
 
   void cancelSeparation() => _sepCancel?.cancel();
+
+  /// Tiếp tục lần tách dở ([sepPending]).
+  Future<void> resumeSeparation() async {
+    if (_sepPending == null) return;
+    await separate(askConsent: () async => null, resume: true);
+  }
+
+  /// Bỏ lần tách dở: xoá job trên máy chủ và phần đã tải.
+  Future<void> discardSeparation() async {
+    final p = _sepPending;
+    if (p == null || _sepProgress != null) return;
+    _sepPending = null;
+    _sepInterrupted = false;
+    _sepError = null;
+    _sepErrorDetails = null;
+    _notify();
+    await discardSeparationJob(p, settings: settings, store: _stems);
+  }
+
+  /// App quay lại từ nền: lần tách bị ngắt trong phiên này thì tự tiếp tục.
+  void onAppResumed() {
+    if (_sepInterrupted && _sepPending != null && _sepProgress == null) {
+      unawaited(resumeSeparation());
+    }
+  }
 
   /// Xoá bản tách giọng của bài đang nạp, nạp lại bài thường.
   Future<void> deleteStems() async {
@@ -899,7 +994,8 @@ class SingController extends ChangeNotifier {
     _pitchTicker?.cancel();
     _sub?.cancel();
     _analyzer?.dispose();
-    _sepCancel?.cancel();
+    // Rời màn khi đang tách: tạm dừng, giữ job trên máy chủ — mở lại bài thì tiếp tục được.
+    _sepCancel?.pause();
     if (_recording) {
       try {
         // Rời màn khi đang thu: vẫn giữ file đã ghi.

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/take_store.dart';
+import '../data/test_log.dart';
 import '../engine/labels.dart';
 import 'review_page.dart';
 
@@ -21,6 +22,7 @@ class _TakesPageState extends State<TakesPage> {
   @override
   void initState() {
     super.initState();
+    TestLog.screen('takes');
     _reload();
   }
 

@@ -81,7 +81,12 @@ class SeparationResult {
 }
 
 class SeparationException implements Exception {
-  SeparationException(this.message, {this.status, this.details});
+  SeparationException(
+    this.message, {
+    this.status,
+    this.details,
+    this.resumable = false,
+  });
 
   /// Câu báo lỗi tiếng Việt cho người dùng (kèm việc cần làm).
   final String message;
@@ -90,16 +95,36 @@ class SeparationException implements Exception {
   /// Chữ kỹ thuật cho nút "Chi tiết" (mã HTTP, lỗi của máy chủ…).
   final String? details;
 
+  /// Bị ngắt giữa chừng (mất mạng, máy chủ lỗi tạm thời, tạm dừng khi rời màn): job vẫn giữ trên
+  /// máy chủ, tiếp tục được (M8 B7).
+  final bool resumable;
+
   @override
   String toString() =>
       'SeparationException($status): $message${details == null ? '' : ' — $details'}';
 }
 
-/// Huỷ một lần tách đang chạy.
+/// Dừng một lần tách đang chạy: [cancel] = huỷ (xoá job trên máy chủ); [pause] = tạm dừng, giữ job
+/// để tiếp tục sau (rời màn hát, M8 B7).
 class SeparationCancel {
   bool _cancelled = false;
+  bool _keepJob = false;
   bool get cancelled => _cancelled;
+  bool get keepJob => _keepJob;
   void cancel() => _cancelled = true;
+
+  void pause() {
+    _cancelled = true;
+    _keepJob = true;
+  }
+}
+
+/// Job tách đã tạo trên máy chủ — lưu lại để tiếp tục khi bị ngắt (M8 B7).
+class SeparationJob {
+  const SeparationJob({required this.id, required this.chunks});
+
+  final String id;
+  final int chunks;
 }
 
 class ServerInfo {
@@ -111,7 +136,9 @@ class ServerInfo {
 
 /// Gửi bài lên server tách giọng theo đoạn và tải giọng về (docs/adr/006-vocal-separation.md):
 /// tạo job → upload từng đoạn ngay khi máy xuất xong → hỏi trạng thái → tải giọng từng đoạn ngay
-/// khi server xong → xoá job. Upload, tách, tải về chạy gối nhau.
+/// khi server xong → xoá job. Upload, tách, tải về chạy gối nhau. Bị ngắt (mất mạng, tạm dừng) thì
+/// giữ job: gọi lại với `resume` để hỏi tiếp — gửi tiếp các đoạn máy chủ chưa có, tải tiếp các đoạn
+/// giọng chưa có trong thư mục (M8 B7).
 class SeparationClient {
   SeparationClient({
     required this.baseUrl,
@@ -146,11 +173,15 @@ class SeparationClient {
     );
   }
 
+  /// Tách bài: [source] cho các đoạn FLAC (chỉ dùng tới khi còn đoạn phải gửi), giọng tải về
+  /// [outDir]. [resume]: tiếp tục job đã có thay vì tạo mới; [onJob]: job vừa tạo (để lưu lại).
   Future<SeparationResult> separate(
     ChunkSource source,
     Directory outDir, {
     void Function(SeparationProgress p)? onProgress,
     SeparationCancel? cancel,
+    SeparationJob? resume,
+    Future<void> Function(SeparationJob job)? onJob,
   }) async {
     final clock = Stopwatch()..start();
     var uploaded = 0;
@@ -159,6 +190,10 @@ class SeparationClient {
     var chunks = 0;
     String? jobId;
     Object? uploadError;
+    Object? failure;
+    final vocals = <File>[];
+    File vocalFile(int i) =>
+        File('${outDir.path}/vocals_${i.toString().padLeft(3, '0')}.flac');
 
     void report(SeparationStage stage) {
       if (onProgress == null) return;
@@ -180,37 +215,71 @@ class SeparationClient {
     }
 
     void checkCancel() {
-      if (cancel?.cancelled ?? false) {
-        throw SeparationException('Đã huỷ tách giọng.');
+      final c = cancel;
+      if (c != null && c.cancelled) {
+        throw c.keepJob
+            ? SeparationException('Đã tạm dừng tách giọng.', resumable: true)
+            : SeparationException('Đã huỷ tách giọng.');
       }
     }
 
     try {
       report(SeparationStage.preparing);
-      final layout = await source.layout();
-      checkCancel();
-      chunks = layout.chunks;
-      final created = await _send(
-        'POST',
-        '/v1/jobs',
-        body: utf8.encode(
-          jsonEncode({
-            'sample_rate': layout.sampleRate,
-            'channels': layout.channels,
-            'frames': layout.frames,
-            'chunk_frames': layout.chunkFrames,
-            'chunks': layout.chunks,
-          }),
-        ),
-        contentType: 'application/json',
-      );
-      _expect(created, 200);
-      jobId = '${_json(created.body)['id']}';
+      if (resume != null) {
+        // Tiếp tục: máy chủ đã có bao nhiêu đoạn, máy đã tải bao nhiêu đoạn giọng.
+        jobId = resume.id;
+        chunks = resume.chunks;
+        final st = await _send('GET', '/v1/jobs/${resume.id}');
+        if (st.status == 404) {
+          throw SeparationException(
+            'Máy chủ không còn giữ phần tách dở (có thể đã khởi động lại). Hãy tách lại.',
+            status: 404,
+            details: 'GET /v1/jobs/${resume.id} → 404',
+          );
+        }
+        _expect(st, 200);
+        uploaded = ((_json(st.body)['chunks_received'] as num?)?.toInt() ?? 0)
+            .clamp(0, chunks);
+        while (downloaded < chunks && vocalFile(downloaded).existsSync()) {
+          vocals.add(vocalFile(downloaded));
+          downloaded++;
+        }
+      } else {
+        final layout = await source.layout();
+        checkCancel();
+        chunks = layout.chunks;
+        final created = await _send(
+          'POST',
+          '/v1/jobs',
+          body: utf8.encode(
+            jsonEncode({
+              'sample_rate': layout.sampleRate,
+              'channels': layout.channels,
+              'frames': layout.frames,
+              'chunk_frames': layout.chunkFrames,
+              'chunks': layout.chunks,
+            }),
+          ),
+          contentType: 'application/json',
+        );
+        _expect(created, 200);
+        jobId = '${_json(created.body)['id']}';
+        await onJob?.call(SeparationJob(id: jobId, chunks: chunks));
+      }
 
-      // Upload song song với vòng hỏi trạng thái.
+      // Upload song song với vòng hỏi trạng thái (gửi lại đoạn máy chủ đã có cũng không sao).
+      final firstUpload = uploaded;
       final upload =
           () async {
-            for (var i = 0; i < chunks; i++) {
+            if (resume != null && firstUpload < chunks) {
+              final l = await source.layout();
+              if (l.chunks != chunks) {
+                throw SeparationException(
+                  'File bài đã khác lần tách trước. Hãy tách lại.',
+                );
+              }
+            }
+            for (var i = firstUpload; i < chunks; i++) {
               if (cancel?.cancelled ?? false) return;
               final file = await source.chunk(i);
               final r = await _send(
@@ -227,7 +296,6 @@ class SeparationClient {
             uploadError = e;
           });
 
-      final vocals = <File>[];
       double? serverSeconds;
       while (downloaded < chunks) {
         checkCancel();
@@ -251,9 +319,7 @@ class SeparationClient {
           checkCancel();
           final v = await _send('GET', '/v1/jobs/$jobId/vocals/$downloaded');
           _expect(v, 200);
-          final f = File(
-            '${outDir.path}/vocals_${downloaded.toString().padLeft(3, '0')}.flac',
-          );
+          final f = vocalFile(downloaded);
           final tmp = File('${f.path}.part');
           await tmp.writeAsBytes(v.body, flush: true);
           await tmp.rename(f.path);
@@ -280,14 +346,24 @@ class SeparationClient {
         elapsed: clock.elapsed,
         serverSeconds: serverSeconds,
       );
+    } catch (e) {
+      failure = e;
+      rethrow;
     } finally {
       final id = jobId;
       if (id != null) {
         source.cancel();
-        unawaited(_deleteQuietly(id));
+        // Bị ngắt (tạm dừng, mất mạng): giữ job để tiếp tục; còn lại xoá.
+        final keep =
+            (cancel?.keepJob ?? false) ||
+            (failure is SeparationException && failure.resumable);
+        if (!keep) unawaited(_deleteQuietly(id));
       }
     }
   }
+
+  /// Xoá job trên máy chủ (bỏ phần tách dở); lỗi thì thôi — máy chủ tự xoá sau 24 giờ.
+  Future<void> deleteJob(String id) => _deleteQuietly(id);
 
   Future<void> _deleteQuietly(String id) async {
     try {
@@ -330,6 +406,7 @@ class SeparationClient {
             'Máy chủ tách giọng đang lỗi. Hãy thử lại sau ít phút.',
             status: res.statusCode,
             details: 'HTTP ${res.statusCode}',
+            resumable: true,
           );
           await Future<void>.delayed(Duration(milliseconds: 300 * (a + 1)));
           continue;
@@ -347,6 +424,8 @@ class SeparationClient {
     if (last is SeparationException) throw last;
     throw SeparationException(
       'Không kết nối được máy chủ tách giọng. Kiểm tra Wi-Fi và địa chỉ máy chủ.',
+      details: last?.toString(),
+      resumable: true,
     );
   }
 
@@ -372,6 +451,7 @@ class SeparationClient {
       },
       status: r.status,
       details: 'HTTP ${r.status}${msg is String ? ': $msg' : ''}',
+      resumable: r.status >= 500,
     );
   }
 }
