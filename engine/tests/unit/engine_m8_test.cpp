@@ -134,10 +134,13 @@ TEST(EngineInputPreference, ValidatesAndReports) {
 
 namespace {
 
+// (preference, deviceId) — cùng kiểu hai phía để so được với cả libstdc++.
+using Pref = std::pair<int32_t, int32_t>;
+
 // Backend giả: ghi lại các lệnh chọn micro, báo micro đang dùng theo lệnh cuối.
 struct FakeLog {
-  std::vector<std::pair<int32_t, int32_t>> prefs;  // (preference, deviceId)
-  int startedAfterPrefs = -1;                      // số lệnh đã nhận lúc start()
+  std::vector<Pref> prefs;
+  int startedAfterPrefs = -1;  // số lệnh đã nhận lúc start()
   bool started = false;
 };
 FakeLog* g_log = nullptr;
@@ -180,13 +183,13 @@ TEST(EngineInputPreference, ReachesBackend) {
   EXPECT_TRUE(log.prefs.empty());  // chưa có backend
   ASSERT_EQ(tc_engine_start(e), TC_OK);
   ASSERT_EQ(log.prefs.size(), 1u);
-  EXPECT_EQ(log.prefs[0], std::make_pair(TC_INPUT_HEADSET, 0));
+  EXPECT_EQ(log.prefs[0], Pref(TC_INPUT_HEADSET, 0));
   EXPECT_EQ(log.startedAfterPrefs, 1);
   EXPECT_EQ(metrics(e).input_source, TC_INPUT_HEADSET);
 
   ASSERT_EQ(tc_set_input_preference(e, TC_INPUT_USB, 7), TC_OK);
   ASSERT_EQ(log.prefs.size(), 2u);
-  EXPECT_EQ(log.prefs[1], std::make_pair(TC_INPUT_USB, 7));
+  EXPECT_EQ(log.prefs[1], Pref(TC_INPUT_USB, 7));
   tc_metrics m = metrics(e);
   EXPECT_EQ(m.input_source, TC_INPUT_USB);
   EXPECT_EQ(m.input_preference, TC_INPUT_USB);
@@ -199,7 +202,7 @@ TEST(EngineInputPreference, ReachesBackend) {
   ASSERT_EQ(tc_engine_stop(e), TC_OK);
   ASSERT_EQ(tc_engine_start(e), TC_OK);
   ASSERT_EQ(log.prefs.size(), 3u);
-  EXPECT_EQ(log.prefs[2], std::make_pair(TC_INPUT_USB, 7));
+  EXPECT_EQ(log.prefs[2], Pref(TC_INPUT_USB, 7));
   EXPECT_EQ(log.startedAfterPrefs, 3);
   tc_engine_destroy(e);
   tonecore::setBackendFactoryForTesting(nullptr);
