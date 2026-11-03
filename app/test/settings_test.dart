@@ -10,6 +10,7 @@ import 'package:chuantone/engine/latency_measure.dart';
 import 'package:chuantone/engine_info.dart';
 import 'package:chuantone/pages/latency_wizard_page.dart';
 import 'package:chuantone/pages/settings_page.dart';
+import 'package:chuantone/widgets/soundcard_prompt.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tonecore_flutter/tonecore_flutter.dart';
@@ -69,6 +70,20 @@ void main() {
       expect((await s.exportPrefs()).aacBitrate, 192000);
       await s.setInputPreference(InputKind.auto);
       expect(await LibraryDb.getSetting(dir, 'inputPreference'), isNull);
+    });
+
+    test('chế độ soundcard: mặc định chưa hỏi, lưu lại', () async {
+      final s = AppSettings(baseDir: dir);
+      expect(await s.soundcardMode(), isNull);
+      expect(await s.soundcardFx(), SoundcardFx.soundcard);
+      await s.setSoundcardMode(false);
+      expect(await s.soundcardMode(), isFalse);
+      await s.setSoundcardMode(true);
+      await s.setSoundcardFx(SoundcardFx.app);
+      expect(await s.soundcardMode(), isTrue);
+      expect(await s.soundcardFx(), SoundcardFx.app);
+      await s.setSoundcardFx(SoundcardFx.soundcard);
+      expect(await LibraryDb.getSetting(dir, 'soundcardFx'), isNull);
     });
 
     test('mẹo: hiện một lần, đặt lại được', () async {
@@ -197,6 +212,39 @@ void main() {
       expect(find.text('Hơi trễ, nên dùng tai nghe có dây'), findsOneWidget);
       expect(find.textContaining('48 ms'), findsOneWidget);
     });
+
+    testWidgets('chế độ soundcard: đo qua Loopback của soundcard (B6)', (
+      tester,
+    ) async {
+      final service = AudioService.test(() => throw StateError('không dùng'))
+        ..soundcardMode = true
+        ..route = AudioRoute.usb;
+      var next = _latency(0, valid: false);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LatencyWizardPage(service: service, measure: () async => next),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('Bước 1: Bật Loopback trên soundcard'), findsOneWidget);
+      expect(find.text('Đang dùng: USB / soundcard'), findsOneWidget);
+      await tester.tap(find.text('Tiếp'));
+      await tester.pump();
+      expect(find.text('Bước 2: Đo qua soundcard'), findsOneWidget);
+      await tester.tap(find.text('Bắt đầu đo'));
+      await tester.pump();
+      expect(find.textContaining('nút Loopback'), findsOneWidget);
+      await tester.tap(find.text('Đo lại'));
+      await tester.pump();
+      next = _latency(
+        70,
+      ); // soundcard: không đánh giá "trễ nhiều", chỉ để căn bản thu
+      await tester.tap(find.text('Bắt đầu đo'));
+      await tester.pump();
+      expect(find.text('Đã đo qua soundcard'), findsOneWidget);
+      expect(find.textContaining('tắt Loopback'), findsOneWidget);
+      expect(find.textContaining('70 ms'), findsOneWidget);
+    });
   });
 
   group('trang Cài đặt', () {
@@ -297,12 +345,59 @@ void main() {
       skip: false,
     );
 
+    testWidgets('chế độ soundcard: bật → chọn hiệu ứng, lưu lại (B6)', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 3000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final service = AudioService.test(() => throw StateError('không dùng'));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SettingsPage(
+            engineInfo: _ok,
+            library: SongLibrary(baseDir: dir),
+            service: service,
+          ),
+        ),
+      );
+      await settle(
+        tester,
+        () => find.text('Cắm soundcard vào là app hỏi').evaluate().isNotEmpty,
+      );
+      expect(find.text('Vang của soundcard'), findsNothing);
+      await tester.tap(find.text('Chế độ soundcard'));
+      await tester.pump();
+      expect(service.soundcardMode, isTrue);
+      expect(find.text('Vang của soundcard'), findsOneWidget);
+      expect(find.text(soundcardFxHelp.soundcard), findsOneWidget);
+      expect(find.text('Đo độ trễ qua soundcard'), findsOneWidget);
+      await tester.tap(find.text('Hiệu ứng của app'));
+      await tester.pump();
+      expect(service.soundcardFx, SoundcardFx.app);
+      expect(find.text(soundcardFxHelp.app), findsOneWidget);
+      for (var i = 0; i < 10; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 5)),
+        );
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+      final s = AppSettings(baseDir: dir);
+      expect(await tester.runAsync(s.soundcardMode), isTrue);
+      expect(await tester.runAsync(s.soundcardFx), SoundcardFx.app);
+      await close(tester);
+    });
+
     testWidgets('máy nhỏ 320 px, chữ 130%: không tràn', (tester) async {
       tester.view.physicalSize = const Size(640, 1136);
       tester.view.devicePixelRatio = 2;
       tester.platformDispatcher.textScaleFactorTestValue = 1.3;
       addTearDown(tester.view.reset);
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      // Bật chế độ soundcard: hiện cả phần chọn hiệu ứng.
+      await tester.runAsync(
+        () => AppSettings(baseDir: dir).setSoundcardMode(true),
+      );
       await tester.pumpWidget(
         MaterialApp(
           home: SettingsPage(

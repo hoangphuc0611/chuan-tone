@@ -10,6 +10,7 @@ import 'package:tonecore_flutter/tonecore_flutter.dart';
 import '../data/app_settings.dart';
 import '../data/take_store.dart';
 import '../engine/audio_service.dart';
+import '../engine/beat_leak.dart';
 import '../engine/labels.dart';
 import '../engine/takes.dart';
 import '../widgets/error_text.dart';
@@ -18,12 +19,16 @@ import '../widgets/gain_slider.dart';
 
 /// Màn Nghe lại & chỉnh (CLAUDE.md mục 5 màn 4, M7): phát bản thu với giọng khô đi qua chuỗi giọng
 /// real-time (đổi preset / mức chỉnh giọng nghe ngay), to nhỏ giọng / nhạc, giọng sớm / muộn, cắt
-/// đầu đuôi; xuất M4A (−14 LUFS) và chia sẻ.
+/// đầu đuôi; xuất M4A (−14 LUFS) và chia sẻ. Bản thu qua soundcard: báo nếu nhạc lọt vào micro
+/// (Loopback bật khi thu, M8 B6).
 class ReviewPage extends StatefulWidget {
-  const ReviewPage({super.key, required this.take, this.store});
+  const ReviewPage({super.key, required this.take, this.store, this.service});
 
   final Take take;
   final TakeStore? store;
+
+  /// Dịch vụ âm thanh (test truyền vào; null = của app).
+  final AudioService? service;
 
   @override
   State<ReviewPage> createState() => _ReviewPageState();
@@ -32,13 +37,14 @@ class ReviewPage extends StatefulWidget {
 class _ReviewPageState extends State<ReviewPage> {
   static const _nudgeStepMs = 5.0;
 
-  final _service = AudioService.instance;
+  late final AudioService _service = widget.service ?? AudioService.instance;
   late final TakeStore _store = widget.store ?? TakeStore();
   late TakeInfo _info = widget.take.info;
   Timer? _ticker;
   bool _loading = true;
   String? _error;
   String? _errorDetails;
+  BeatLeak? _leak;
   PlaybackState? _playback;
   double? _drag;
   RangeValues? _trimDrag;
@@ -85,6 +91,14 @@ class _ReviewPageState extends State<ReviewPage> {
       gateOn: _info.gateOn,
     );
     await _load();
+    // Bản thu qua soundcard: tìm nhạc lọt vào micro ở isolate riêng.
+    if (_info.route == AudioRoute.usb) {
+      unawaited(
+        checkTakeLeak(_take).then((r) {
+          if (mounted) setState(() => _leak = r);
+        }, onError: (_) {}),
+      );
+    }
     _ticker = Timer.periodic(const Duration(milliseconds: 200), (_) {
       final eng = _service.engine;
       if (eng != null && mounted) setState(() => _playback = eng.playback);
@@ -433,6 +447,7 @@ class _ReviewPageState extends State<ReviewPage> {
             'Bản thu có chỗ bị hụt (máy bận). Có thể nghe thấy tiếng ngắt.',
             style: TextStyle(color: theme.colorScheme.error),
           ),
+        if (_leak?.leaked ?? false) const _BeatLeakWarning(),
         if (_error != null)
           Padding(
             padding: const EdgeInsets.only(top: 8),
@@ -657,6 +672,49 @@ class _ReviewPageState extends State<ReviewPage> {
             onShare: () => _share(a),
           ),
       ],
+    );
+  }
+}
+
+/// Soundcard bật Loopback lúc thu: giọng khô có lẫn nhạc (B6).
+class _BeatLeakWarning extends StatelessWidget {
+  const _BeatLeakWarning();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final on = theme.colorScheme.onErrorContainer;
+    return Card(
+      key: const ValueKey('review-beat-leak'),
+      color: theme.colorScheme.errorContainer,
+      margin: const EdgeInsets.only(top: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.warning_amber, color: on),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Soundcard đang trộn nhạc vào micro',
+                    style: theme.textTheme.titleMedium?.copyWith(color: on),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Giọng thu được có lẫn tiếng nhạc nên bản xuất sẽ bị nhạc chồng lên nhau. Tắt '
+                    'Loopback trên soundcard khi thu rồi thu lại.',
+                    style: TextStyle(color: on),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

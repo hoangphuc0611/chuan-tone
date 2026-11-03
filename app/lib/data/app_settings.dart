@@ -46,9 +46,19 @@ class ExportPrefs {
       'ExportPrefs($aacBitrate bit/s, 720p: $hd720, chuẩn hoá: $normalize)';
 }
 
+/// Hiệu ứng giọng ở chế độ soundcard (M8 B6).
+enum SoundcardFx {
+  /// Giữ vang / echo của soundcard (đã có sẵn trong tiếng micro): bản thu để preset Khô.
+  soundcard,
+
+  /// Dùng hiệu ứng của app (tắt vang của soundcard): có trong bản thu và lúc Nghe lại.
+  app,
+}
+
 /// Cài đặt chung của app (bảng `settings` của [LibraryDb]; trước M8 là `settings.json`): máy chủ
 /// tách giọng, lựa chọn "không hỏi lại" khi gửi bài, mã máy ngẫu nhiên (server dùng để giới hạn
-/// số lần tách và giữ job riêng của máy); từ M8 B4: micro, tự bật nghe lại giọng, lựa chọn xuất.
+/// số lần tách và giữ job riêng của máy); từ M8 B4: micro, tự bật nghe lại giọng, lựa chọn xuất;
+/// B6: chế độ soundcard.
 class AppSettings {
   AppSettings({this.baseDir});
 
@@ -92,6 +102,22 @@ class AppSettings {
 
   Future<void> setAutoMonitor(bool on) =>
       _set('autoMonitor', on ? null : false);
+
+  /// Chế độ soundcard khi cắm thiết bị USB: null = chưa hỏi (cắm vào thì app hỏi một lần).
+  Future<bool?> soundcardMode() async {
+    final v = await _get('soundcardMode');
+    return v is bool ? v : null;
+  }
+
+  Future<void> setSoundcardMode(bool on) => _set('soundcardMode', on);
+
+  /// Hiệu ứng giọng ở chế độ soundcard (mặc định giữ vang của soundcard).
+  Future<SoundcardFx> soundcardFx() async => await _get('soundcardFx') == 'app'
+      ? SoundcardFx.app
+      : SoundcardFx.soundcard;
+
+  Future<void> setSoundcardFx(SoundcardFx fx) =>
+      _set('soundcardFx', fx == SoundcardFx.app ? 'app' : null);
 
   Future<ExportPrefs> exportPrefs() async {
     final v = await _get('export');

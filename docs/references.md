@@ -114,6 +114,7 @@ Mọi thuật toán trong ToneCore được viết từ các nguồn công khai 
 ## Lời bài hát, bài mẫu (M8)
 
 - Định dạng LRC (mô tả công khai trên Wikipedia "LRC (file format)", gồm thẻ `[mm:ss.xx]`, `[ti:]`, `[ar:]`, `[offset:]` và dạng mở rộng mốc từng chữ `<mm:ss.xx>`) — bộ đọc tự viết `app/lib/data/lrc.dart`; tô màu theo số ký tự đã hát (nội suy tuyến tính giữa hai mốc).
+- Ước lượng độ trễ bằng tương quan chéo chuẩn hoá — C. H. Knapp, G. C. Carter, *The generalized correlation method for estimation of time delay*, IEEE Trans. ASSP 24(4), 1976 (dạng không lọc trọng số); A. V. Oppenheim, R. W. Schafer, *Discrete-Time Signal Processing*, 3rd ed., mục hạ mẫu (lọc thông thấp trung bình trượt rồi lấy 1/M mẫu) — dò nhạc lọt vào micro khi soundcard bật Loopback, r² = phần năng lượng giọng khô giải thích được bằng beat trễ (`app/lib/engine/beat_leak.dart`, B6).
 - Tổng hợp cộng (additive synthesis) và bộ dao động đệ quy y[n] = 2·cos(ω)·y[n−1] − y[n−2] — J. O. Smith III, *Physical Audio Signal Processing* / *Mathematics of the DFT* (CCRMA, online), mục "digital sinusoid generators"; tắt dần theo hoạ âm như mô hình dây đàn đơn giản — dùng tạo bài mẫu `tools/samples/make_samples.dart` (không chạy trong app).
 
 ## Fingerprint

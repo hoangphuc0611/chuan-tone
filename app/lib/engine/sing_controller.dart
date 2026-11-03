@@ -612,6 +612,22 @@ class SingController extends ChangeNotifier {
     _notify();
   }
 
+  // ---- soundcard (M8 B6) ----
+
+  /// Chọn chế độ soundcard (hộp hỏi khi cắm USB / Cài đặt): lưu và áp ngay.
+  Future<void> setSoundcardMode(bool on) async {
+    service.updateSoundcard(mode: on);
+    refresh();
+    await settings.setSoundcardMode(on);
+  }
+
+  /// Hiệu ứng giọng ở chế độ soundcard: của soundcard (bản thu để Khô) hay của app.
+  Future<void> setSoundcardFx(SoundcardFx fx) async {
+    service.updateSoundcard(fx: fx);
+    _notify();
+    await settings.setSoundcardFx(fx);
+  }
+
   /// "Giữ giọng ca sĩ gốc" 0..1 (bài đã tách giọng).
   void setVocalGain(double v) {
     service.setVocalGain(v);

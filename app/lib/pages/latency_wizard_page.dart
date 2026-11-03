@@ -10,7 +10,9 @@ import '../engine/latency_measure.dart';
 
 /// Đo độ trễ từng bước cho người dùng (M8 B4, Cài đặt → Âm thanh): rút tai nghe → để máy chỗ yên
 /// tĩnh, đo qua loa → báo kết quả bằng lời ("Máy bạn hát mượt" / "Hơi trễ, nên dùng tai nghe có
-/// dây"). Số đo được lưu để căn giọng khớp nhạc khi thu (M7). Bản kỹ thuật: [LatencyPage].
+/// dây"). Số đo được lưu để căn giọng khớp nhạc khi thu (M7). Chế độ soundcard (B6): đo qua
+/// Loopback của soundcard — tiếng đo đi vòng bằng điện nên rất chính xác, lưu theo route USB. Bản kỹ
+/// thuật: [LatencyPage].
 class LatencyWizardPage extends StatefulWidget {
   const LatencyWizardPage({super.key, this.service, this.store, this.measure});
 
@@ -52,6 +54,9 @@ class _LatencyWizardPageState extends State<LatencyWizardPage> {
       (_) => _readRoute(),
     );
   }
+
+  /// Đang ở chế độ soundcard: đo qua Loopback thay vì qua loa.
+  bool get _loop => _service.soundcardActive;
 
   void _readRoute() {
     final r = _service.engine?.metrics.route ?? AudioRoute.unknown;
@@ -131,6 +136,44 @@ class _LatencyWizardPageState extends State<LatencyWizardPage> {
 
   List<Widget> _unplug(BuildContext context) {
     final theme = Theme.of(context);
+    if (_loop) {
+      return [
+        Icon(
+          Icons.settings_input_component,
+          size: 72,
+          color: theme.colorScheme.primary,
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'Bước 1: Bật Loopback trên soundcard',
+          style: theme.textTheme.headlineSmall,
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Tiếng đo đi vòng trong soundcard (không qua không khí) nên rất chính xác. Bật nút '
+          'Loopback trên soundcard (có máy ghi "Live" hoặc "Thu trực tiếp"), vặn nhỏ micro và tắt '
+          'vang của soundcard trong lúc đo.',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodyLarge,
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Đang dùng: ${routeLabel(AudioRoute.usb)}',
+          key: const ValueKey('wizard-route'),
+          textAlign: TextAlign.center,
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: Colors.green.shade700,
+          ),
+        ),
+        const SizedBox(height: 24),
+        FilledButton(
+          onPressed: () => setState(() => _step = _Step.measure),
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
+          child: const Text('Tiếp'),
+        ),
+      ];
+    }
     final speaker =
         _route == AudioRoute.speaker || _route == AudioRoute.unknown;
     return [
@@ -178,14 +221,17 @@ class _LatencyWizardPageState extends State<LatencyWizardPage> {
       Icon(Icons.speed, size: 72, color: theme.colorScheme.primary),
       const SizedBox(height: 16),
       Text(
-        'Bước 2: Đo qua loa',
+        _loop ? 'Bước 2: Đo qua soundcard' : 'Bước 2: Đo qua loa',
         style: theme.textTheme.headlineSmall,
         textAlign: TextAlign.center,
       ),
       const SizedBox(height: 8),
       Text(
-        'Để máy chỗ yên tĩnh, tăng âm lượng khoảng 70%. Máy sẽ kêu xè xè khoảng 2 giây — đừng nói '
-        'trong lúc đo.',
+        _loop
+            ? 'Bỏ tai nghe ra hoặc vặn nhỏ: tiếng đo xè xè khoảng 2 giây khá to. Đừng nói vào micro '
+                  'trong lúc đo.'
+            : 'Để máy chỗ yên tĩnh, tăng âm lượng khoảng 70%. Máy sẽ kêu xè xè khoảng 2 giây — đừng '
+                  'nói trong lúc đo.',
         textAlign: TextAlign.center,
         style: theme.textTheme.bodyLarge,
       ),
@@ -219,7 +265,10 @@ class _LatencyWizardPageState extends State<LatencyWizardPage> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Máy chưa nghe được tiếng đo. Hãy tăng âm lượng, để máy chỗ yên tĩnh rồi đo lại.',
+          _loop
+              ? 'Máy chưa nghe được tiếng đo. Kiểm tra nút Loopback trên soundcard đã bật và âm '
+                    'lượng điện thoại không vặn nhỏ hết, rồi đo lại.'
+              : 'Máy chưa nghe được tiếng đo. Hãy tăng âm lượng, để máy chỗ yên tĩnh rồi đo lại.',
           textAlign: TextAlign.center,
           style: theme.textTheme.bodyLarge,
         ),
@@ -231,7 +280,16 @@ class _LatencyWizardPageState extends State<LatencyWizardPage> {
         ),
       ];
     }
-    final v = latencyVerdict(r.latencyMs);
+    // Soundcard đã cho nghe giọng trực tiếp: độ trễ chỉ dùng để căn bản thu, không cần đánh giá.
+    final v = _loop
+        ? (
+            level: LatencyLevel.smooth,
+            title: 'Đã đo qua soundcard',
+            advice:
+                'Bản thu sẽ được căn giọng khớp nhạc theo số đo này. Nhớ tắt Loopback trước khi '
+                'thu, nếu không giọng sẽ lẫn nhạc.',
+          )
+        : latencyVerdict(r.latencyMs);
     final color = switch (v.level) {
       LatencyLevel.smooth => Colors.green.shade700,
       LatencyLevel.slight => Colors.orange.shade800,

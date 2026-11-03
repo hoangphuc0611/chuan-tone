@@ -1,6 +1,7 @@
 // Màn hát (M8 B2) với engine thật, backend NULL:
 //   TONECORE_LIB=../engine/build/host/libtonecore.dylib fvm flutter test test/sing_page_test.dart
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:chuantone/data/library_db.dart';
@@ -246,39 +247,104 @@ void main() {
   }, skip: skip != null);
 
   for (final width in [320.0, 375.0]) {
-    testWidgets(
-      'máy nhỏ ${width.round()} px, chữ 130%: không tràn, Thu ở đáy',
-      (tester) async {
-        tester.view.physicalSize = Size(width * 2, 568 * 2);
-        tester.view.devicePixelRatio = 2;
-        tester.platformDispatcher.textScaleFactorTestValue = 1.3;
-        addTearDown(tester.view.reset);
-        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-        final (c, s) = await open(tester);
-        expect(tester.takeException(), isNull);
-        final thu = find.text('Thu');
-        expect(thu, findsOneWidget);
-        expect(tester.getBottomLeft(thu).dy, greaterThan(568 - 120));
-        expect(find.text('Rê trưởng (D)').hitTestable(), findsOneWidget);
-        // Cuộn hết phần trên: vẫn không tràn, thanh phát vẫn ở đáy.
-        await tester.drag(
-          find.byType(SingleChildScrollView).first,
-          const Offset(0, -600),
-        );
-        await tester.pump();
-        expect(tester.takeException(), isNull);
-        expect(find.text('Thu').hitTestable(), findsOneWidget);
-        // Đang thu: nút thành "Dừng · 0:00", vẫn vừa.
-        await tester.tap(thu);
-        await settle(tester, () => c.recording);
-        await tester.pump();
-        expect(find.textContaining('Dừng ·'), findsOneWidget);
-        expect(tester.takeException(), isNull);
-        await close(tester, c, s);
-      },
-      skip: skip != null,
-    );
+    testWidgets('máy nhỏ ${width.round()} px, chữ 130%: không tràn, Thu ở đáy', (
+      tester,
+    ) async {
+      tester.view.physicalSize = Size(width * 2, 568 * 2);
+      tester.view.devicePixelRatio = 2;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final (c, s) = await open(tester);
+      expect(tester.takeException(), isNull);
+      final thu = find.text('Thu');
+      expect(thu, findsOneWidget);
+      expect(tester.getBottomLeft(thu).dy, greaterThan(568 - 120));
+      expect(find.text('Rê trưởng (D)').hitTestable(), findsOneWidget);
+      // Chế độ soundcard: thẻ "vang của soundcard" thay chip thể loại, vẫn vừa.
+      s.soundcardMode = true;
+      s.engine!.setRouteHint(AudioRoute.usb);
+      await settle(tester, () => s.soundcardActive);
+      c.refresh();
+      await tester.pump();
+      expect(find.byKey(const ValueKey('sing-soundcard-fx')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      // Cuộn hết phần trên: vẫn không tràn, thanh phát vẫn ở đáy.
+      await tester.drag(
+        find.byType(SingleChildScrollView).first,
+        const Offset(0, -600),
+      );
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(find.text('Thu').hitTestable(), findsOneWidget);
+      // Đang thu: nút thành "Dừng · 0:00", vẫn vừa.
+      await tester.tap(thu);
+      await settle(tester, () => c.recording);
+      await tester.pump();
+      expect(find.textContaining('Dừng ·'), findsOneWidget);
+      expect(find.byKey(const ValueKey('sing-loopback-tip')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await close(tester, c, s);
+    }, skip: skip != null);
   }
+
+  testWidgets(
+    'cắm soundcard: hỏi một lần → tắt nghe lại giọng, vang của soundcard; Thu nhắc tắt Loopback',
+    (tester) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final (c, s) = await open(tester);
+      final e = s.engine!;
+      expect(find.text('Bạn vừa cắm soundcard?'), findsNothing);
+      e.setRouteHint(AudioRoute.usb);
+      await settle(tester, () => s.route == AudioRoute.usb);
+      c.refresh();
+      await tester.pumpAndSettle();
+      expect(find.text('Bạn vừa cắm soundcard?'), findsOneWidget);
+      expect(e.monitorEnabled, isTrue); // chưa chọn: như tai nghe
+      await tester.tap(find.text('Dùng chế độ soundcard'));
+      await tester.pumpAndSettle();
+      expect(s.soundcardActive, isTrue);
+      expect(c.monitorOn, isFalse);
+      expect(find.byKey(const ValueKey('sing-soundcard-fx')), findsOneWidget);
+      expect(find.widgetWithText(ChoiceChip, 'Bolero'), findsNothing);
+      expect(
+        find.textContaining('giọng đã chỉnh có trong bản thu'),
+        findsOneWidget,
+      );
+      bool? saved;
+      unawaited(c.settings.soundcardMode().then((v) => saved = v));
+      await settle(tester, () => saved != null);
+      expect(saved, isTrue);
+
+      // Dùng hiệu ứng của app: chip thể loại trở lại, kèm lời giải thích.
+      await tester.tap(find.text('Dùng hiệu ứng của app'));
+      await tester.pump();
+      expect(find.widgetWithText(ChoiceChip, 'Bolero'), findsOneWidget);
+      expect(find.text('Dùng vang của soundcard'), findsOneWidget);
+
+      // Rút ra cắm lại: không hỏi nữa, vẫn tắt nghe lại giọng.
+      e.setRouteHint(AudioRoute.speaker);
+      await settle(tester, () => s.route == AudioRoute.speaker);
+      e.setRouteHint(AudioRoute.usb);
+      await settle(tester, () => s.route == AudioRoute.usb);
+      c.refresh();
+      await tester.pumpAndSettle();
+      expect(find.text('Bạn vừa cắm soundcard?'), findsNothing);
+      expect(c.monitorOn, isFalse);
+
+      // Thu: nhắc tắt Loopback mấy giây đầu.
+      expect(find.byKey(const ValueKey('sing-loopback-tip')), findsNothing);
+      await tester.tap(find.text('Thu'));
+      await settle(tester, () => c.recording);
+      c.refresh();
+      await tester.pump();
+      expect(find.byKey(const ValueKey('sing-loopback-tip')), findsOneWidget);
+      await close(tester, c, s);
+    },
+    skip: skip != null,
+  );
 
   testWidgets('bài không mở được: báo lỗi bằng thanh thông báo', (
     tester,

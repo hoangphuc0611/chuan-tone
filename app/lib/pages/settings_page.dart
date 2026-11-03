@@ -11,6 +11,7 @@ import '../engine/labels.dart';
 import '../engine/song_jobs.dart';
 import '../engine_info.dart';
 import '../widgets/separation_panel.dart';
+import '../widgets/soundcard_prompt.dart';
 import 'latency_page.dart';
 import 'latency_wizard_page.dart';
 import 'mic_page.dart';
@@ -24,7 +25,7 @@ const appVersion = String.fromEnvironment(
 );
 
 /// Cài đặt (M8 B4, docs/m8-plan.md mục 1): Âm thanh (đo độ trễ từng bước, micro, tự nghe lại
-/// giọng), Xuất (chất lượng âm thanh, video 720p, cân bằng âm lượng), Bộ nhớ (dung lượng, xoá từng
+/// giọng, chế độ soundcard — B6), Xuất (chất lượng âm thanh, video 720p, cân bằng âm lượng), Bộ nhớ (dung lượng, xoá từng
 /// nhóm), Trợ giúp (mẹo hát), Giới thiệu (phiên bản, giấy phép, quyền riêng tư), Nâng cao (Phòng thử,
 /// đo độ trễ kỹ thuật, máy chủ tách giọng).
 class SettingsPage extends StatefulWidget {
@@ -51,6 +52,8 @@ class _SettingsPageState extends State<SettingsPage> {
   late final AudioService _service = widget.service ?? AudioService.instance;
   ExportPrefs? _export;
   bool _autoMonitor = true;
+  bool? _soundcard;
+  SoundcardFx _soundcardFx = SoundcardFx.soundcard;
   InputKind _input = InputKind.auto;
   String? _server;
   StorageUsage? _usage;
@@ -66,12 +69,16 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _load() async {
     final export = await _settings.exportPrefs();
     final auto = await _settings.autoMonitor();
+    final soundcard = await _settings.soundcardMode();
+    final soundcardFx = await _settings.soundcardFx();
     final input = await _settings.inputPreference();
     final server = await _settings.separationServer();
     if (!mounted) return;
     setState(() {
       _export = export;
       _autoMonitor = auto;
+      _soundcard = soundcard;
+      _soundcardFx = soundcardFx;
       _input = input;
       _server = server;
     });
@@ -103,6 +110,18 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() => _autoMonitor = on);
     _service.updateAutoMonitor(on);
     await _settings.setAutoMonitor(on);
+  }
+
+  Future<void> _setSoundcard(bool on) async {
+    setState(() => _soundcard = on);
+    _service.updateSoundcard(mode: on);
+    await _settings.setSoundcardMode(on);
+  }
+
+  Future<void> _setSoundcardFx(SoundcardFx fx) async {
+    setState(() => _soundcardFx = fx);
+    _service.updateSoundcard(fx: fx);
+    await _settings.setSoundcardFx(fx);
   }
 
   Future<void> _confirmDelete({
@@ -172,6 +191,58 @@ class _SettingsPageState extends State<SettingsPage> {
             value: _autoMonitor,
             onChanged: _setAutoMonitor,
           ),
+          SwitchListTile(
+            key: const ValueKey('settings-soundcard'),
+            secondary: const Icon(Icons.settings_input_component),
+            title: const Text('Chế độ soundcard'),
+            subtitle: Text(
+              _soundcard == null
+                  ? 'Cắm soundcard vào là app hỏi'
+                  : 'Khi cắm soundcard: tắt nghe lại giọng trong app (soundcard đã cho nghe '
+                        'giọng trực tiếp)',
+            ),
+            value: _soundcard == true,
+            onChanged: _setSoundcard,
+          ),
+          if (_soundcard == true) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(72, 0, 16, 0),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final (fx, label) in const [
+                    (SoundcardFx.soundcard, 'Vang của soundcard'),
+                    (SoundcardFx.app, 'Hiệu ứng của app'),
+                  ])
+                    ChoiceChip(
+                      label: Text(label),
+                      selected: _soundcardFx == fx,
+                      showCheckmark: false,
+                      onSelected: (_) => _setSoundcardFx(fx),
+                    ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(72, 4, 16, 0),
+              child: Text(
+                _soundcardFx == SoundcardFx.app
+                    ? soundcardFxHelp.app
+                    : soundcardFxHelp.soundcard,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+            ListTile(
+              contentPadding: const EdgeInsets.fromLTRB(72, 0, 16, 0),
+              title: const Text('Đo độ trễ qua soundcard'),
+              subtitle: const Text(
+                'Cắm soundcard, bật Loopback rồi đo — chính xác nhất',
+              ),
+              enabled: _ok,
+              onTap: () => _push(LatencyWizardPage(service: widget.service)),
+            ),
+          ],
           const _Header('Xuất'),
           if (export != null) ...[
             ListTile(

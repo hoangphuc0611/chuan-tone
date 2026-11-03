@@ -35,7 +35,8 @@ class TakeSnapshot {
   }) {
     final analysis = s.songAnalysis;
     return TakeSnapshot(
-      genre: s.genre,
+      // Chế độ soundcard giữ vang của soundcard: bản thu để Khô (vang đã có trong tiếng micro).
+      genre: s.takeGenre,
       correction: s.correction,
       retuneMs: s.correctionRetuneMs,
       key: s.currentKey,

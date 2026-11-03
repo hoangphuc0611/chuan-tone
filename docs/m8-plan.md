@@ -135,7 +135,44 @@
   - Test app 159 (+5): hướng dẫn đi hết 6 bước (micro bị từ chối, đo, tai nghe, thử giọng, bài mẫu),
     đã có quyền → không hỏi lại, mở app lần đầu vào hướng dẫn / lần sau thẳng Trang chủ, 320 px chữ
     130% từng bước; đồng hồ cao độ gọn không có "cent"; câu lỗi mới + nút Chi tiết.
-- [ ] B6 — Chế độ soundcard (OTG)
+- [~] **B6** (2026-11-03, code + test bằng tín hiệu giả; nghiệm thu khi có soundcard thật, không chặn
+  đóng M8): chế độ soundcard.
+  - **Nhận ra + hỏi một lần**: engine đã báo route USB (iOS `usbAudio`, Android `TYPE_USB_DEVICE` /
+    `TYPE_USB_HEADSET` / `TYPE_USB_ACCESSORY`). Cắm vào lần đầu, Màn hát hỏi "Bạn vừa cắm
+    soundcard?" (thiết bị USB cũng có thể là tai nghe USB-C nên phải hỏi): "Dùng chế độ soundcard" /
+    "Không, đây là tai nghe"; đóng hộp thì lần mở app sau hỏi lại. Đổi ở Cài đặt → Âm thanh → Chế độ
+    soundcard (cài đặt `soundcardMode`, `soundcardFx`).
+  - **Chế độ soundcard** (`AudioService.soundcardActive` = đã chọn + đang cắm USB): tắt nghe lại giọng
+    trong app (soundcard đã cho nghe trực tiếp; để cả hai thì giọng đôi lệch nhau, bật Loopback còn
+    thành vòng hú), rút ra / cắm lại vẫn giữ. Hiệu ứng: **"Vang của soundcard"** (mặc định — Màn hát
+    thay chip thể loại bằng thẻ "Đang dùng vang của soundcard", bản thu để preset Khô) hoặc **"Hiệu
+    ứng của app"** (chip thể loại như thường, có trong bản thu và lúc Nghe lại, nhắc tắt vang của
+    soundcard). Mức chỉnh giọng giữ như người dùng chọn (tắt được).
+  - **Đo độ trễ qua Loopback**: trình đo độ trễ thấy chế độ soundcard thì đổi sang "Bật Loopback trên
+    soundcard → Đo qua soundcard → Đã đo qua soundcard" (không đánh giá "trễ nhiều" vì người hát
+    nghe giọng qua soundcard; chỉ để căn bản thu), lưu theo route USB — bản thu qua USB dùng đúng số
+    này (`roundTripFor`). Cài đặt có lối tắt "Đo độ trễ qua soundcard".
+  - **Cảnh báo nhạc lọt vào micro** (`engine/beat_leak.dart`): bản thu qua USB, màn Nghe lại tìm
+    tương quan chuẩn hoá giữa `dry.wav` và `beat.wav` quanh độ trễ khứ hồi ± 150 ms (4 đoạn 2 giây
+    beat to nhất, hạ mẫu 8 kHz, đọc từng đoạn file ở isolate riêng, ~0,1 s). |r| ≥ 0,15 (nhạc lọt
+    nhỏ hơn giọng ~17 dB; không lẫn r ≈ 0,03) → thẻ "Soundcard đang trộn nhạc vào micro — tắt Loopback
+    khi thu rồi thu lại". Không làm phẳng phổ: phần trầm (trống, bass) là nơi giọng yếu nên nhạc lọt
+    nổi rõ; làm phẳng ở 8 kHz đẩy dải 2–4 kHz của giọng, r tụt từ 0,31 xuống 0,09. Khi bấm Thu ở
+    chế độ soundcard: lúc đếm ngược và 5 giây đầu nhắc "nhớ tắt Loopback".
+  - **44,1 kHz**: iOS RemoteIO (định dạng phía app cố định 48 kHz) và Oboe (`setSampleRate` +
+    `SampleRateConversionQuality::Medium`) tự đổi tần số — không phải sửa engine; độ trễ tăng bao
+    nhiêu đo khi có soundcard.
+  - Test app 173 (+14): bộ dò nhạc lọt trên tín hiệu giả (lọt −10 dB, đảo dấu, độ trễ dự kiến sai
+    100 ms, lọt −30 dB, beat im lặng / bản thu ngắn, đọc từng đoạn WAV 16-bit stereo / float mono);
+    với engine thật: chế độ soundcard (tắt nghe lại giọng, Khô, rút / cắm, đọc lại cài đặt), đo độ
+    trễ qua Loopback giả −20 dB (đúng ±2 frame, lưu route USB), thu có / không Loopback, trọn luồng
+    thu → màn Nghe lại có cảnh báo; Màn hát (hỏi một lần, thẻ vang soundcard, nhắc Loopback khi
+    thu); Cài đặt (bật, chọn hiệu ứng, lưu; 320 px chữ 130%); trình đo qua soundcard.
+  - **Khi có soundcard thật** (rủi ro 4): cắm → hỏi → chế độ soundcard; nghe giọng chỉ qua
+    soundcard, không đôi; đo qua Loopback (ghi số đo và tần số soundcard 44,1 / 48 kHz, so với đo qua
+    loa); thu một bài có / không Loopback → cảnh báo đúng; micro chỉ ở một kênh (iOS lấy kênh đầu,
+    Android trộn) → nếu mất tiếng thì thêm chọn kênh micro; vang soundcard + "Hiệu ứng của app" có
+    chồng vang không; ghi tên soundcard đã thử.
 - [ ] B7 — Chạy nền ngắn, nhật ký thử nghiệm, thử nội bộ 1–2 người
 - [ ] B8 — Thử với 5 người dùng → sửa → báo cáo M8
 

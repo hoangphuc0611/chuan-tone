@@ -4,6 +4,7 @@ import 'package:chuantone_media/chuantone_media.dart';
 import 'package:flutter/material.dart';
 import 'package:tonecore_flutter/tonecore_flutter.dart';
 
+import '../data/app_settings.dart';
 import '../data/lrc.dart';
 import '../data/song_import.dart';
 import '../data/song_ref.dart';
@@ -17,6 +18,7 @@ import '../widgets/gain_slider.dart';
 import '../widgets/lyrics_view.dart';
 import '../widgets/pitch_meter.dart';
 import '../widgets/separation_panel.dart';
+import '../widgets/soundcard_prompt.dart';
 import '../widgets/transpose_control.dart';
 import 'review_page.dart';
 
@@ -24,7 +26,8 @@ import 'review_page.dart';
 /// − / + (nhớ theo bài), đồng hồ cao độ, mức chỉnh giọng, chip thể loại, "Vang", "Giữ giọng ca sĩ
 /// gốc" (bài đã tách giọng), lời chạy chữ (`.lrc`, B3); thanh phát + nút Thu luôn ở đáy. Nút loa:
 /// âm lượng / nghe lại giọng; menu ⋮: lời bài hát, tách giọng, sửa tone. Lần đầu vào: 3 bong bóng
-/// mẹo. Logic ở [SingController] (dùng chung với Phòng thử).
+/// mẹo. Cắm thiết bị USB lần đầu: hỏi chế độ soundcard (B6). Logic ở [SingController] (dùng chung
+/// với Phòng thử).
 class SingPage extends StatefulWidget {
   const SingPage({super.key, required this.song, this.controller});
 
@@ -71,6 +74,11 @@ class _SingPageState extends State<SingPage> {
       _shownMessage = _c.messageId;
       showErrorSnack(context, msg, details: _c.messageDetails);
     }
+    // Vừa cắm thiết bị USB mà chưa chọn chế độ soundcard → hỏi một lần.
+    if (_c.engine != null && _c.service.shouldAskSoundcard) {
+      _c.service.markSoundcardAsked();
+      unawaited(_askSoundcard());
+    }
     // Mẹo chờ dò tone xong: chữ tone đổi kích thước làm lệch chỗ được chỉ.
     if (!_tipsChecked && _c.song != null && !_c.loading && !_c.analyzing) {
       _tipsChecked = true;
@@ -107,6 +115,11 @@ class _SingPageState extends State<SingPage> {
             'sẻ.',
       ),
     ]);
+  }
+
+  Future<void> _askSoundcard() async {
+    final on = await askSoundcardMode(context);
+    if (on != null && mounted) await _c.setSoundcardMode(on);
   }
 
   Future<void> _review(Take take) async {
@@ -370,13 +383,17 @@ class _SingPageState extends State<SingPage> {
                   child: _CorrectionPicker(c: c),
                 ),
                 const SizedBox(height: 16),
-                _GenreChips(c: c),
-                GainSlider(
-                  label: 'Vang',
-                  value: c.service.fxMix,
-                  max: 2,
-                  onChanged: c.service.genre == Genre.dry ? null : c.setFxMix,
-                ),
+                if (c.service.usingSoundcardFx)
+                  _SoundcardFx(c: c)
+                else ...[
+                  _GenreChips(c: c),
+                  GainSlider(
+                    label: 'Vang',
+                    value: c.service.fxMix,
+                    max: 2,
+                    onChanged: c.service.genre == Genre.dry ? null : c.setFxMix,
+                  ),
+                ],
                 if (c.hasStems)
                   GainSlider(
                     label: 'Giữ giọng ca sĩ gốc',
@@ -533,7 +550,9 @@ class _CorrectionPicker extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Text(
-              'Bật "Nghe lại giọng" ở nút loa (trên cùng) để nghe giọng đã chỉnh trong tai nghe.',
+              c.service.soundcardActive
+                  ? 'Chế độ soundcard: giọng đã chỉnh có trong bản thu và khi nghe lại.'
+                  : 'Bật "Nghe lại giọng" ở nút loa (trên cùng) để nghe giọng đã chỉnh trong tai nghe.',
               style: theme.textTheme.bodySmall,
             ),
           ),
@@ -583,7 +602,68 @@ class _GenreChips extends StatelessWidget {
               style: theme.textTheme.bodySmall,
             ),
           ),
+        if (c.service.soundcardActive) ...[
+          const SizedBox(height: 4),
+          Text(soundcardFxHelp.app, style: theme.textTheme.bodySmall),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: () => c.setSoundcardFx(SoundcardFx.soundcard),
+              child: const Text('Dùng vang của soundcard'),
+            ),
+          ),
+        ],
       ],
+    );
+  }
+}
+
+/// Chế độ soundcard, giữ vang của soundcard: thay chip thể loại (bản thu để Khô, M8 B6).
+class _SoundcardFx extends StatelessWidget {
+  const _SoundcardFx({required this.c});
+
+  final SingController c;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      key: const ValueKey('sing-soundcard-fx'),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 4, 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.settings_input_component,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Đang dùng vang của soundcard',
+                    style: theme.textTheme.titleMedium,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Text(soundcardFxHelp.soundcard),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () => c.setSoundcardFx(SoundcardFx.app),
+                child: const Text('Dùng hiệu ứng của app'),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -619,6 +699,14 @@ class _TransportBar extends StatelessWidget {
         : c.monitorOn && route == AudioRoute.speaker
         ? 'Đang dùng loa ngoài: dễ bị hú. Hãy cắm tai nghe có dây.'
         : null;
+    // Chế độ soundcard, lúc đếm ngược / vài giây đầu khi thu: nhắc tắt Loopback (nhạc trộn vào micro
+    // thì bản thu lẫn nhạc, B6).
+    final loopbackTip =
+        c.service.soundcardActive &&
+        (c.countdown != null ||
+            (c.recording &&
+                (c.recStatus?.duration ?? Duration.zero) <
+                    const Duration(seconds: 5)));
     final playing = pb?.playing ?? false;
     final red = theme.colorScheme.error;
     // Nút thu luôn đỏ chữ trắng (màu "lỗi" của giao diện tối là hồng nhạt).
@@ -646,6 +734,17 @@ class _TransportBar extends StatelessWidget {
                   child: Text(
                     warning,
                     style: theme.textTheme.bodySmall?.copyWith(color: red),
+                  ),
+                ),
+              if (loopbackTip)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
+                  child: Text(
+                    'Chế độ soundcard: nhớ tắt Loopback để giọng không lẫn nhạc.',
+                    key: const ValueKey('sing-loopback-tip'),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               Slider(
@@ -853,7 +952,11 @@ class _VolumeSheet extends StatelessWidget {
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Nghe lại giọng'),
-              subtitle: const Text('Nghe giọng mình qua tai nghe khi hát'),
+              subtitle: Text(
+                c.service.soundcardActive
+                    ? 'Đang dùng soundcard: soundcard đã cho nghe giọng trực tiếp'
+                    : 'Nghe giọng mình qua tai nghe khi hát',
+              ),
               value: c.monitorOn,
               onChanged: c.setMonitorOn,
             ),

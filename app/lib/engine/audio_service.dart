@@ -34,6 +34,18 @@ class AudioService extends ChangeNotifier {
   /// Tự bật nghe lại giọng khi dùng tai nghe có dây / soundcard, tắt khi về loa ngoài.
   bool autoMonitor = true;
 
+  /// Chế độ soundcard (M8 B6): null = chưa hỏi; true = cắm thiết bị USB thì coi là soundcard (tắt
+  /// nghe lại giọng trong app vì soundcard đã cho nghe giọng trực tiếp, không trễ).
+  bool? soundcardMode;
+
+  /// Hiệu ứng giọng ở chế độ soundcard.
+  SoundcardFx soundcardFx = SoundcardFx.soundcard;
+
+  /// Đường tiếng hiện tại (theo sự kiện đổi route của engine).
+  AudioRoute route = AudioRoute.unknown;
+
+  bool _soundcardAsked = false;
+
   ToneCoreEngine? _engine;
   RouteMonitor? _routeMonitor;
   StreamSubscription<ToneCoreEvent>? _eventSub;
@@ -93,6 +105,23 @@ class AudioService extends ChangeNotifier {
   /// Sự kiện từ engine (nạp beat xong, đổi route, đo độ trễ xong...).
   Stream<ToneCoreEvent> get events => _events.stream;
 
+  /// Đang ở chế độ soundcard: đã chọn và đang cắm thiết bị USB.
+  bool get soundcardActive => soundcardMode == true && route == AudioRoute.usb;
+
+  /// Giữ vang của soundcard: bản thu để preset Khô (vang đã có sẵn trong tiếng micro).
+  bool get usingSoundcardFx =>
+      soundcardActive && soundcardFx == SoundcardFx.soundcard;
+
+  /// Thể loại ghi vào bản thu (preset dùng khi Nghe lại / xuất).
+  Genre get takeGenre => usingSoundcardFx ? Genre.dry : genre;
+
+  /// Vừa cắm thiết bị USB mà chưa chọn chế độ soundcard → giao diện hỏi (một lần mỗi lần mở app;
+  /// gọi [markSoundcardAsked] khi hỏi).
+  bool get shouldAskSoundcard =>
+      soundcardMode == null && route == AudioRoute.usb && !_soundcardAsked;
+
+  void markSoundcardAsked() => _soundcardAsked = true;
+
   /// Xin quyền micro và mở thiết bị âm thanh. Trả về true nếu chạy được.
   Future<bool> ensureStarted() async {
     if (_engine != null) return true;
@@ -106,6 +135,8 @@ class AudioService extends ChangeNotifier {
     if (settings != null) {
       inputPreference = await settings.inputPreference();
       autoMonitor = await settings.autoMonitor();
+      soundcardMode = await settings.soundcardMode();
+      soundcardFx = await settings.soundcardFx();
     }
     // Android: id của micro đã chọn (tìm trước khi mở để mở đúng micro ngay).
     final deviceId = await InputDevices.idFor(inputPreference);
@@ -122,7 +153,7 @@ class AudioService extends ChangeNotifier {
       _syncSong();
       _routeMonitor = RouteMonitor(e)..start();
       _eventSub = e.events.listen(_onEngineEvent);
-      _applyAutoMonitor(e.metrics.route);
+      _applyRoute(e.metrics.route);
       lastError = null;
       lastErrorDetails = null;
     } catch (err) {
@@ -136,25 +167,32 @@ class AudioService extends ChangeNotifier {
 
   void _onEngineEvent(ToneCoreEvent ev) {
     if (ev.type == ToneCoreEventType.routeChanged) {
-      _applyAutoMonitor(
+      _applyRoute(
         AudioRoute.values[ev.code.clamp(0, AudioRoute.values.length - 1)],
       );
     }
     _events.add(ev);
   }
 
-  /// Tự bật nghe lại giọng khi cắm tai nghe có dây / soundcard; tắt khi về loa ngoài (tránh hú).
-  /// Bluetooth: engine tự chặn. Không rõ đường tiếng: giữ nguyên.
-  void _applyAutoMonitor(AudioRoute route) {
+  /// Nhận đường tiếng mới. Chế độ soundcard: tắt nghe lại giọng — soundcard đã cho nghe giọng
+  /// trực tiếp, nghe thêm qua app thành giọng đôi lệch nhau; soundcard bật Loopback còn thành vòng
+  /// hú (tiếng ra → soundcard → micro → tiếng ra). Còn lại: tự bật nghe lại giọng khi cắm tai nghe có
+  /// dây / USB, tắt khi về loa ngoài (tránh hú); Bluetooth engine tự chặn; không rõ: giữ nguyên.
+  void _applyRoute(AudioRoute r) {
+    route = r;
     final e = _engine;
-    if (e == null || !autoMonitor) return;
-    switch (route) {
-      case AudioRoute.wired || AudioRoute.usb:
-        e.monitorEnabled = true;
-      case AudioRoute.speaker || AudioRoute.receiver:
-        e.monitorEnabled = false;
-      default:
-        return;
+    if (e == null) return;
+    if (soundcardActive) {
+      e.monitorEnabled = false;
+    } else if (autoMonitor) {
+      switch (r) {
+        case AudioRoute.wired || AudioRoute.usb:
+          e.monitorEnabled = true;
+        case AudioRoute.speaker || AudioRoute.receiver:
+          e.monitorEnabled = false;
+        default:
+          break;
+      }
     }
     notifyListeners();
   }
@@ -172,7 +210,17 @@ class AudioService extends ChangeNotifier {
   void updateAutoMonitor(bool on) {
     autoMonitor = on;
     final e = _engine;
-    if (on && e != null) _applyAutoMonitor(e.metrics.route);
+    if (on && e != null) _applyRoute(e.metrics.route);
+    notifyListeners();
+  }
+
+  /// Đổi chế độ soundcard / hiệu ứng (lưu cài đặt do người gọi làm). Áp ngay theo đường tiếng hiện
+  /// tại: bật khi đang cắm soundcard thì tắt nghe lại giọng; tắt thì về cách tự bật / tắt thường.
+  void updateSoundcard({bool? mode, SoundcardFx? fx}) {
+    if (mode != null) soundcardMode = mode;
+    if (fx != null) soundcardFx = fx;
+    _soundcardAsked = true;
+    _applyRoute(route);
     notifyListeners();
   }
 
