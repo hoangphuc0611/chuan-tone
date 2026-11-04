@@ -41,6 +41,7 @@ class _ReviewPageState extends State<ReviewPage> with WidgetsBindingObserver {
   static const _nudgeStepMs = 5.0;
 
   late final AudioService _service = widget.service ?? AudioService.instance;
+  int _loadId = -1; // lần nạp bản thu của màn này ([AudioService.loads])
   late final TakeStore _store = widget.store ?? TakeStore();
   late TakeInfo _info = widget.take.info;
   Timer? _ticker;
@@ -139,6 +140,7 @@ class _ReviewPageState extends State<ReviewPage> with WidgetsBindingObserver {
     final e = _service.engine;
     if (e == null) return;
     setState(() => _loading = true);
+    _loadId = ++_service.loads;
     try {
       await e.loadTakeAndWait(
         _take.beatPath,
@@ -479,10 +481,10 @@ class _ReviewPageState extends State<ReviewPage> with WidgetsBindingObserver {
     _ticker?.cancel();
     _cancelExport();
     final e = _service.engine;
-    if (e != null) {
-      e.pause();
-      e.unloadBeat(); // gỡ bản thu: micro trở lại chuỗi giọng ở các màn khác
-    }
+    e?.pause();
+    // Gỡ bản thu (micro trở lại chuỗi giọng ở các màn khác) — trừ khi màn khác đã nạp bài sau đó
+    // (Màn hát nạp lại bài ngay lúc bấm quay về, trước khi màn này đóng hẳn).
+    if (e != null && _service.loads == _loadId) e.unloadBeat();
     super.dispose();
   }
 
@@ -521,7 +523,7 @@ class _ReviewPageState extends State<ReviewPage> with WidgetsBindingObserver {
       padding: const EdgeInsets.all(16),
       children: [
         Text(
-          _info.songName,
+          songTitle(_info.songName),
           style: theme.textTheme.titleLarge,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
@@ -621,7 +623,7 @@ class _ReviewPageState extends State<ReviewPage> with WidgetsBindingObserver {
         ),
         Text(
           'Nghe giọng chậm hơn nhạc thì bấm +. Đã bù độ trễ '
-          '${(_info.roundTripMs + ms(_info.outputLookaheadFrames)).toStringAsFixed(1)} ms '
+          '${(_info.roundTripMs + ms(_info.outputLookaheadFrames)).toStringAsFixed(1).replaceAll('.', ',')} ms '
           '(${latencySourceLabel(_info.latencySource)}).',
           style: theme.textTheme.bodySmall,
         ),

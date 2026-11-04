@@ -19,13 +19,26 @@ class GainSlider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Chữ to (Cài đặt của máy): nhãn rộng thêm theo cỡ chữ (giới hạn để thanh còn chỗ), số phần
+    // trăm co lại chứ không xuống dòng ("100" / "%").
+    final scaler = MediaQuery.textScalerOf(context);
     return Row(
       children: [
-        SizedBox(width: 120, child: Text(label)),
+        SizedBox(
+          width: scaler.scale(120).clamp(120, 160).toDouble(),
+          child: Text(label),
+        ),
         Expanded(
           child: Slider(value: value, max: max, onChanged: onChanged),
         ),
-        SizedBox(width: 44, child: Text('${(value * 100).round()}%')),
+        SizedBox(
+          width: 48,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerRight,
+            child: Text('${(value * 100).round()}%', maxLines: 1),
+          ),
+        ),
       ],
     );
   }

@@ -46,7 +46,7 @@ class _TakesPageState extends State<TakesPage> {
       builder: (ctx) => AlertDialog(
         title: const Text('Xoá bản thu?'),
         content: Text(
-          '${t.info.songName} · ${formatTakeDate(t.info.createdAt)}',
+          '${songTitle(t.info.songName)} · ${formatTakeDate(t.info.createdAt)}',
         ),
         actions: [
           TextButton(
@@ -91,7 +91,7 @@ class _TakesPageState extends State<TakesPage> {
                 return ListTile(
                   leading: const Icon(Icons.graphic_eq),
                   title: Text(
-                    t.info.songName,
+                    songTitle(t.info.songName),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),

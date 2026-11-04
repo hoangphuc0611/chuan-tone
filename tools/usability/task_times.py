@@ -65,7 +65,9 @@ def load(lines) -> list[Event]:
             continue
         try:
             j = json.loads(line)
-            t = datetime.fromisoformat(j.pop("t"))
+            ts = j.pop("t")
+            # Giờ UTC ("…Z", vd đồng hồ của test): Python < 3.11 không đọc được "Z".
+            t = datetime.fromisoformat(ts[:-1] if ts.endswith("Z") else ts)
             e = j.pop("e")
         except (ValueError, KeyError, TypeError):
             continue

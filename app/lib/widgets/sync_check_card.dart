@@ -55,6 +55,7 @@ class _SyncCheckCardState extends State<SyncCheckCard> {
       final beatPath = '${dir.path}/tach.wav';
       await File(beatPath)
           .writeAsBytes(encodeWav16(stereo, sampleRate: rate, channels: 2));
+      AudioService.instance.loads++;
       await e.loadBeatAndWait(beatPath);
       e.monitorEnabled = false; // không để micro vọng lại
       e.seek(Duration.zero);

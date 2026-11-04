@@ -174,6 +174,8 @@ class _AnalysisPageState extends State<AnalysisPage> {
     final p = _sepProgress;
     final stage = _status?.stage ?? AnalysisStage.none;
     final tempoRunning = _analyzing && stage == AnalysisStage.tempo;
+    // Dò nhịp chạy sau khi đã dò xong tone.
+    final toneDone = _analysis != null || tempoRunning;
     return [
       AnalysisStep(
         title: 'Tách giọng ca sĩ',
@@ -213,7 +215,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
             ? StepStatus.failed
             : _analyzing && !tempoRunning
             ? StepStatus.running
-            : _analysis != null
+            : toneDone
             ? StepStatus.done
             : StepStatus.waiting,
         subtitle:
@@ -244,7 +246,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            _song.name,
+            songTitle(_song.name),
             style: theme.textTheme.titleLarge,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,

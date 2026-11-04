@@ -14,6 +14,33 @@
 
 ## 1. Vòng nhỏ (B7): bạn + 1–2 người
 
+### 1.0 Lượt chạy tự động (máy làm trước, không cần iPhone)
+
+`app/test/walkthrough_test.dart` chạy app thật (engine thật backend NULL, micro giả hát lệch nốt
++ tiếng loa lọt vào) như một người thử mới. Nó đi qua hướng dẫn 6 bước, rồi nhận bài "Mở bằng
+ChuẩnTone" kèm lời gửi riêng, rồi Phân tích bài. Ở Màn hát nó xem mẹo lần đầu, chọn chỉnh giọng
+Tự nhiên, hạ tone, chọn Bolero và tăng Vang. Sau đó nó thu 30 giây và sang Nghe lại: cho nhạc
+nhỏ đi, xuất video, lưu Ảnh, xuất M4A thật. Cuối cùng nó về Trang chủ, mở lại bài và bản thu,
+rồi vào Cài đặt. Lượt này chạy trên hai máy: iPhone 13 sáng và iPhone SE tối với chữ 130%. Tràn
+bố cục làm test hỏng. Test chạy trong CI mỗi lần push (bài giả).
+
+Trên máy dev có thể chụp màn hình từng bước kèm nhật ký thử nghiệm của lượt, và chạy với bài thật
+và tách giọng bằng server thật:
+
+```
+cd app && TONECORE_LIB=$PWD/../engine/build/host/libtonecore.dylib \
+  WALKTHROUGH_OUT=$PWD/../testdata/walkthrough \
+  WALKTHROUGH_SONG=$PWD/../testdata/vocal-songs/<bài>.m4a \
+  CHUANTONE_SERVER=http://127.0.0.1:8000 \
+  fvm flutter test test/walkthrough_test.dart
+```
+
+Lượt này **không thay** được người thử: không đo được người ta có tự tìm ra nút hay không, không
+có SUS. Nó cũng không chạm phần cứng và native của iPhone: âm thanh thật, độ trễ, tai nghe
+Bluetooth, dựng video bằng AVFoundation, camera, TikTok, chạy nền thật của iOS, soundcard. Các mục
+K1–K14 dưới đây vẫn cần làm trên máy. Lượt tự động chỉ bắt trước lỗi luồng, lỗi chữ và lỗi bố cục
+để buổi thử không tốn thời gian vào chúng.
+
 ### 1.1 Trước buổi thử (bạn tự làm, ~30 phút)
 
 1. Cài IPA mới nhất từ CI (`gh run download <id> -n ChuanTone-ipa` → Sideloadly). **Xoá app cũ
@@ -153,6 +180,21 @@ SUS trung bình: ___ · Mở app → câu hát đầu tiên (trung vị): ___ ·
 
 ### Vấn đề tìm được
 
+"Tự động" = lượt chạy tự động (mục 1.0), không phải người thử.
+
 | # | Vòng | Màn | Vấn đề | Mức (chặn / nặng / nhẹ) | Sửa ở |
 |---|---|---|---|---|---|
-| | | | | | |
+| 1 | tự động | Màn hát ← Nghe lại | Nghe lại xong bấm quay về Màn hát thì mất bài: 0:00, không phát, không đổi tone, không thu được. Nguyên nhân: Màn hát nạp lại bài ngay lúc bấm quay về, còn màn Nghe lại chỉ gỡ bản thu khi đóng hẳn (sau hiệu ứng chuyển màn), nên gỡ luôn bài vừa nạp. | nặng | B7 (đã sửa: đếm lần nạp, Nghe lại chỉ gỡ khi chưa ai nạp gì sau nó) |
+| 2 | tự động | Màn hát | Hát hết bài mà không bấm Dừng thì app thu tiếp khoảng lặng, bản thu và video có đoạn im cuối | nhẹ | B7 (đã sửa: hết bài thì tự dừng → Nghe lại) |
+| 3 | tự động | Phân tích bài, Nghe lại, Bản thu của tôi | Tên bài kèm đuôi file ("Lạc trôi.m4a") | nhẹ | B7 (đã sửa) |
+| 4 | tự động | Phân tích bài | Đang dò nhịp thì bước "Dò tone" (đã xong) hiện vòng tròn rỗng như chưa làm | nhẹ | B7 (đã sửa) |
+| 5 | tự động | Nghe lại | "Đã bù độ trễ 1.0 ms": dấu chấm thập phân | nhẹ | B7 (đã sửa) |
+| 6 | tự động | Cài đặt | Hiện "ToneCore v0.8.0" dù engine đã là 0.9 (số phiên bản trong CMake chưa nâng ở B4) | nhẹ | B7 (đã sửa; phân tích bài cũ chạy lại một lần) |
+| 7 | tự động | Màn hát | Mở bài dài (vd quay về từ Nghe lại): trong 1–3 giây nạp bài, màn vẫn hiện tone và thời lượng của bản thu vừa nghe | nhẹ | xem ở vòng thử |
+| 8 | tự động | Nghe lại | Nút Xuất ở cuối trang, sau khoảng 1,5 màn hình nút chỉnh; xuất xong, thẻ kết quả nằm dưới mép màn hình — người thử có thể không thấy (nhiệm vụ 5) | ? | xem ở vòng thử |
+| 9 | tự động | Nghe lại, Màn hát | Chữ kỹ thuật: "nén 3:1", "−14,0 LUFS", "(hệ điều hành báo)", "theo bài · nhạc −1" | nhẹ | xem ở vòng thử |
+| 10 | tự động | Màn hát / Nghe lại | Cùng một thứ mà hai màn gọi khác nhau: "Chỉnh giọng" / "Tự chỉnh giọng", "Thể loại" / "Hiệu ứng giọng"; một màn dùng chip, màn kia dùng nút phân đoạn (SUS câu 6) | nhẹ | xem ở vòng thử |
+| 11 | tự động | engine | Engine báo "nạp bài xong" trước khi luồng âm thanh nhận bài: đọc thời lượng hay đổi tone ngay sau đó có thể hụt. Trên máy gần như không xảy ra vì app đọc CSDL xen giữa. | nhẹ | M9 |
+| 12 | tự động | Màn hát | "Lạc trôi": đoạn dạo 18 giây bị dò thành La# trưởng (độ tin cậy 0,47) nên Màn hát hiện tone sai đầu bài rồi mới đổi sang La thứ. Có thể chỉ hiện đoạn chuyển tone đủ tin cậy. | nhẹ | xem ở vòng thử / M9 |
+| 13 | tự động | Màn hát (bảng Tách giọng) | Nhãn "Giữ giọng ca sĩ gốc" xuống dòng thành 2 dòng ở cột nhãn hẹp | nhẹ | — |
+| 14 | tự động | Phân tích bài | iPhone SE, chữ to: thông báo "Đã gắn lời cho bài…" che nút "Hát" trong 4 giây | nhẹ | xem ở vòng thử |

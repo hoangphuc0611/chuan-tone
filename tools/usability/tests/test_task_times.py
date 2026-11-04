@@ -64,6 +64,14 @@ class TaskTimesTest(unittest.TestCase):
         self.assertIsNone(tasks[2].seconds)  # chưa hạ tone
         self.assertEqual(tasks[3].start, tasks[2].start)  # tính từ lúc nhiệm vụ 3 bắt đầu
 
+    def test_utc_z_timestamps(self):
+        # Đồng hồ UTC ("…Z", vd nhật ký của lượt chạy tự động) đọc được như giờ thường.
+        lines = [json.dumps({**json.loads(l), "t": json.loads(l)["t"] + "Z"}) for l in SESSION]
+        s = tt.sessions(tt.load(lines))
+        self.assertEqual(len(s), 1)
+        self.assertEqual(len(s[0]), len(SESSION))
+        self.assertEqual(tt.first_song_seconds(s[0]), 160)
+
     def test_report(self):
         s = tt.sessions(tt.load(SESSION))[0]
         r = tt.report(s, timeline=True)

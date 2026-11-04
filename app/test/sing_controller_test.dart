@@ -264,6 +264,36 @@ void main() {
     expect(engine.playback.playing, isFalse);
   }, skip: skip);
 
+  test('hết bài khi đang thu: tự dừng thu → Nghe lại, không thu thêm khoảng lặng', () async {
+    final c = make();
+    await c.start(initial: song);
+    Take? reviewed;
+    c.onTake = (t) async => reviewed = t;
+    c.seek(engine.playback.duration - const Duration(seconds: 1));
+    c.playPause();
+    await c.startRecording();
+    expect(c.recording, isTrue);
+    // 3 giây âm thanh; bài hết sau 1 giây.
+    for (var i = 0; i < 3 * 48000 ~/ 256 && reviewed == null; i++) {
+      run(1);
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    final deadline = DateTime.now().add(const Duration(seconds: 10));
+    while (reviewed == null && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    expect(reviewed, isNotNull);
+    expect(c.recording, isFalse);
+    expect(reviewed!.info.frames, lessThan(48000 * 3 ~/ 2));
+    // Quay về từ Nghe lại: bài nạp lại.
+    while ((c.loading || !engine.playback.hasBeat) &&
+        DateTime.now().isBefore(deadline)) {
+      run(1);
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    expect(engine.playback.hasBeat, isTrue);
+  }, skip: skip);
+
   test('nhạc đang phát thì thu ngay, không đếm ngược', () async {
     final c = make();
     await c.start(initial: song);

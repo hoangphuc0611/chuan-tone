@@ -336,7 +336,7 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 200));
       });
       await tester.pump();
-      expect(find.text('Lạc trôi.m4a'), findsOneWidget);
+      expect(find.text('Lạc trôi'), findsOneWidget); // tên bài không kèm đuôi file
       expect(find.textContaining('02/11 21:05 · 0:30'), findsOneWidget);
     });
   });

@@ -211,6 +211,28 @@
     ngắt lúc xuất → tự xuất lại có báo (engine thật); nhật ký (tắt không ghi, mốc phiên, chặn thanh
     trượt, tắt / xoá), Cài đặt bật nhật ký; chạy nền ngắn (báo xong cả khi lỗi, không xin được vẫn
     làm). Python 3 test cho công cụ tính thời gian.
+  - **Lượt chạy tự động** (2026-11-04, `app/test/walkthrough_test.dart`, `docs/m8-usability.md`
+    mục 1.0): làm trước phần máy làm được của vòng thử nhỏ. App thật chạy như người thử mới, engine
+    thật backend NULL, micro giả hát lệch nốt + tiếng loa lọt vào, kênh native giả (quyền micro,
+    file gửi vào, dựng video, lưu Ảnh).
+    - Luồng: hướng dẫn 6 bước → nhận bài + lời từ Zalo → Phân tích → Màn hát (mẹo lần đầu, chỉnh
+      giọng, hạ tone, Bolero, Vang) → thu 30 giây → Nghe lại (nhạc nhỏ đi, xuất video, lưu Ảnh, xuất
+      M4A thật) → quay về Màn hát → Trang chủ → mở lại bài và bản thu → Cài đặt.
+    - Hai máy: iPhone 13 sáng; iPhone SE tối, chữ 130%.
+    - Máy dev có thể chụp màn hình từng bước. Chạy với bài thật "Lạc trôi" 4:32 và máy chủ tách
+      giọng thật: tách xong 58 giây; chuyển app ra nền 5 giây giữa chừng không hỏng.
+    - Nhật ký thử nghiệm của lượt chạy qua được `task_times.py`: đủ 6 nhiệm vụ.
+    - Sửa lỗi lượt này tìm được:
+      - (nặng) Nghe lại xong quay về Màn hát thì mất bài. Màn Nghe lại gỡ bản thu khi đóng hẳn,
+        sau lúc Màn hát đã nạp lại bài; nay đếm lần nạp (`AudioService.loads`).
+      - Hết bài khi đang thu thì tự dừng → Nghe lại.
+      - Tên bài bỏ đuôi file.
+      - Bước "Dò tone" hiện đã xong khi đang dò nhịp.
+      - "1,0 ms".
+      - Engine 0.9.0 (CMake còn ghi 0.8.0).
+      - Số phần trăm của thanh trượt không gãy dòng khi chữ to.
+      - Công cụ đọc được giờ UTC "…Z".
+    - Các điểm cần người thử xác nhận: bảng "Vấn đề" trong `docs/m8-usability.md`.
 - [ ] B8 — Thử với 5 người dùng → sửa → báo cáo M8
 
 ---

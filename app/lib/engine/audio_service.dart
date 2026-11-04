@@ -20,10 +20,15 @@ class AudioService extends ChangeNotifier {
   AudioService.test(ToneCoreEngine Function() create, {AppSettings? settings})
     : this._(create, settings);
 
-  static final AudioService instance = AudioService._(
+  static AudioService get instance => _instance;
+  static AudioService _instance = AudioService._(
     ToneCoreEngine.platform,
     AppSettings(),
   );
+
+  /// Lượt chạy toàn app trong test (test/walkthrough_test.dart): mọi màn dùng dịch vụ này.
+  @visibleForTesting
+  static set instanceForTesting(AudioService s) => _instance = s;
 
   final ToneCoreEngine Function() _create;
   final AppSettings? _settings;
@@ -93,6 +98,11 @@ class AudioService extends ChangeNotifier {
   FxPreset presetOf(Genre g) => _presets[g] ??= ToneCore.genrePreset(g);
 
   ToneCoreEngine? get engine => _engine;
+
+  /// Số lần đã nạp bài / bản thu vào engine (mỗi màn nạp thì tăng). Màn Nghe lại chỉ gỡ bản thu
+  /// của mình khi chưa ai nạp gì sau nó: quay về Màn hát thì Màn hát nạp lại bài ngay lúc bấm quay
+  /// về, còn màn Nghe lại chỉ đóng hẳn sau hiệu ứng chuyển màn — gỡ lúc đó là gỡ mất bài vừa nạp.
+  int loads = 0;
 
   /// Tone đang áp dụng = tone đang nghe (khi theo bài thì đổi theo vị trí beat; đã cộng số nửa
   /// cung đổi tone beat).

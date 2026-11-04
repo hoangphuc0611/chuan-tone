@@ -351,6 +351,10 @@ class SingController extends ChangeNotifier {
         _currentKey = ev.key;
       case ToneCoreEventType.transposeReady:
         timing.rendered(ev.code, ev.value);
+      case ToneCoreEventType.beatEnded:
+        // Hết bài khi đang thu: tự dừng → Nghe lại (không thu thêm khoảng lặng cuối bài).
+        if (_recording) unawaited(stopRecording());
+        return;
       case ToneCoreEventType.monitorBlocked:
         _show(
           'Tai nghe Bluetooth bị trễ nhiều nên đã tắt nghe lại giọng. Hãy dùng tai nghe có dây.',
@@ -445,6 +449,7 @@ class SingController extends ChangeNotifier {
   /// Nạp bài; có stem giọng đã tách thì nạp kèm (hỏng thì xoá stem, nạp bài thường). Trả các đoạn
   /// giọng đã dùng (null = không có).
   Future<List<String>?> _loadSong(ToneCoreEngine e, SongRef song) async {
+    service.loads++;
     final vocals = await _stems.vocalsFor(name: song.name, size: song.size);
     if (vocals != null) {
       try {
@@ -887,6 +892,7 @@ class SingController extends ChangeNotifier {
       if (_disposed || !_isCurrent(song)) return; // đã đổi bài
       final vocals = [for (final f in r.vocals) f.path];
       final transpose = service.transpose;
+      service.loads++;
       await e.loadBeatWithVocalsAndWait(song.path, vocals);
       _vocals = vocals;
       _sepResult = r;
@@ -957,6 +963,7 @@ class SingController extends ChangeNotifier {
     if (e == null || song == null || _recording) return;
     await _stems.delete(name: song.name, size: song.size);
     final transpose = service.transpose;
+    service.loads++;
     try {
       await e.loadBeatAndWait(song.path);
     } on ToneCoreException catch (err) {

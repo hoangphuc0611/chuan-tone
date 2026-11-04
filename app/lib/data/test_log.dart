@@ -105,6 +105,7 @@ abstract final class TestLog {
   static void reset() {
     _enabled = false;
     _baseDir = null;
+    _writing = Future.value(); // lệnh ghi dở của test trước không chặn test sau
     _lastAt.clear();
     now = DateTime.now;
   }
