@@ -163,6 +163,19 @@ class _NoSource implements ChunkSource {
   void dispose() {}
 }
 
+/// HttpClient giả: mọi yêu cầu hỏng như khi máy chủ ngắt kết nối trên Linux.
+class _ResetClient implements HttpClient {
+  @override
+  set connectionTimeout(Duration? _) {}
+
+  @override
+  Future<HttpClientRequest> openUrl(String method, Uri url) async =>
+      throw const OSError('Connection reset by peer', 104);
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 void main() {
   late Directory dir;
   late FakeServer server;
@@ -185,6 +198,24 @@ void main() {
   test('health', () async {
     final info = await client().health();
     expect(info.separator, 'fake');
+  });
+
+  test('máy chủ ngắt giữa chừng kiểu Linux (OSError thô, không phải SocketException): '
+      'báo mất kết nối, tiếp tục được', () async {
+    final c = SeparationClient(
+      baseUrl: server.url,
+      deviceId: 'may-1',
+      http: _ResetClient(),
+      retries: 2,
+    );
+    await expectLater(
+      c.health(),
+      throwsA(
+        isA<SeparationException>()
+            .having((e) => e.resumable, 'resumable', isTrue)
+            .having((e) => e.details, 'details', contains('reset by peer')),
+      ),
+    );
   });
 
   test('gửi đủ đoạn, tải giọng đúng thứ tự, xoá job', () async {

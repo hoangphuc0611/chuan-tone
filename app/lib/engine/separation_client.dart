@@ -412,9 +412,10 @@ class SeparationClient {
           continue;
         }
         return (status: res.statusCode, body: bytes);
-      } on SocketException catch (e) {
-        last = e;
-      } on HttpException catch (e) {
+      } on IOException catch (e) {
+        last = e; // SocketException, HttpException…
+      } on OSError catch (e) {
+        // Máy chủ ngắt giữa lúc gửi: Linux ném thẳng OSError ("Connection reset by peer").
         last = e;
       } on TimeoutException catch (e) {
         last = e;

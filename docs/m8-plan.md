@@ -232,6 +232,8 @@
       - Engine 0.9.0 (CMake còn ghi 0.8.0).
       - Số phần trăm của thanh trượt không gãy dòng khi chữ to.
       - Công cụ đọc được giờ UTC "…Z".
+      - (CI) Tách giọng: máy chủ ngắt giữa lúc gửi mà Linux ném `OSError` thô (không phải
+        `SocketException`) thì giờ cũng coi là mất kết nối, tiếp tục được.
     - Các điểm cần người thử xác nhận: bảng "Vấn đề" trong `docs/m8-usability.md`.
 - [ ] B8 — Thử với 5 người dùng → sửa → báo cáo M8
 
