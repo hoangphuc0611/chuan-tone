@@ -14,6 +14,7 @@ import '../engine/labels.dart';
 import '../engine/sing_controller.dart';
 import '../widgets/analysis_widgets.dart';
 import '../widgets/coach_marks.dart';
+import '../widgets/correction_chips.dart';
 import '../widgets/error_text.dart';
 import '../widgets/gain_slider.dart';
 import '../widgets/lyrics_view.dart';
@@ -518,7 +519,8 @@ class _KeyHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final a = c.analysis;
-    final transpose = c.playback?.audibleTranspose ?? 0;
+    final opening =
+        c.loading; // đang nạp bài: tone của bài trước / bản thu chưa đổi
     final detecting = c.analyzing && a == null && c.manualKey == null;
     final source = switch (c.keySource) {
       KeySource.song => 'theo bài',
@@ -532,21 +534,22 @@ class _KeyHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          detecting ? 'Đang dò tone…' : keyLabel(c.currentKey),
+          opening
+              ? 'Đang mở bài…'
+              : detecting
+              ? 'Đang dò tone…'
+              : keyLabel(c.currentKey),
           key: const ValueKey('sing-key'),
           textAlign: TextAlign.center,
           style:
-              (detecting
+              (opening || detecting
                       ? theme.textTheme.headlineSmall
                       : theme.textTheme.displaySmall)
                   ?.copyWith(fontWeight: FontWeight.w700),
         ),
-        if (!detecting)
+        if (!opening && !detecting)
           Text(
-            [
-              source,
-              if (transpose != 0) 'nhạc ${transposeLabel(transpose)}',
-            ].join(' · '),
+            source,
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyLarge,
           ),
@@ -574,42 +577,15 @@ class _CorrectionPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final current = c.service.correction;
-    final options = <(String, CorrectionPreset?)>[
-      ('Tắt', null),
-      for (final p in CorrectionPreset.values) (correctionPresetLabel(p), p),
-    ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Chỉnh giọng', style: theme.textTheme.titleMedium),
-        const SizedBox(height: 6),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final (label, value) in options)
-              ChoiceChip(
-                label: Text(label),
-                labelStyle: theme.textTheme.titleMedium,
-                selected: current == value,
-                showCheckmark: false,
-                onSelected: (_) => c.setCorrection(value),
-              ),
-          ],
-        ),
-        if (current != null && !c.monitorOn)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              c.service.soundcardActive
-                  ? 'Chế độ soundcard: giọng đã chỉnh có trong bản thu và khi nghe lại.'
-                  : 'Bật "Nghe lại giọng" ở nút loa (trên cùng) để nghe giọng đã chỉnh trong tai nghe.',
-              style: theme.textTheme.bodySmall,
-            ),
-          ),
-      ],
+    return CorrectionChips(
+      value: current,
+      onChanged: c.setCorrection,
+      hint: current != null && !c.monitorOn
+          ? (c.service.soundcardActive
+                ? 'Chế độ soundcard: giọng đã chỉnh có trong bản thu và khi nghe lại.'
+                : 'Bật "Nghe lại giọng" ở nút loa (trên cùng) để nghe giọng đã chỉnh trong tai nghe.')
+          : null,
     );
   }
 }
@@ -742,8 +718,10 @@ class _TransportBar extends StatelessWidget {
     final theme = Theme.of(context);
     final pb = c.playback;
     final hasBeat = pb != null && pb.hasBeat;
-    final duration = pb?.duration ?? Duration.zero;
-    final position = pb?.position ?? Duration.zero;
+    // Đang nạp bài: chưa hiện vị trí / độ dài của bài trước hay bản thu vừa nghe. Không đổi trạng
+    // thái bật / tắt của thanh trượt ở đây (đổi giữa lúc chuyển màn làm hỏng cây semantics).
+    final duration = c.loading ? Duration.zero : pb?.duration ?? Duration.zero;
+    final position = c.loading ? Duration.zero : pb?.position ?? Duration.zero;
     final maxMs = duration.inMilliseconds.toDouble();
     final route = c.metrics?.route;
     final warning = route == AudioRoute.bluetooth

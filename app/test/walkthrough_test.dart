@@ -660,7 +660,10 @@ void main() {
           await tapText('Xuất âm thanh (M4A)');
           await idle(const Duration(milliseconds: 300));
           await wait(
-            () => !showsPart('Đang xuất'),
+            () => find
+                .byKey(const ValueKey('review-export-main'))
+                .evaluate()
+                .isNotEmpty,
             max: const Duration(seconds: 60),
             reason: 'xuất M4A chưa xong',
           );
@@ -689,6 +692,9 @@ void main() {
         await shot('trang-chu-co-bai');
         await tapOn(find.text('Bai hat thu').first);
         await wait(() => find.byTooltip('Hạ tone').evaluate().isNotEmpty);
+        await idle(
+          const Duration(milliseconds: 600),
+        ); // hết hiệu ứng chuyển màn
         await camera.shot(tester, 'mo-lai-bai-dang-nap');
         await songLoaded();
         await shot('mo-lai-bai');

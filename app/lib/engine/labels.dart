@@ -214,6 +214,17 @@ String? genreCorrectionLabel(GenreCorrection c) {
   return '${correctionPresetLabel(level)} ${c.retuneMs!.round()} ms';
 }
 
+/// Thể loại nghe ra sao, bằng lời thường (màn Nghe lại; thông số kỹ thuật ở Phòng thử).
+String genreDescription(Genre g) => switch (g) {
+  Genre.dry => 'Giọng mộc, không vang',
+  Genre.bolero => 'Vang dài, ấm, có tiếng vọng nhẹ',
+  Genre.ballad => 'Vang vừa, mượt',
+  Genre.pop => 'Giọng sáng, vang gọn',
+  Genre.remix => 'Giọng sáng, vọng nhanh theo nhịp',
+  Genre.rap => 'Gọn, rõ chữ, ít vang',
+  Genre.lofi => 'Tiếng mờ ấm, vang phòng nhỏ',
+};
+
 /// Vì sao chip này đang được chọn.
 String genreSourceLabel(GenreSource s, {double? bpm}) => switch (s) {
   GenreSource.saved => 'Đã chọn cho bài này',

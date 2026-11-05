@@ -6,7 +6,8 @@ import '../engine/labels.dart';
 import 'gain_slider.dart';
 
 /// Chip 7 preset (đổi khi đang hát không click), vì sao chip đang chọn, preset gồm những gì, thanh
-/// "Vang", lọc tiếng ồn micro.
+/// "Vang", lọc tiếng ồn micro. [simple] (màn Nghe lại): gọi "Thể loại" như Màn hát, tả bằng lời
+/// thường thay thông số (vang, vọng, nén, mức chỉnh giọng kèm theo — các thông số để Phòng thử).
 class FxPanel extends StatelessWidget {
   const FxPanel({
     super.key,
@@ -20,7 +21,10 @@ class FxPanel extends StatelessWidget {
     required this.onGenre,
     required this.onMix,
     required this.onGate,
+    this.simple = false,
   });
+
+  final bool simple;
 
   final Genre genre;
   final FxPreset preset;
@@ -41,8 +45,11 @@ class FxPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Hiệu ứng giọng', style: theme.textTheme.titleLarge),
-        const SizedBox(height: 8),
+        if (simple)
+          Text('Thể loại', style: theme.textTheme.titleMedium)
+        else
+          Text('Hiệu ứng giọng', style: theme.textTheme.titleLarge),
+        SizedBox(height: simple ? 6 : 8),
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -62,8 +69,8 @@ class FxPanel extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 8),
-        Text(fxSummary(preset)),
-        if (correction != null)
+        Text(simple ? genreDescription(genre) : fxSummary(preset)),
+        if (correction != null && !simple)
           Text(
             'Kèm chỉnh giọng: $correction',
             style: theme.textTheme.bodySmall,

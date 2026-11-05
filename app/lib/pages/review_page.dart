@@ -15,6 +15,7 @@ import '../engine/background.dart';
 import '../engine/beat_leak.dart';
 import '../engine/labels.dart';
 import '../engine/takes.dart';
+import '../widgets/correction_chips.dart';
 import '../widgets/error_text.dart';
 import '../widgets/fx_panel.dart';
 import '../widgets/gain_slider.dart';
@@ -45,6 +46,7 @@ class _ReviewPageState extends State<ReviewPage> with WidgetsBindingObserver {
   late final TakeStore _store = widget.store ?? TakeStore();
   late TakeInfo _info = widget.take.info;
   Timer? _ticker;
+  final _scroll = ScrollController();
   bool _loading = true;
   String? _error;
   String? _errorDetails;
@@ -316,6 +318,17 @@ class _ReviewPageState extends State<ReviewPage> with WidgetsBindingObserver {
       return;
     }
     setState(() => _notice = null);
+    // Kết quả (Lưu vào Ảnh / Chia sẻ) hoặc lỗi nằm cuối trang: cuộn tới cho thấy ngay.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      unawaited(
+        _scroll.animateTo(
+          _scroll.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeOut,
+        ),
+      );
+    });
   }
 
   /// Video camera trước (B6): ghép hình đã quay với file M4A theo mốc đồng hồ máy.
@@ -485,6 +498,7 @@ class _ReviewPageState extends State<ReviewPage> with WidgetsBindingObserver {
     // Gỡ bản thu (micro trở lại chuỗi giọng ở các màn khác) — trừ khi màn khác đã nạp bài sau đó
     // (Màn hát nạp lại bài ngay lúc bấm quay về, trước khi màn này đóng hẳn).
     if (e != null && _service.loads == _loadId) e.unloadBeat();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -502,6 +516,60 @@ class _ReviewPageState extends State<ReviewPage> with WidgetsBindingObserver {
         ],
       ),
       body: _buildBody(context),
+      bottomNavigationBar: _exportBar(context),
+    );
+  }
+
+  /// Nút xuất chính luôn ở đáy màn (không phải cuộn qua các nút chỉnh mới thấy): video camera nếu
+  /// bản thu có quay, không thì video sóng nhạc. Đang xuất: việc đang làm + tiến độ + Huỷ.
+  Widget _exportBar(BuildContext context) {
+    final camera = _take.videoPath != null;
+    final label = _busyLabel;
+    return Material(
+      color: Theme.of(context).colorScheme.surfaceContainer,
+      elevation: 3, // như thanh đáy của Màn hát
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          child: label != null
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: Text(label)),
+                        TextButton(
+                          onPressed: _cancelExport,
+                          child: const Text('Huỷ'),
+                        ),
+                      ],
+                    ),
+                    LinearProgressIndicator(value: _progress),
+                  ],
+                )
+              : FilledButton.icon(
+                  key: const ValueKey('review-export-main'),
+                  onPressed: _loading
+                      ? null
+                      : () => _export(
+                          camera
+                              ? ExportKind.cameraVideo
+                              : ExportKind.waveformVideo,
+                        ),
+                  icon: Icon(camera ? Icons.videocam : Icons.movie),
+                  label: Text(
+                    camera
+                        ? 'Xuất video camera (9:16)'
+                        : 'Xuất video sóng nhạc (9:16)',
+                  ),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(56),
+                  ),
+                ),
+        ),
+      ),
     );
   }
 
@@ -519,266 +587,238 @@ class _ReviewPageState extends State<ReviewPage> with WidgetsBindingObserver {
         _trimDrag ?? RangeValues(ms(_info.trimStartFrame), ms(trimEnd));
     final busy = _busyLabel != null;
 
-    return ListView(
+    return SingleChildScrollView(
+      controller: _scroll,
       padding: const EdgeInsets.all(16),
-      children: [
-        Text(
-          songTitle(_info.songName),
-          style: theme.textTheme.titleLarge,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-        Text(
-          '${formatTakeDate(_info.createdAt)} · ${formatDuration(total)} · '
-          '${routeLabel(_info.route)}',
-          style: theme.textTheme.bodySmall,
-        ),
-        if (_info.droppedFrames > 0)
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
           Text(
-            'Bản thu có chỗ bị hụt (máy bận). Có thể nghe thấy tiếng ngắt.',
-            style: TextStyle(color: theme.colorScheme.error),
+            songTitle(_info.songName),
+            style: theme.textTheme.titleLarge,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
-        if (_leak?.leaked ?? false) const _BeatLeakWarning(),
-        if (_error != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: ErrorText(_error!, details: _errorDetails),
+          Text(
+            '${formatTakeDate(_info.createdAt)} · ${formatDuration(total)} · '
+            '${routeLabel(_info.route)}',
+            style: theme.textTheme.bodySmall,
           ),
-        const SizedBox(height: 8),
-        // ---- Phát ----
-        Slider(
-          value: (_drag ?? pos.inMilliseconds.toDouble()).clamp(0, totalMs),
-          max: totalMs > 0 ? totalMs : 1,
-          onChanged: _loading ? null : (v) => setState(() => _drag = v),
-          onChangeEnd: (v) {
-            e?.seek(Duration(milliseconds: v.round()));
-            _drag = null;
-          },
-        ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [Text(formatDuration(pos)), Text(formatDuration(total))],
-        ),
-        Center(
-          child: _loading
-              ? const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: CircularProgressIndicator(),
-                )
-              : IconButton.filled(
-                  iconSize: 48,
-                  onPressed: e == null || pb == null || !pb.hasTake
-                      ? null
-                      : () => pb.playing ? e.pause() : e.play(),
-                  icon: Icon(
-                    pb?.playing ?? false ? Icons.pause : Icons.play_arrow,
+          if (_info.droppedFrames > 0)
+            Text(
+              'Bản thu có chỗ bị hụt (máy bận). Có thể nghe thấy tiếng ngắt.',
+              style: TextStyle(color: theme.colorScheme.error),
+            ),
+          if (_leak?.leaked ?? false) const _BeatLeakWarning(),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: ErrorText(_error!, details: _errorDetails),
+            ),
+          const SizedBox(height: 8),
+          // ---- Phát ----
+          Slider(
+            value: (_drag ?? pos.inMilliseconds.toDouble()).clamp(0, totalMs),
+            max: totalMs > 0 ? totalMs : 1,
+            onChanged: _loading ? null : (v) => setState(() => _drag = v),
+            onChangeEnd: (v) {
+              e?.seek(Duration(milliseconds: v.round()));
+              _drag = null;
+            },
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [Text(formatDuration(pos)), Text(formatDuration(total))],
+          ),
+          Center(
+            child: _loading
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: CircularProgressIndicator(),
+                  )
+                : IconButton.filled(
+                    iconSize: 48,
+                    onPressed: e == null || pb == null || !pb.hasTake
+                        ? null
+                        : () => pb.playing ? e.pause() : e.play(),
+                    icon: Icon(
+                      pb?.playing ?? false ? Icons.pause : Icons.play_arrow,
+                    ),
                   ),
+          ),
+          const Divider(height: 32),
+          // ---- Trộn ----
+          Text('Giọng và nhạc', style: theme.textTheme.titleLarge),
+          GainSlider(
+            label: 'Âm lượng giọng',
+            value: _info.voiceGain,
+            max: 2,
+            onChanged: (v) {
+              e?.monitorGain = v;
+              TestLog.event('review.voice_gain', {'value': v}, true);
+              _update(_info.copyWith(voiceGain: v));
+            },
+          ),
+          GainSlider(
+            label: 'Âm lượng nhạc',
+            value: _info.beatGain,
+            max: 2,
+            onChanged: (v) {
+              e?.beatGain = v;
+              TestLog.event('review.beat_gain', {'value': v}, true);
+              _update(_info.copyWith(beatGain: v));
+            },
+          ),
+          const SizedBox(height: 8),
+          Text('Giọng sớm / muộn', style: theme.textTheme.titleMedium),
+          Row(
+            children: [
+              IconButton.outlined(
+                tooltip: 'Giọng muộn hơn',
+                onPressed: _loading ? null : () => _nudge(-_nudgeStepMs),
+                icon: const Icon(Icons.remove),
+              ),
+              Expanded(
+                child: Text(
+                  nudgeLabel(_info.nudgeMs),
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleMedium,
                 ),
-        ),
-        const Divider(height: 32),
-        // ---- Trộn ----
-        Text('Giọng và nhạc', style: theme.textTheme.titleLarge),
-        GainSlider(
-          label: 'Âm lượng giọng',
-          value: _info.voiceGain,
-          max: 2,
-          onChanged: (v) {
-            e?.monitorGain = v;
-            TestLog.event('review.voice_gain', {'value': v}, true);
-            _update(_info.copyWith(voiceGain: v));
-          },
-        ),
-        GainSlider(
-          label: 'Âm lượng nhạc',
-          value: _info.beatGain,
-          max: 2,
-          onChanged: (v) {
-            e?.beatGain = v;
-            TestLog.event('review.beat_gain', {'value': v}, true);
-            _update(_info.copyWith(beatGain: v));
-          },
-        ),
-        const SizedBox(height: 8),
-        Text('Giọng sớm / muộn', style: theme.textTheme.titleMedium),
-        Row(
-          children: [
-            IconButton.outlined(
-              tooltip: 'Giọng muộn hơn',
-              onPressed: _loading ? null : () => _nudge(-_nudgeStepMs),
-              icon: const Icon(Icons.remove),
+              ),
+              IconButton.outlined(
+                tooltip: 'Giọng sớm hơn',
+                onPressed: _loading ? null : () => _nudge(_nudgeStepMs),
+                icon: const Icon(Icons.add),
+              ),
+            ],
+          ),
+          Text(
+            'Nghe giọng chậm hơn nhạc thì bấm +, nhanh hơn thì bấm −. App đã tự căn khớp '
+            '(${(_info.roundTripMs + ms(_info.outputLookaheadFrames)).toStringAsFixed(1).replaceAll('.', ',')} ms).',
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
+          Text('Cắt đầu / đuôi', style: theme.textTheme.titleMedium),
+          RangeSlider(
+            values: RangeValues(
+              trim.start.clamp(0, totalMs),
+              trim.end.clamp(0, totalMs),
             ),
-            Expanded(
+            max: totalMs > 0 ? totalMs : 1,
+            onChanged: (v) => setState(() => _trimDrag = v),
+            onChangeEnd: (v) {
+              _trimDrag = null;
+              final start = (v.start * rate / 1000).round();
+              var end = (v.end * rate / 1000).round();
+              if (end >= _info.frames) end = 0;
+              TestLog.event('review.trim');
+              _update(_info.copyWith(trimStartFrame: start, trimEndFrame: end));
+            },
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                formatDuration(Duration(milliseconds: trim.start.round())),
+                style: theme.textTheme.bodySmall,
+              ),
+              Text(
+                'Dài ${formatDuration(Duration(milliseconds: (trim.end - trim.start).round()))}',
+                style: theme.textTheme.bodySmall,
+              ),
+              Text(
+                formatDuration(Duration(milliseconds: trim.end.round())),
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+          ),
+          const Divider(height: 32),
+          // ---- Chuỗi giọng (cùng tên, cùng kiểu với Màn hát) ----
+          CorrectionChips(
+            value: _service.correction,
+            onChanged: (p) {
+              _service.setCorrection(p);
+              _syncVoice();
+            },
+          ),
+          const SizedBox(height: 16),
+          FxPanel(
+            simple: true,
+            genre: _service.genre,
+            preset: _service.presetOf(_service.genre),
+            source: null,
+            bpm: _info.tempoBpm,
+            mix: _service.fxMix,
+            gateOn: _service.gateOn,
+            monitorOn: true,
+            onGenre: (g) {
+              _service.setGenre(g);
+              _syncVoice();
+            },
+            onMix: (v) {
+              _service.setFxMix(v);
+              _syncVoice();
+            },
+            onGate: (v) {
+              _service.setGate(v);
+              _syncVoice();
+            },
+          ),
+          const Divider(height: 32),
+          // ---- Xuất (nút chính ở đáy màn, đây là các cách xuất khác + kết quả) ----
+          Text('Xuất', style: theme.textTheme.titleLarge),
+          if (_notice case final n?)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
               child: Text(
-                nudgeLabel(_info.nudgeMs),
-                textAlign: TextAlign.center,
-                style: theme.textTheme.titleMedium,
+                n,
+                key: const ValueKey('review-export-notice'),
+                style: TextStyle(color: theme.colorScheme.primary),
               ),
             ),
-            IconButton.outlined(
-              tooltip: 'Giọng sớm hơn',
-              onPressed: _loading ? null : () => _nudge(_nudgeStepMs),
-              icon: const Icon(Icons.add),
-            ),
-          ],
-        ),
-        Text(
-          'Nghe giọng chậm hơn nhạc thì bấm +. Đã bù độ trễ '
-          '${(_info.roundTripMs + ms(_info.outputLookaheadFrames)).toStringAsFixed(1).replaceAll('.', ',')} ms '
-          '(${latencySourceLabel(_info.latencySource)}).',
-          style: theme.textTheme.bodySmall,
-        ),
-        const SizedBox(height: 8),
-        Text('Cắt đầu / đuôi', style: theme.textTheme.titleMedium),
-        RangeSlider(
-          values: RangeValues(
-            trim.start.clamp(0, totalMs),
-            trim.end.clamp(0, totalMs),
-          ),
-          max: totalMs > 0 ? totalMs : 1,
-          onChanged: (v) => setState(() => _trimDrag = v),
-          onChangeEnd: (v) {
-            _trimDrag = null;
-            final start = (v.start * rate / 1000).round();
-            var end = (v.end * rate / 1000).round();
-            if (end >= _info.frames) end = 0;
-            TestLog.event('review.trim');
-            _update(_info.copyWith(trimStartFrame: start, trimEndFrame: end));
-          },
-        ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              formatDuration(Duration(milliseconds: trim.start.round())),
-              style: theme.textTheme.bodySmall,
-            ),
-            Text(
-              'Dài ${formatDuration(Duration(milliseconds: (trim.end - trim.start).round()))}',
-              style: theme.textTheme.bodySmall,
-            ),
-            Text(
-              formatDuration(Duration(milliseconds: trim.end.round())),
-              style: theme.textTheme.bodySmall,
-            ),
-          ],
-        ),
-        const Divider(height: 32),
-        // ---- Chuỗi giọng ----
-        FxPanel(
-          genre: _service.genre,
-          preset: _service.presetOf(_service.genre),
-          source: null,
-          bpm: _info.tempoBpm,
-          mix: _service.fxMix,
-          gateOn: _service.gateOn,
-          monitorOn: true,
-          onGenre: (g) {
-            _service.setGenre(g);
-            _syncVoice();
-          },
-          onMix: (v) {
-            _service.setFxMix(v);
-            _syncVoice();
-          },
-          onGate: (v) {
-            _service.setGate(v);
-            _syncVoice();
-          },
-        ),
-        const SizedBox(height: 12),
-        Text('Tự chỉnh giọng', style: theme.textTheme.titleMedium),
-        const SizedBox(height: 4),
-        SegmentedButton<int>(
-          segments: [
-            const ButtonSegment(value: -1, label: Text('Tắt')),
-            for (final p in CorrectionPreset.values)
-              ButtonSegment(
-                value: p.index,
-                label: Text(correctionPresetLabel(p)),
+          const SizedBox(height: 8),
+          if (_take.videoPath != null) ...[
+            OutlinedButton.icon(
+              onPressed: busy || _loading
+                  ? null
+                  : () => _export(ExportKind.waveformVideo),
+              icon: const Icon(Icons.movie),
+              label: const Text('Xuất video sóng nhạc (9:16)'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
               ),
-          ],
-          selected: {_service.correction?.index ?? -1},
-          showSelectedIcon: false,
-          onSelectionChanged: (sel) {
-            final v = sel.single;
-            _service.setCorrection(v < 0 ? null : CorrectionPreset.values[v]);
-            _syncVoice();
-          },
-        ),
-        const Divider(height: 32),
-        // ---- Xuất ----
-        Text('Xuất', style: theme.textTheme.titleLarge),
-        if (_notice case final n?)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              n,
-              key: const ValueKey('review-export-notice'),
-              style: TextStyle(color: theme.colorScheme.primary),
             ),
-          ),
-        const SizedBox(height: 8),
-        if (_take.videoPath != null) ...[
-          FilledButton.icon(
+            const SizedBox(height: 8),
+          ],
+          OutlinedButton.icon(
             onPressed: busy || _loading
                 ? null
-                : () => _export(ExportKind.cameraVideo),
-            icon: const Icon(Icons.videocam),
-            label: const Text('Xuất video camera (9:16)'),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(56),
+                : () => _export(ExportKind.audio),
+            icon: const Icon(Icons.audio_file),
+            label: const Text('Xuất âm thanh (M4A)'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(48),
             ),
           ),
-          const SizedBox(height: 8),
-        ],
-        FilledButton.icon(
-          onPressed: busy || _loading
-              ? null
-              : () => _export(ExportKind.waveformVideo),
-          icon: const Icon(Icons.movie),
-          label: const Text('Xuất video sóng nhạc (9:16)'),
-          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
-        ),
-        const SizedBox(height: 8),
-        OutlinedButton.icon(
-          onPressed: busy || _loading ? null : () => _export(ExportKind.audio),
-          icon: const Icon(Icons.audio_file),
-          label: const Text('Xuất âm thanh (M4A)'),
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size.fromHeight(48),
-          ),
-        ),
-        if (busy) ...[
-          const SizedBox(height: 8),
-          Text(_busyLabel!),
-          const SizedBox(height: 4),
-          LinearProgressIndicator(value: _progress),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: _cancelExport,
-              child: const Text('Huỷ'),
+          if (_exportError != null)
+            ErrorText(_exportError!, details: _exportDetails),
+          if (_videoPath case final v? when !busy)
+            _ExportResult(
+              title: 'Video 9:16',
+              path: v,
+              status: _audioStatus,
+              onShare: () => _share(v),
+              onSave: () => _saveVideo(v),
             ),
-          ),
+          if (_audioPath case final a? when !busy)
+            _ExportResult(
+              title: 'Âm thanh M4A',
+              path: a,
+              status: _audioStatus,
+              onShare: () => _share(a),
+            ),
         ],
-        if (_exportError != null)
-          ErrorText(_exportError!, details: _exportDetails),
-        if (_videoPath case final v? when !busy)
-          _ExportResult(
-            title: 'Video 9:16',
-            path: v,
-            status: _audioStatus,
-            onShare: () => _share(v),
-            onSave: () => _saveVideo(v),
-          ),
-        if (_audioPath case final a? when !busy)
-          _ExportResult(
-            title: 'Âm thanh M4A',
-            path: a,
-            status: _audioStatus,
-            onShare: () => _share(a),
-          ),
-      ],
+      ),
     );
   }
 }
@@ -845,7 +885,6 @@ class _ExportResult extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final size = File(path).existsSync() ? File(path).lengthSync() : 0;
-    final lufs = status?.outputLufs;
     return Card(
       margin: const EdgeInsets.only(top: 8),
       child: Padding(
@@ -858,8 +897,6 @@ class _ExportResult extends StatelessWidget {
               [
                 if (status != null) formatDuration(status!.duration),
                 formatBytes(size),
-                if (lufs != null)
-                  '${lufs.toStringAsFixed(1).replaceAll('.', ',')} LUFS',
               ].join(' · '),
             ),
             const SizedBox(height: 8),

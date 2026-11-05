@@ -234,6 +234,17 @@
       - Công cụ đọc được giờ UTC "…Z".
       - (CI) Tách giọng: máy chủ ngắt giữa lúc gửi mà Linux ném `OSError` thô (không phải
         `SocketException`) thì giờ cũng coi là mất kết nối, tiếp tục được.
+    - Sửa tiếp (2026-11-05, các điểm 7–10 của bảng "Vấn đề"):
+      - Màn hát đang nạp bài hiện "Đang mở bài…" và vị trí 0:00 thay vì tone, thời lượng của bản
+        thu vừa nghe.
+      - Nghe lại:
+        - nút xuất video chính cố định ở đáy màn (video camera nếu có quay), các cách xuất khác ở
+          mục Xuất; xuất xong tự cuộn tới kết quả hoặc lỗi;
+        - "Chỉnh giọng" và "Thể loại" cùng tên, cùng kiểu chip (`CorrectionChips` dùng chung),
+          cùng thứ tự với Màn hát;
+        - thể loại tả bằng lời thường (`genreDescription`), bỏ "nén 3:1", LUFS, "hệ điều hành
+          báo" — các thông số vẫn ở Phòng thử.
+      - Màn hát bỏ "nhạc −1" (trùng với "Tone −1").
     - Các điểm cần người thử xác nhận: bảng "Vấn đề" trong `docs/m8-usability.md`.
 - [ ] B8 — Thử với 5 người dùng → sửa → báo cáo M8
 

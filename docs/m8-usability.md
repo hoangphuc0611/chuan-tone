@@ -190,10 +190,10 @@ SUS trung bình: ___ · Mở app → câu hát đầu tiên (trung vị): ___ ·
 | 4 | tự động | Phân tích bài | Đang dò nhịp thì bước "Dò tone" (đã xong) hiện vòng tròn rỗng như chưa làm | nhẹ | B7 (đã sửa) |
 | 5 | tự động | Nghe lại | "Đã bù độ trễ 1.0 ms": dấu chấm thập phân | nhẹ | B7 (đã sửa) |
 | 6 | tự động | Cài đặt | Hiện "ToneCore v0.8.0" dù engine đã là 0.9 (số phiên bản trong CMake chưa nâng ở B4) | nhẹ | B7 (đã sửa; phân tích bài cũ chạy lại một lần) |
-| 7 | tự động | Màn hát | Mở bài dài (vd quay về từ Nghe lại): trong 1–3 giây nạp bài, màn vẫn hiện tone và thời lượng của bản thu vừa nghe | nhẹ | xem ở vòng thử |
-| 8 | tự động | Nghe lại | Nút Xuất ở cuối trang, sau khoảng 1,5 màn hình nút chỉnh; xuất xong, thẻ kết quả nằm dưới mép màn hình — người thử có thể không thấy (nhiệm vụ 5) | ? | xem ở vòng thử |
-| 9 | tự động | Nghe lại, Màn hát | Chữ kỹ thuật: "nén 3:1", "−14,0 LUFS", "(hệ điều hành báo)", "theo bài · nhạc −1" | nhẹ | xem ở vòng thử |
-| 10 | tự động | Màn hát / Nghe lại | Cùng một thứ mà hai màn gọi khác nhau: "Chỉnh giọng" / "Tự chỉnh giọng", "Thể loại" / "Hiệu ứng giọng"; một màn dùng chip, màn kia dùng nút phân đoạn (SUS câu 6) | nhẹ | xem ở vòng thử |
+| 7 | tự động | Màn hát | Mở bài dài (vd quay về từ Nghe lại): trong 1–3 giây nạp bài, màn vẫn hiện tone và thời lượng của bản thu vừa nghe | nhẹ | B7 (đã sửa: đang nạp thì hiện "Đang mở bài…", vị trí 0:00) |
+| 8 | tự động | Nghe lại | Nút Xuất ở cuối trang, sau khoảng 1,5 màn hình nút chỉnh; xuất xong, thẻ kết quả nằm dưới mép màn hình — người thử có thể không thấy (nhiệm vụ 5) | ? | B7 (đã sửa: nút xuất video chính cố định ở đáy màn; xuất xong tự cuộn tới kết quả / lỗi) — người thử xác nhận |
+| 9 | tự động | Nghe lại, Màn hát | Chữ kỹ thuật: "nén 3:1", "−14,0 LUFS", "(hệ điều hành báo)", "theo bài · nhạc −1" | nhẹ | B7 (đã sửa: tả thể loại bằng lời thường, bỏ LUFS và nguồn số đo độ trễ, bỏ "nhạc −1" trùng với Tone −1; thông số vẫn ở Phòng thử) |
+| 10 | tự động | Màn hát / Nghe lại | Cùng một thứ mà hai màn gọi khác nhau: "Chỉnh giọng" / "Tự chỉnh giọng", "Thể loại" / "Hiệu ứng giọng"; một màn dùng chip, màn kia dùng nút phân đoạn (SUS câu 6) | nhẹ | B7 (đã sửa: Nghe lại dùng "Chỉnh giọng" + "Thể loại", cùng kiểu chip, cùng thứ tự với Màn hát) |
 | 11 | tự động | engine | Engine báo "nạp bài xong" trước khi luồng âm thanh nhận bài: đọc thời lượng hay đổi tone ngay sau đó có thể hụt. Trên máy gần như không xảy ra vì app đọc CSDL xen giữa. | nhẹ | M9 |
 | 12 | tự động | Màn hát | "Lạc trôi": đoạn dạo 18 giây bị dò thành La# trưởng (độ tin cậy 0,47) nên Màn hát hiện tone sai đầu bài rồi mới đổi sang La thứ. Có thể chỉ hiện đoạn chuyển tone đủ tin cậy. | nhẹ | xem ở vòng thử / M9 |
 | 13 | tự động | Màn hát (bảng Tách giọng) | Nhãn "Giữ giọng ca sĩ gốc" xuống dòng thành 2 dòng ở cột nhãn hẹp | nhẹ | — |
