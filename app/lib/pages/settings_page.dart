@@ -13,6 +13,7 @@ import '../engine/labels.dart';
 import '../engine/latency_measure.dart';
 import '../engine/song_jobs.dart';
 import '../engine_info.dart';
+import '../widgets/app_ui.dart';
 import '../widgets/separation_panel.dart';
 import '../widgets/soundcard_prompt.dart';
 import 'latency_page.dart';
@@ -199,8 +200,8 @@ class _SettingsPageState extends State<SettingsPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Cài đặt')),
       body: ListView(
-        padding: const EdgeInsets.only(bottom: 24),
-        children: [
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        children: _grouped([
           const _Header('Âm thanh'),
           ListTile(
             leading: const Icon(Icons.speed),
@@ -249,11 +250,10 @@ class _SettingsPageState extends State<SettingsPage> {
                     (SoundcardFx.soundcard, 'Vang của soundcard'),
                     (SoundcardFx.app, 'Hiệu ứng của app'),
                   ])
-                    ChoiceChip(
-                      label: Text(label),
+                    AppChoiceChip(
+                      label: label,
                       selected: _soundcardFx == fx,
-                      showCheckmark: false,
-                      onSelected: (_) => _setSoundcardFx(fx),
+                      onSelected: () => _setSoundcardFx(fx),
                     ),
                 ],
               ),
@@ -297,11 +297,10 @@ class _SettingsPageState extends State<SettingsPage> {
                     (192000, 'Cao'),
                     (256000, 'Rất cao'),
                   ])
-                    ChoiceChip(
-                      label: Text(label),
+                    AppChoiceChip(
+                      label: label,
                       selected: export.aacBitrate == rate,
-                      showCheckmark: false,
-                      onSelected: (_) =>
+                      onSelected: () =>
                           _updateExport((p) => p.copyWith(aacBitrate: rate)),
                     ),
                 ],
@@ -482,9 +481,39 @@ class _SettingsPageState extends State<SettingsPage> {
               padding: const EdgeInsets.only(top: 8),
               child: EngineStatusCard(info: widget.engineInfo),
             ),
-        ],
+        ]),
       ),
     );
+  }
+
+  /// Gộp các dòng dưới mỗi tiêu đề thành một thẻ.
+  List<Widget> _grouped(List<Widget> all) {
+    final out = <Widget>[];
+    var part = <Widget>[];
+    void flush() {
+      if (part.isEmpty) return;
+      out.add(
+        Card(
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: part,
+          ),
+        ),
+      );
+      part = [];
+    }
+
+    for (final w in all) {
+      if (w is _Header) {
+        flush();
+        out.add(w);
+      } else {
+        part.add(w);
+      }
+    }
+    flush();
+    return out;
   }
 }
 
@@ -497,7 +526,7 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
+      padding: const EdgeInsets.fromLTRB(4, 20, 4, 8),
       child: Text(
         text,
         style: theme.textTheme.titleSmall?.copyWith(
@@ -690,7 +719,9 @@ class EngineStatusCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ok = info.ok;
-    final color = ok ? Colors.green : Theme.of(context).colorScheme.error;
+    final color = ok
+        ? Theme.of(context).colorScheme.tertiary
+        : Theme.of(context).colorScheme.error;
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Padding(

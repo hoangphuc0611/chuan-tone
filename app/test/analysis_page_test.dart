@@ -135,9 +135,7 @@ void main() {
     await tester.tap(find.text('mở'));
     await tester.pumpAndSettle();
     expect(find.text('La thứ (Am)'), findsOneWidget);
-    await tester.tap(find.byType(DropdownButton<int>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Rê (D)').last);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Rê'));
     await tester.pumpAndSettle();
     expect(find.text('Rê thứ (Dm)'), findsOneWidget);
     await tester.tap(find.text('Lưu'));

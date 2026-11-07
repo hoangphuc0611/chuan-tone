@@ -142,3 +142,13 @@ Chưa làm: mẫu video xuất 9:16 (vẽ bằng Swift / AVFoundation), để sa
     Zalo); Bài hát của tôi; Bản thu của tôi (sửa câu cũ còn nhắc Phòng thử).
 - [x] **U3** (2026-11-07): Hướng dẫn 6 bước (ô minh hoạ, thẻ trạng thái, dấu chấm bước); Phân tích bài
   (các bước dạng thẻ, thẻ kết quả đỏ, nút "Hát" cố định ở đáy).
+- [x] **U4–U7** (2026-11-07):
+  - Màn hát luôn nền tối kiểu sân khấu (cả bảng dưới, hộp thoại mở từ màn này); thẻ mờ cho lời và
+    các nút chỉnh; camera lên đầu màn; đếm ngược số to giữa màn; thanh đáy bo góc; nút Thu đỏ đặc.
+  - Sửa tone thành bảng dưới với lưới 12 nốt (Màn hát, Phân tích bài).
+  - Nghe lại: các khối dạng thẻ; bảng "Video đã sẵn sàng" sau khi xuất video (Lưu vào Ảnh, Chia sẻ,
+    Xong). Chia sẻ dùng bảng chia sẻ của máy, không có nút riêng từng app (quyết định M7).
+  - Cài đặt nhóm thành thẻ; Micro, Đo độ trễ theo màu mới.
+  - Lượt chạy tự động đi qua cả bảng Thêm bài, Âm lượng, Sửa tone, Lời, Micro, Đo độ trễ; hai cỡ máy.
+  - Chưa làm: đồng hồ kim ở Đo độ trễ, sóng âm ở Nghe lại (cần tính dữ liệu sóng), mẫu video 9:16.
+

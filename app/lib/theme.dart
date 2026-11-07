@@ -180,7 +180,14 @@ ThemeData appTheme(Brightness brightness) {
       backgroundColor: cs.surfaceContainerLowest,
       selectedColor: cs.primary,
       showCheckmark: false,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+      labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+    ),
+    segmentedButtonTheme: SegmentedButtonThemeData(
+      style: SegmentedButton.styleFrom(
+        selectedBackgroundColor: cs.primary,
+        selectedForegroundColor: cs.onPrimary,
+      ),
     ),
     sliderTheme: SliderThemeData(
       trackHeight: 6,

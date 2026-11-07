@@ -23,8 +23,8 @@ class PitchMeter extends StatelessWidget {
     final color = !active
         ? theme.colorScheme.outline
         : inTune
-        ? Colors.green.shade600
-        : Colors.orange.shade700;
+        ? theme.colorScheme.tertiary
+        : theme.colorScheme.secondary;
 
     final String hint;
     if (!active) {
@@ -55,6 +55,8 @@ class PitchMeter extends StatelessWidget {
 
     if (compact) {
       return Card(
+        color: const Color(0x14FFFFFF),
+        elevation: 0,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
           child: Row(
@@ -163,7 +165,9 @@ class _CentsBar extends StatelessWidget {
                 width: w * 0.2,
                 top: 11,
                 height: 6,
-                child: ColoredBox(color: Colors.green.withValues(alpha: 0.35)),
+                child: ColoredBox(
+                  color: theme.colorScheme.tertiary.withValues(alpha: 0.35),
+                ),
               ),
               Positioned(
                 left: w / 2 - 1,

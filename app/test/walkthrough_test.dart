@@ -453,6 +453,12 @@ void main() {
           await tester.pump();
         }
 
+        /// Đóng bảng dưới (bấm ra ngoài).
+        Future<void> closeSheet() async {
+          await tester.tapAt(const Offset(20, 60));
+          await idle(const Duration(milliseconds: 600));
+        }
+
         /// Về tab Trang chủ: đóng các màn đè lên khung tab (bảng dưới thì bấm ra ngoài).
         Future<void> toHome() async {
           while (find.byType(NavigationBar).hitTestable().evaluate().isEmpty) {
@@ -531,6 +537,10 @@ void main() {
         await tapText('Về Trang chủ');
         await wait(() => shows('Thêm bài hát'));
         await shot('trang-chu-trong');
+        await tapText('Thêm bài hát');
+        await wait(() => shows('Chọn từ Tệp'));
+        await shot('bang-them-bai');
+        await closeSheet();
 
         // ---- Nhiệm vụ 2: bài gửi qua Zalo → "Mở bằng ChuẩnTone" → hát có chỉnh giọng ----
         final inbox = Directory('${dir.path}/zalo')..createSync();
@@ -651,7 +661,9 @@ void main() {
             '${secs(elapsed(exportStart))}',
           );
           await shot('xuat-video-xong');
-          await tapText('Lưu vào Ảnh');
+          // Bảng "Video đã sẵn sàng" (kèm thẻ kết quả ở cuối trang phía sau).
+          expect(shows('Video đã sẵn sàng'), isTrue);
+          await tapOn(find.text('Lưu vào Ảnh').hitTestable());
           await wait(() => phone.saved.isNotEmpty);
           await shot('luu-anh');
           final m4aStart = DateTime.now();
@@ -675,6 +687,23 @@ void main() {
         await idle(const Duration(seconds: 1));
         await songLoaded();
         await shot('man-hat-sau-nghe-lai');
+        await tapTip('Âm lượng');
+        await wait(() => shows('Nghe lại giọng'));
+        await shot('bang-am-luong');
+        await closeSheet();
+        await tapTip('Thêm');
+        await idle(const Duration(milliseconds: 500));
+        await tapOn(find.widgetWithText(ListTile, 'Sửa tone của bài'));
+        await wait(() => shows('Trưởng'));
+        await shot('bang-sua-tone');
+        await tapText('Huỷ');
+        await idle(const Duration(milliseconds: 600));
+        await tapTip('Thêm');
+        await idle(const Duration(milliseconds: 500));
+        await tapOn(find.widgetWithText(ListTile, 'Lời bài hát'));
+        await wait(() => shows('Lời đúng như file'));
+        await shot('bang-loi');
+        await closeSheet();
         expect(
           service.engine!.playback.duration,
           greaterThan(Duration.zero),
@@ -715,6 +744,16 @@ void main() {
           300,
         );
         await shot('cai-dat-nang-cao');
+        await tapText('Micro');
+        await idle(const Duration(seconds: 1));
+        await shot('micro');
+        await back();
+        await idle(const Duration(milliseconds: 800));
+        await tapText('Đo độ trễ');
+        await idle(const Duration(seconds: 1));
+        await shot('do-do-tre');
+        await back();
+        await idle(const Duration(milliseconds: 800));
         await toHome();
 
         // ---- Tách giọng với server thật (K12, chỉ khi có CHUANTONE_SERVER) ----

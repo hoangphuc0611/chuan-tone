@@ -165,7 +165,7 @@ class _LatencyWizardPageState extends State<LatencyWizardPage> {
           key: const ValueKey('wizard-route'),
           textAlign: TextAlign.center,
           style: theme.textTheme.titleMedium?.copyWith(
-            color: Colors.green.shade700,
+            color: Theme.of(context).colorScheme.tertiary,
           ),
         ),
         const SizedBox(height: 24),
@@ -205,7 +205,7 @@ class _LatencyWizardPageState extends State<LatencyWizardPage> {
         key: const ValueKey('wizard-route'),
         textAlign: TextAlign.center,
         style: theme.textTheme.titleMedium?.copyWith(
-          color: speaker ? Colors.green.shade700 : theme.colorScheme.error,
+          color: speaker ? theme.colorScheme.tertiary : theme.colorScheme.error,
         ),
       ),
       const SizedBox(height: 24),
@@ -293,8 +293,8 @@ class _LatencyWizardPageState extends State<LatencyWizardPage> {
           )
         : latencyVerdict(r.latencyMs);
     final color = switch (v.level) {
-      LatencyLevel.smooth => Colors.green.shade700,
-      LatencyLevel.slight => Colors.orange.shade800,
+      LatencyLevel.smooth => Theme.of(context).colorScheme.tertiary,
+      LatencyLevel.slight => Theme.of(context).colorScheme.secondary,
       LatencyLevel.high => theme.colorScheme.error,
     };
     return [

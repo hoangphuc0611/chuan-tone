@@ -15,6 +15,8 @@ import '../engine/background.dart';
 import '../engine/beat_leak.dart';
 import '../engine/labels.dart';
 import '../engine/takes.dart';
+import '../theme.dart';
+import '../widgets/app_ui.dart';
 import '../widgets/correction_chips.dart';
 import '../widgets/error_text.dart';
 import '../widgets/fx_panel.dart';
@@ -318,6 +320,10 @@ class _ReviewPageState extends State<ReviewPage> with WidgetsBindingObserver {
       return;
     }
     setState(() => _notice = null);
+    if (_exportError == null && kind != ExportKind.audio) {
+      final v = _videoPath;
+      if (v != null) unawaited(_showVideoReady(v));
+    }
     // Kết quả (Lưu vào Ảnh / Chia sẻ) hoặc lỗi nằm cuối trang: cuộn tới cho thấy ngay.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scroll.hasClients) return;
@@ -424,6 +430,75 @@ class _ReviewPageState extends State<ReviewPage> with WidgetsBindingObserver {
     }
   }
 
+  /// Xuất video xong: hiện ngay việc tiếp theo (lưu, chia sẻ).
+  Future<void> _showVideoReady(String path) async {
+    final file = File(path);
+    final size = file.existsSync() ? file.lengthSync() : 0;
+    final duration = _audioStatus?.duration;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheet) {
+        final theme = Theme.of(sheet);
+        final cs = theme.colorScheme;
+        return SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: IconBadge(
+                    Icons.check_rounded,
+                    size: 64,
+                    background: cs.tertiaryContainer,
+                    foreground: cs.onTertiaryContainer,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Video đã sẵn sàng',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.headlineSmall,
+                ),
+                Text(
+                  [
+                    if (duration != null) formatDuration(duration),
+                    formatBytes(size),
+                  ].join(' · '),
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: () => Navigator.pop(sheet, 'save'),
+                  icon: const Icon(Icons.photo_library),
+                  label: const Text('Lưu vào Ảnh'),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () => Navigator.pop(sheet, 'share'),
+                  icon: const Icon(Icons.ios_share),
+                  label: const Text('Chia sẻ (TikTok, Facebook, Zalo…)'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(sheet),
+                  child: const Text('Xong'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (!mounted) return;
+    if (action == 'save') await _saveVideo(path);
+    if (action == 'share') await _share(path);
+  }
+
   void _cancelExport() {
     _renderer?.cancel();
     if (_videoBusy) unawaited(ChuanToneMedia.cancel());
@@ -527,7 +602,11 @@ class _ReviewPageState extends State<ReviewPage> with WidgetsBindingObserver {
     final label = _busyLabel;
     return Material(
       color: Theme.of(context).colorScheme.surfaceContainer,
-      elevation: 3, // như thanh đáy của Màn hát
+      elevation: 2, // như thanh đáy của Màn hát
+      shadowColor: const Color(0x44000000),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(cardRadius)),
+      ),
       child: SafeArea(
         top: false,
         child: Padding(
@@ -592,7 +671,7 @@ class _ReviewPageState extends State<ReviewPage> with WidgetsBindingObserver {
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+        children: _cards([
           Text(
             songTitle(_info.songName),
             style: theme.textTheme.titleLarge,
@@ -817,9 +896,42 @@ class _ReviewPageState extends State<ReviewPage> with WidgetsBindingObserver {
               status: _audioStatus,
               onShare: () => _share(a),
             ),
-        ],
+        ]),
       ),
     );
+  }
+
+  /// Chia các khối (ngăn bằng [Divider]) thành từng thẻ.
+  List<Widget> _cards(List<Widget> all) {
+    final out = <Widget>[];
+    var part = <Widget>[];
+    void flush() {
+      out.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: part,
+              ),
+            ),
+          ),
+        ),
+      );
+      part = [];
+    }
+
+    for (final w in all) {
+      if (w is Divider) {
+        flush();
+      } else {
+        part.add(w);
+      }
+    }
+    flush();
+    return out;
   }
 }
 

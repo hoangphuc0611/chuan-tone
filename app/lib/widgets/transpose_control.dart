@@ -37,7 +37,11 @@ class TransposeControl extends StatelessWidget {
     final theme = Theme.of(context);
     final pending = value != audible;
     final rendering = value != 0 && progress < 1.0;
-    final buttonStyle = IconButton.styleFrom(minimumSize: const Size(56, 56));
+    final buttonStyle = IconButton.styleFrom(
+      minimumSize: const Size(56, 56),
+      backgroundColor: theme.colorScheme.surfaceContainerHighest,
+      foregroundColor: theme.colorScheme.onSurface,
+    );
     final align = label == null ? TextAlign.center : TextAlign.start;
     final valueText = Text(
       label == null ? 'Tone ${transposeLabel(value)}' : transposeLabel(value),
@@ -55,7 +59,7 @@ class TransposeControl extends StatelessWidget {
           children: [
             if (label != null)
               Expanded(child: Text(label!, style: theme.textTheme.titleMedium)),
-            IconButton.filledTonal(
+            IconButton(
               tooltip: 'Hạ tone',
               style: buttonStyle,
               iconSize: 32,
@@ -73,7 +77,7 @@ class TransposeControl extends StatelessWidget {
                   child: valueText,
                 ),
               ),
-            IconButton.filledTonal(
+            IconButton(
               tooltip: 'Nâng tone',
               style: buttonStyle,
               iconSize: 32,

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:chuantone_media/chuantone_media.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:tonecore_flutter/tonecore_flutter.dart';
 
 import '../data/app_settings.dart';
@@ -32,7 +33,7 @@ import 'review_page.dart';
 /// âm lượng / nghe lại giọng; menu ⋮: lời bài hát, tách giọng, sửa tone. Lần đầu vào: 3 bong bóng
 /// mẹo. Cắm thiết bị USB lần đầu: hỏi chế độ soundcard (B6). Logic ở [SingController] (dùng chung
 /// với Phòng thử).
-class SingPage extends StatefulWidget {
+class SingPage extends StatelessWidget {
   const SingPage({
     super.key,
     required this.song,
@@ -49,12 +50,37 @@ class SingPage extends StatefulWidget {
   final SingController? controller;
 
   @override
-  State<SingPage> createState() => _SingPageState();
+  Widget build(BuildContext context) => Theme(
+    data: _stageTheme,
+    child: _SingScreen(
+      song: song,
+      controller: controller,
+      resumeSeparation: resumeSeparation,
+    ),
+  );
+}
+
+/// Màn hát luôn tối, kiểu sân khấu (kể cả khi máy ở giao diện sáng).
+final _stageTheme = appTheme(Brightness.dark);
+
+class _SingScreen extends StatefulWidget {
+  const _SingScreen({
+    required this.song,
+    required this.controller,
+    required this.resumeSeparation,
+  });
+
+  final SongRef song;
+  final SingController? controller;
+  final bool resumeSeparation;
+
+  @override
+  State<_SingScreen> createState() => _SingPageState();
 }
 
 enum _Menu { lyrics, separate, editKey }
 
-class _SingPageState extends State<SingPage> with WidgetsBindingObserver {
+class _SingPageState extends State<_SingScreen> with WidgetsBindingObserver {
   late final SingController _c = widget.controller ?? SingController();
   final _toneKey = GlobalKey();
   final _correctionKey = GlobalKey();
@@ -296,59 +322,64 @@ class _SingPageState extends State<SingPage> with WidgetsBindingObserver {
       builder: (context, _) {
         final c = _c;
         final ready = !c.starting && c.engine != null;
-        return Scaffold(
-          appBar: AppBar(
-            title: Text(
-              c.title ?? songTitle(widget.song.name),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            actions: [
-              if (ready) ...[
-                IconButton(
-                  tooltip: 'Âm lượng',
-                  icon: const Icon(Icons.volume_up),
-                  onPressed: _showVolume,
-                ),
-                PopupMenuButton<_Menu>(
-                  tooltip: 'Thêm',
-                  enabled: !c.recording,
-                  onSelected: _onMenu,
-                  itemBuilder: (_) => [
-                    PopupMenuItem(
-                      value: _Menu.lyrics,
-                      enabled: c.song != null,
-                      child: const ListTile(
-                        leading: Icon(Icons.lyrics_outlined),
-                        title: Text('Lời bài hát'),
+        return StageBackground(
+          child: Scaffold(
+            backgroundColor: Colors.transparent,
+            appBar: AppBar(
+              backgroundColor: Colors.transparent,
+              systemOverlayStyle: SystemUiOverlayStyle.light,
+              title: Text(
+                c.title ?? songTitle(widget.song.name),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              actions: [
+                if (ready) ...[
+                  IconButton(
+                    tooltip: 'Âm lượng',
+                    icon: const Icon(Icons.volume_up),
+                    onPressed: _showVolume,
+                  ),
+                  PopupMenuButton<_Menu>(
+                    tooltip: 'Thêm',
+                    enabled: !c.recording,
+                    onSelected: _onMenu,
+                    itemBuilder: (_) => [
+                      PopupMenuItem(
+                        value: _Menu.lyrics,
+                        enabled: c.song != null,
+                        child: const ListTile(
+                          leading: Icon(Icons.lyrics_outlined),
+                          title: Text('Lời bài hát'),
+                        ),
                       ),
-                    ),
-                    PopupMenuItem(
-                      value: _Menu.separate,
-                      enabled: c.song != null,
-                      child: const ListTile(
-                        leading: Icon(Icons.record_voice_over),
-                        title: Text('Tách giọng ca sĩ'),
+                      PopupMenuItem(
+                        value: _Menu.separate,
+                        enabled: c.song != null,
+                        child: const ListTile(
+                          leading: Icon(Icons.record_voice_over),
+                          title: Text('Tách giọng ca sĩ'),
+                        ),
                       ),
-                    ),
-                    PopupMenuItem(
-                      value: _Menu.editKey,
-                      enabled: c.song != null,
-                      child: const ListTile(
-                        leading: Icon(Icons.tune),
-                        title: Text('Sửa tone của bài'),
+                      PopupMenuItem(
+                        value: _Menu.editKey,
+                        enabled: c.song != null,
+                        child: const ListTile(
+                          leading: Icon(Icons.tune),
+                          title: Text('Sửa tone của bài'),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                ],
               ],
-            ],
+            ),
+            body: c.starting
+                ? const Center(child: CircularProgressIndicator())
+                : c.engine == null
+                ? _ErrorView(message: c.startError ?? 'Không mở được âm thanh')
+                : _body(context),
           ),
-          body: c.starting
-              ? const Center(child: CircularProgressIndicator())
-              : c.engine == null
-              ? _ErrorView(message: c.startError ?? 'Không mở được âm thanh')
-              : _body(context),
         );
       },
     );
@@ -359,141 +390,170 @@ class _SingPageState extends State<SingPage> with WidgetsBindingObserver {
     final theme = Theme.of(context);
     final pb = c.playback;
     final sep = c.sepProgress;
+    final countdown = c.countdown;
     return Column(
       children: [
         if (c.loading) const LinearProgressIndicator(),
         Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                KeyedSubtree(
-                  key: _toneKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _KeyHeader(c: c),
-                      const SizedBox(height: 8),
-                      TransposeControl(
-                        label: null,
-                        value: pb?.transpose ?? 0,
-                        audible: pb?.audibleTranspose ?? 0,
-                        progress: pb?.transposeProgress ?? 1,
-                        onChanged: c.setTranspose,
-                        enabled: pb != null && pb.hasBeat && !c.recording,
-                      ),
-                      if (c.recording)
-                        Text(
-                          'Đang thu: tone được giữ nguyên.',
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.bodySmall,
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                ValueListenableBuilder(
-                  valueListenable: c.pitch,
-                  builder: (context, pitch, _) =>
-                      PitchMeter(state: pitch, compact: true),
-                ),
-                if (c.lyrics case final lyrics?)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: LyricsView(
-                      lyrics: lyrics,
-                      offsetMs: c.lyricsOffsetMs,
-                      position: c.position,
-                    ),
-                  ),
-                const SizedBox(height: 12),
-                KeyedSubtree(
-                  key: _correctionKey,
-                  child: _CorrectionPicker(c: c),
-                ),
-                const SizedBox(height: 16),
-                if (c.service.usingSoundcardFx)
-                  _SoundcardFx(c: c)
-                else ...[
-                  _GenreChips(c: c),
-                  GainSlider(
-                    label: 'Vang',
-                    value: c.service.fxMix,
-                    max: 2,
-                    onChanged: c.service.genre == Genre.dry ? null : c.setFxMix,
-                  ),
-                ],
-                if (c.hasStems)
-                  GainSlider(
-                    label: 'Giữ giọng ca sĩ gốc',
-                    value: c.service.vocalGain,
-                    onChanged: c.setVocalGain,
-                  ),
-                if (sep == null && c.sepPending != null)
-                  Card(
-                    key: const ValueKey('sing-sep-pending'),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 12, 4, 4),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const Text('Tách giọng ca sĩ chưa xong.'),
-                          Wrap(
-                            alignment: WrapAlignment.end,
-                            children: [
-                              TextButton(
-                                onPressed: c.discardSeparation,
-                                child: const Text('Bỏ'),
-                              ),
-                              TextButton(
-                                onPressed: c.resumeSeparation,
-                                child: const Text('Tiếp tục tách'),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                if (sep != null)
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 12, 4, 4),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(separationStageLabel(sep)),
-                          const SizedBox(height: 6),
-                          LinearProgressIndicator(value: sep.fraction),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: TextButton(
-                              onPressed: c.cancelSeparation,
-                              child: const Text('Huỷ tách giọng'),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (c.cameraOn) ...[
+                      Center(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(cardRadius),
+                          child: const SizedBox(
+                            height: 280,
+                            child: AspectRatio(
+                              aspectRatio: 9 / 16,
+                              child: CameraPreviewView(),
                             ),
                           ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    KeyedSubtree(
+                      key: _toneKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _KeyHeader(c: c),
+                          const SizedBox(height: 8),
+                          TransposeControl(
+                            label: null,
+                            value: pb?.transpose ?? 0,
+                            audible: pb?.audibleTranspose ?? 0,
+                            progress: pb?.transposeProgress ?? 1,
+                            onChanged: c.setTranspose,
+                            enabled: pb != null && pb.hasBeat && !c.recording,
+                          ),
+                          if (c.recording)
+                            Text(
+                              'Đang thu: tone được giữ nguyên.',
+                              textAlign: TextAlign.center,
+                              style: theme.textTheme.bodySmall,
+                            ),
                         ],
                       ),
                     ),
-                  ),
-                if (c.cameraOn) ...[
-                  const SizedBox(height: 8),
-                  Center(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: const SizedBox(
-                        height: 200,
-                        child: AspectRatio(
-                          aspectRatio: 9 / 16,
-                          child: CameraPreviewView(),
+                    const SizedBox(height: 8),
+                    ValueListenableBuilder(
+                      valueListenable: c.pitch,
+                      builder: (context, pitch, _) =>
+                          PitchMeter(state: pitch, compact: true),
+                    ),
+                    if (c.lyrics case final lyrics?)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: _StageCard(
+                          child: LyricsView(
+                            lyrics: lyrics,
+                            offsetMs: c.lyricsOffsetMs,
+                            position: c.position,
+                          ),
                         ),
                       ),
+                    const SizedBox(height: 8),
+                    _StageCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          KeyedSubtree(
+                            key: _correctionKey,
+                            child: _CorrectionPicker(c: c),
+                          ),
+                          const SizedBox(height: 16),
+                          if (c.service.usingSoundcardFx)
+                            _SoundcardFx(c: c)
+                          else ...[
+                            _GenreChips(c: c),
+                            GainSlider(
+                              label: 'Vang',
+                              value: c.service.fxMix,
+                              max: 2,
+                              onChanged: c.service.genre == Genre.dry
+                                  ? null
+                                  : c.setFxMix,
+                            ),
+                          ],
+                          if (c.hasStems)
+                            GainSlider(
+                              label: 'Giữ giọng ca sĩ gốc',
+                              value: c.service.vocalGain,
+                              onChanged: c.setVocalGain,
+                            ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              ],
-            ),
+                    if (sep == null && c.sepPending != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Card(
+                          key: const ValueKey('sing-sep-pending'),
+                          color: theme.colorScheme.secondaryContainer,
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Text(
+                                  'Tách giọng ca sĩ chưa xong.',
+                                  style: theme.textTheme.titleSmall?.copyWith(
+                                    color:
+                                        theme.colorScheme.onSecondaryContainer,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  alignment: WrapAlignment.end,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  spacing: 8,
+                                  children: [
+                                    TextButton(
+                                      onPressed: c.discardSeparation,
+                                      child: const Text('Bỏ'),
+                                    ),
+                                    FilledButton(
+                                      onPressed: c.resumeSeparation,
+                                      child: const Text('Tiếp tục tách'),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (sep != null)
+                      _StageCard(
+                        padding: const EdgeInsets.fromLTRB(12, 12, 4, 4),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(separationStageLabel(sep)),
+                            const SizedBox(height: 6),
+                            LinearProgressIndicator(value: sep.fraction),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton(
+                                onPressed: c.cancelSeparation,
+                                child: const Text('Huỷ tách giọng'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (countdown != null) _CountdownOverlay(count: countdown),
+            ],
           ),
         ),
         _TransportBar(
@@ -750,7 +810,11 @@ class _TransportBar extends StatelessWidget {
     final countdown = c.countdown;
     return Material(
       color: theme.colorScheme.surfaceContainer,
-      elevation: 3,
+      elevation: 2,
+      shadowColor: const Color(0x44000000),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(cardRadius)),
+      ),
       child: SafeArea(
         top: false,
         child: Padding(
@@ -1030,6 +1094,69 @@ class _ErrorView extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(message, textAlign: TextAlign.center),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Thẻ trên nền sân khấu: nền trắng rất mờ, thấy ánh tím phía sau.
+class _StageCard extends StatelessWidget {
+  const _StageCard({
+    required this.child,
+    this.padding = const EdgeInsets.all(14),
+  });
+
+  final Widget child;
+  final EdgeInsets padding;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: padding,
+    decoration: BoxDecoration(
+      color: const Color(0x14FFFFFF),
+      borderRadius: BorderRadius.circular(cardRadius),
+    ),
+    child: child,
+  );
+}
+
+/// Đếm ngược trước khi thu: số to giữa màn.
+class _CountdownOverlay extends StatelessWidget {
+  const _CountdownOverlay({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return IgnorePointer(
+      child: ColoredBox(
+        color: const Color(0xB315111A),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 128,
+              height: 128,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: theme.colorScheme.secondary,
+                  width: 4,
+                ),
+              ),
+              child: Text(
+                '$count',
+                style: theme.textTheme.displayLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text('Chuẩn bị hát…', style: theme.textTheme.headlineSmall),
           ],
         ),
       ),

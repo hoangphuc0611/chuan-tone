@@ -187,61 +187,78 @@ Future<KeyEdit?> showKeyEditor(
       initial.scale == MusicScale.naturalMinor ||
       initial.scale == MusicScale.harmonicMinor ||
       initial.scale == MusicScale.pentatonicMinor;
-  return showDialog<KeyEdit>(
+  return showModalBottomSheet<KeyEdit>(
     context: context,
+    isScrollControlled: true,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setState) {
+        final theme = Theme.of(ctx);
         final key = MusicKey(
           root,
           minor ? MusicScale.naturalMinor : MusicScale.major,
         );
-        return AlertDialog(
-          title: const Text('Sửa tone của bài'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              DropdownButton<int>(
-                value: root,
-                isExpanded: true,
-                items: [
-                  for (var r = 0; r < 12; r++)
-                    DropdownMenuItem(
-                      value: r,
-                      child: Text('${noteNameVi(r)} (${noteLetter(r)})'),
+        return SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Sửa tone của bài', style: theme.textTheme.titleLarge),
+                const SizedBox(height: 8),
+                Text(
+                  keyLabel(key),
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 12),
+                SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(value: false, label: Text('Trưởng')),
+                    ButtonSegment(value: true, label: Text('Thứ')),
+                  ],
+                  selected: {minor},
+                  showSelectedIcon: false,
+                  onSelectionChanged: (v) => setState(() => minor = v.single),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (var r = 0; r < 12; r++)
+                      AppChoiceChip(
+                        label: noteNameVi(r),
+                        selected: r == root,
+                        onSelected: () => setState(() => root = r),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    if (canReset)
+                      TextButton(
+                        onPressed: () =>
+                            Navigator.pop(ctx, const KeyEdit.reset()),
+                        child: const Text('Theo máy dò'),
+                      ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Huỷ'),
                     ),
-                ],
-                onChanged: (r) => setState(() => root = r ?? root),
-              ),
-              const SizedBox(height: 8),
-              SegmentedButton<bool>(
-                segments: const [
-                  ButtonSegment(value: false, label: Text('Trưởng')),
-                  ButtonSegment(value: true, label: Text('Thứ')),
-                ],
-                selected: {minor},
-                showSelectedIcon: false,
-                onSelectionChanged: (v) => setState(() => minor = v.single),
-              ),
-              const SizedBox(height: 12),
-              Text(keyLabel(key), style: Theme.of(ctx).textTheme.titleMedium),
-            ],
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: () => Navigator.pop(ctx, KeyEdit.set(key)),
+                      child: const Text('Lưu'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-          actions: [
-            if (canReset)
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, const KeyEdit.reset()),
-                child: const Text('Theo máy dò'),
-              ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Huỷ'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, KeyEdit.set(key)),
-              child: const Text('Lưu'),
-            ),
-          ],
         );
       },
     ),
