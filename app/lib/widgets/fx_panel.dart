@@ -3,6 +3,7 @@ import 'package:tonecore_flutter/tonecore_flutter.dart';
 
 import '../engine/genre_rules.dart';
 import '../engine/labels.dart';
+import 'app_ui.dart';
 import 'gain_slider.dart';
 
 /// Chip 7 preset (đổi khi đang hát không click), vì sao chip đang chọn, preset gồm những gì, thanh
@@ -55,16 +56,10 @@ class FxPanel extends StatelessWidget {
           runSpacing: 8,
           children: [
             for (final g in Genre.values)
-              ChoiceChip(
-                label: Text(genreLabel(g)),
-                labelStyle: theme.textTheme.titleMedium,
-                labelPadding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
+              AppChoiceChip(
+                label: genreLabel(g),
                 selected: g == genre,
-                showCheckmark: false,
-                onSelected: (_) => onGenre(g),
+                onSelected: () => onGenre(g),
               ),
           ],
         ),

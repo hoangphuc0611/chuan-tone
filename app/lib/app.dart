@@ -19,6 +19,7 @@ import 'pages/sing_page.dart';
 import 'pages/songs_page.dart';
 import 'pages/takes_page.dart';
 import 'theme.dart';
+import 'widgets/app_ui.dart';
 
 /// Báo cho Trang chủ khi quay lại từ màn khác (để cập nhật "Hát tiếp", số bản thu…).
 final homeRouteObserver = RouteObserver<ModalRoute<void>>();
@@ -195,7 +196,7 @@ class _StartGateState extends State<_StartGate> {
           _action = exit;
         }),
       ),
-      false => HomePage(
+      false => MainShell(
         engineInfo: widget.engineInfo,
         library: widget.library,
         initialAction: _action,
@@ -204,10 +205,85 @@ class _StartGateState extends State<_StartGate> {
   }
 }
 
-/// Trang chủ (M8 B3, bố cục ở docs/m8-plan.md mục 1): nút "Thêm bài hát" to nhất, "Hát tiếp" (bài
-/// mới dùng — bấm là vào Màn hát với tone / thể loại / lời như lần trước), "Tất cả bài hát", bài
-/// mẫu, bản thu, Cài đặt. Engine lỗi thì báo ngay đầu trang. Có bài đang tách giọng dở (bị ngắt) thì
-/// nhắc "Tiếp tục" (M8 B7).
+/// Khung 4 tab: Trang chủ / Bài hát / Bản thu / Cài đặt (docs/ui/redesign-plan.md). Màn hát, Nghe lại…
+/// mở đè lên khung nên không còn tab khi hát. Chọn tab là dựng lại màn đó (đọc lại danh sách mới).
+class MainShell extends StatefulWidget {
+  const MainShell({
+    super.key,
+    required this.engineInfo,
+    required this.library,
+    this.initialAction,
+  });
+
+  final EngineInfo engineInfo;
+  final SongLibrary library;
+
+  /// Việc chọn ở bước cuối của hướng dẫn lần đầu (chỉ làm một lần).
+  final OnboardingExit? initialAction;
+
+  @override
+  State<MainShell> createState() => _MainShellState();
+}
+
+class _MainShellState extends State<MainShell> {
+  int _tab = 0;
+  late OnboardingExit? _action = widget.initialAction;
+
+  void _go(int tab) => setState(() => _tab = tab);
+
+  @override
+  Widget build(BuildContext context) {
+    final action = _action;
+    _action = null; // quay lại Trang chủ từ tab khác không làm lại
+    final baseDir = widget.library.baseDir;
+    return Scaffold(
+      body: switch (_tab) {
+        1 => SongsPage(library: widget.library),
+        2 => TakesPage(store: TakeStore(baseDir: baseDir)),
+        3 => SettingsPage(
+          engineInfo: widget.engineInfo,
+          library: widget.library,
+        ),
+        _ => HomePage(
+          engineInfo: widget.engineInfo,
+          library: widget.library,
+          initialAction: action,
+          onSongs: () => _go(1),
+          onTakes: () => _go(2),
+        ),
+      },
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _tab,
+        onDestinationSelected: _go,
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home_rounded),
+            label: 'Trang chủ',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.queue_music_rounded),
+            label: 'Bài hát',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.graphic_eq_rounded),
+            label: 'Bản thu',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings_rounded),
+            label: 'Cài đặt',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Trang chủ (M8 B3, giao diện mới ở docs/ui/redesign-plan.md): thẻ lớn "Thêm bài hát", "Hát tiếp"
+/// (bài mới dùng — bấm là vào Màn hát với tone / thể loại / lời như lần trước), "Tất cả bài hát", bài
+/// mẫu, bản thu. Engine lỗi thì báo ngay đầu trang. Có bài đang tách giọng dở (bị ngắt) thì nhắc
+/// "Tiếp tục" (M8 B7).
 class HomePage extends StatefulWidget {
   const HomePage({
     super.key,
@@ -216,6 +292,8 @@ class HomePage extends StatefulWidget {
     this.takes,
     this.onSing,
     this.initialAction,
+    this.onSongs,
+    this.onTakes,
   });
 
   final EngineInfo engineInfo;
@@ -235,6 +313,10 @@ class HomePage extends StatefulWidget {
     bool resume,
   })?
   onSing;
+
+  /// Chuyển sang tab Bài hát / Bản thu (null = mở màn riêng).
+  final VoidCallback? onSongs;
+  final VoidCallback? onTakes;
 
   /// Số bài ở "Hát tiếp".
   static const recentCount = 3;
@@ -264,7 +346,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         if (action == OnboardingExit.addSong) {
-          unawaited(_addSong());
+          unawaited(_showAddSheet());
         } else {
           unawaited(_openSample(sampleSongs.first));
         }
@@ -339,6 +421,16 @@ class _HomePageState extends State<HomePage> with RouteAware {
     }
   }
 
+  /// Bảng "Thêm bài hát": chọn từ Tệp, hoặc cách gửi từ Zalo (ba bước).
+  Future<void> _showAddSheet() async {
+    final pick = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => const _AddSongSheet(),
+    );
+    if (pick == true && mounted) await _addSong();
+  }
+
   /// Chọn file (app Tệp trên iOS, không cần quyền thư viện nhạc; chọn kèm file lời được) → thư
   /// viện bài → màn Phân tích bài.
   Future<void> _addSong() async {
@@ -375,6 +467,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     final songs = _songs;
     final recent = songs == null
         ? const <LibrarySong>[]
@@ -382,37 +475,34 @@ class _HomePageState extends State<HomePage> with RouteAware {
     return Scaffold(
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: [
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                IconBadge(
+                  Icons.mic_rounded,
+                  size: 44,
+                  background: cs.primary,
+                  foreground: cs.onPrimary,
+                ),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         'ChuẩnTone',
-                        style: theme.textTheme.headlineLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          color: cs.primary,
                         ),
                       ),
                       Text(
                         'Bấm bài là hát',
-                        style: theme.textTheme.titleMedium,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
                       ),
                     ],
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Cài đặt',
-                  iconSize: 28,
-                  icon: const Icon(Icons.settings_outlined),
-                  onPressed: () => _push(
-                    SettingsPage(
-                      engineInfo: widget.engineInfo,
-                      library: widget.library,
-                    ),
                   ),
                 ),
               ],
@@ -422,66 +512,114 @@ class _HomePageState extends State<HomePage> with RouteAware {
               EngineStatusCard(info: widget.engineInfo),
             ],
             const SizedBox(height: 16),
-            _BigButton(
-              icon: Icons.library_add,
-              label: 'Thêm bài hát',
-              subtitle: 'Từ Tệp, Zalo, Safari…',
-              enabled: _ok,
-              onTap: _addSong,
-            ),
+            _AddSongHero(onTap: _ok ? _showAddSheet : null),
             for (final s in _pendingSep)
-              Card(
-                key: ValueKey('home-sep-pending-${s.name}'),
-                margin: const EdgeInsets.only(top: 12),
-                child: ListTile(
-                  leading: const Icon(Icons.record_voice_over),
-                  title: Text('Đang tách giọng dở: ${s.title}'),
-                  subtitle: const Text('Bị ngắt giữa chừng — bấm để tách tiếp'),
-                  trailing: const Icon(Icons.play_arrow),
-                  enabled: _ok,
-                  onTap: () => _sing(s, resume: true),
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Card(
+                  key: ValueKey('home-sep-pending-${s.name}'),
+                  color: cs.secondaryContainer,
+                  clipBehavior: Clip.antiAlias,
+                  child: ListTile(
+                    textColor: cs.onSecondaryContainer,
+                    iconColor: cs.onSecondaryContainer,
+                    leading: const Icon(Icons.hourglass_top_rounded),
+                    title: Text('Đang tách giọng dở: ${s.title}'),
+                    subtitle: const Text(
+                      'Bị ngắt giữa chừng — bấm để tách tiếp',
+                    ),
+                    trailing: const Icon(Icons.play_arrow_rounded),
+                    enabled: _ok,
+                    onTap: () => _sing(s, resume: true),
+                  ),
                 ),
               ),
             if (recent.isNotEmpty) ...[
-              const _SectionTitle('Hát tiếp'),
-              for (final s in recent)
-                _SongRow(
-                  title: s.title,
-                  subtitle: _recentSubtitle(s),
-                  missing: s.missing,
-                  enabled: _ok,
-                  onTap: () => _sing(s),
+              const SectionHeader('Hát tiếp'),
+              Card(
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  children: [
+                    for (final (i, s) in recent.indexed)
+                      _SongRow(
+                        title: s.title,
+                        subtitle: _recentSubtitle(s),
+                        missing: s.missing,
+                        tint: i,
+                        enabled: _ok,
+                        onTap: () => _sing(s),
+                      ),
+                    ListTile(
+                      title: Text(
+                        'Tất cả bài hát (${songs!.length})',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: cs.primary,
+                        ),
+                      ),
+                      trailing: Icon(Icons.chevron_right, color: cs.primary),
+                      enabled: _ok,
+                      onTap:
+                          widget.onSongs ??
+                          () => _push(SongsPage(library: widget.library)),
+                    ),
+                  ],
                 ),
-              ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                title: Text('Tất cả bài hát (${songs!.length})'),
-                trailing: const Icon(Icons.chevron_right),
-                enabled: _ok,
-                onTap: () => _push(SongsPage(library: widget.library)),
+              ),
+            ] else if (songs != null) ...[
+              const SizedBox(height: 16),
+              const EmptyState(
+                icon: Icons.queue_music_rounded,
+                title: 'Chưa có bài nào',
+                body:
+                    'Mở file nhạc trong Zalo hoặc Tệp rồi chọn "Mở bằng ChuẩnTone" — '
+                    'hoặc hát thử bài mẫu bên dưới.',
               ),
             ],
-            const _SectionTitle('Bài mẫu'),
-            for (final s in sampleSongs)
-              _SongRow(
-                title: s.title,
-                subtitle: s.subtitle,
-                icon: Icons.school_outlined,
-                busy: _installing == s.id,
-                enabled: _ok,
-                onTap: () => _openSample(s),
+            const SectionHeader('Bài mẫu'),
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final (i, s) in sampleSongs.indexed) ...[
+                    if (i > 0) const SizedBox(width: 8),
+                    Expanded(
+                      child: _SampleCard(
+                        title: s.title,
+                        subtitle: s.subtitle,
+                        tint: i,
+                        busy: _installing == s.id,
+                        enabled: _ok,
+                        onTap: () => _openSample(s),
+                      ),
+                    ),
+                  ],
+                ],
               ),
+            ),
             const SizedBox(height: 16),
-            FilledButton.tonalIcon(
-              onPressed: _ok ? () => _push(TakesPage(store: _takes)) : null,
-              icon: const Icon(Icons.graphic_eq),
-              label: Text(
-                _takeCount == 0
-                    ? 'Bản thu của tôi'
-                    : 'Bản thu của tôi ($_takeCount)',
-              ),
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(56),
-                textStyle: theme.textTheme.titleMedium,
+            Card(
+              color: cs.surfaceContainer,
+              clipBehavior: Clip.antiAlias,
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 4,
+                ),
+                leading: IconBadge(
+                  Icons.graphic_eq_rounded,
+                  size: 44,
+                  background: cs.primary,
+                  foreground: cs.onPrimary,
+                ),
+                title: Text(
+                  _takeCount == 0
+                      ? 'Bản thu của tôi'
+                      : 'Bản thu của tôi ($_takeCount)',
+                  style: theme.textTheme.titleMedium,
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                enabled: _ok,
+                onTap: widget.onTakes ?? () => _push(TakesPage(store: _takes)),
               ),
             ),
           ],
@@ -502,56 +640,89 @@ String _recentSubtitle(LibrarySong s) {
   ].join(' · ');
 }
 
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.text);
+/// Thẻ lớn nhất của Trang chủ: thêm bài.
+class _AddSongHero extends StatelessWidget {
+  const _AddSongHero({required this.onTap});
 
-  final String text;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 24, 8, 4),
-      child: Text(
-        text,
-        style: theme.textTheme.titleMedium?.copyWith(
-          color: theme.colorScheme.primary,
-          fontWeight: FontWeight.w700,
-        ),
+    return HeroCard(
+      onTap: onTap,
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Thêm bài hát',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Từ Tệp, Zalo, Safari…',
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          const IconBadge(
+            Icons.add_rounded,
+            size: 56,
+            background: Colors.white,
+            foreground: brandColor,
+          ),
+        ],
       ),
     );
   }
 }
 
-/// Một bài ở Trang chủ: bấm cả dòng là vào hát.
+/// Màu vòng tròn đầu dòng, xoay vòng cho khỏi đơn điệu.
+(Color, Color) _tintColors(ColorScheme cs, int i) => switch (i % 3) {
+  0 => (cs.primaryContainer, cs.onPrimaryContainer),
+  1 => (cs.secondaryContainer, cs.onSecondaryContainer),
+  _ => (cs.surfaceContainerHigh, cs.onSurfaceVariant),
+};
+
+/// Một bài ở "Hát tiếp": bấm cả dòng là vào hát.
 class _SongRow extends StatelessWidget {
   const _SongRow({
     required this.title,
     required this.subtitle,
     required this.enabled,
     required this.onTap,
-    this.icon = Icons.music_note,
+    this.tint = 0,
     this.missing = false,
-    this.busy = false,
   });
 
   final String title;
   final String subtitle;
   final bool enabled;
   final VoidCallback onTap;
-  final IconData icon;
+  final int tint;
   final bool missing;
-  final bool busy;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final (bg, fg) = _tintColors(cs, tint);
     return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12),
       minVerticalPadding: 10,
-      leading: Icon(
-        missing ? Icons.music_off : icon,
-        color: missing ? theme.colorScheme.error : theme.colorScheme.primary,
+      leading: IconBadge(
+        missing ? Icons.music_off_rounded : Icons.music_note_rounded,
+        background: missing ? cs.errorContainer : bg,
+        foreground: missing ? cs.onErrorContainer : fg,
       ),
       title: Text(
         title,
@@ -559,72 +730,177 @@ class _SongRow extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: theme.textTheme.titleMedium,
       ),
-      subtitle: Text(subtitle),
-      trailing: busy
-          ? const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : Icon(Icons.play_circle_fill, color: theme.colorScheme.primary),
+      subtitle: Text(
+        subtitle,
+        style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+      ),
+      trailing: Icon(
+        Icons.play_circle_fill_rounded,
+        color: cs.primary,
+        size: 36,
+      ),
       enabled: enabled,
       onTap: onTap,
     );
   }
 }
 
-class _BigButton extends StatelessWidget {
-  const _BigButton({
-    required this.icon,
-    required this.label,
+/// Thẻ một bài mẫu.
+class _SampleCard extends StatelessWidget {
+  const _SampleCard({
+    required this.title,
     required this.subtitle,
+    required this.tint,
+    required this.busy,
     required this.enabled,
     required this.onTap,
   });
 
-  final IconData icon;
-  final String label;
+  final String title;
   final String subtitle;
+  final int tint;
+  final bool busy;
   final bool enabled;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return FilledButton(
-      onPressed: enabled ? onTap : null,
-      style: FilledButton.styleFrom(
-        minimumSize: const Size.fromHeight(84),
-        alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 36),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Cỡ chữ của theme nhưng không lấy màu: chữ theo màu của nút (sáng trên nền đỏ).
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: theme.textTheme.titleLarge?.fontSize,
-                    fontWeight: FontWeight.w600,
-                  ),
+    final cs = theme.colorScheme;
+    final (bg, fg) = _tintColors(cs, tint);
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              busy
+                  ? const SizedBox(
+                      width: 40,
+                      height: 40,
+                      child: Padding(
+                        padding: EdgeInsets.all(8),
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  : IconBadge(
+                      Icons.school_rounded,
+                      size: 40,
+                      background: bg,
+                      foreground: fg,
+                    ),
+              const SizedBox(height: 8),
+              Text(title, style: theme.textTheme.titleMedium),
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: cs.onSurfaceVariant,
                 ),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: theme.textTheme.bodyMedium?.fontSize,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Bảng "Thêm bài hát". Trả true khi chọn từ Tệp.
+class _AddSongSheet extends StatelessWidget {
+  const _AddSongSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    const steps = [
+      'Mở tin nhắn có file nhạc',
+      'Bấm giữ file → Mở bằng ứng dụng khác',
+      'Chọn ChuẩnTone',
+    ];
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Thêm bài hát', style: theme.textTheme.titleLarge),
+            const SizedBox(height: 12),
+            Card(
+              color: cs.surfaceContainer,
+              clipBehavior: Clip.antiAlias,
+              child: ListTile(
+                contentPadding: const EdgeInsets.all(12),
+                leading: const IconBadge(Icons.folder_rounded),
+                title: Text('Chọn từ Tệp', style: theme.textTheme.titleMedium),
+                subtitle: const Text(
+                  'MP3, M4A, WAV — chọn kèm file lời .lrc nếu có',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).pop(true),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Card(
+              color: cs.surfaceContainer,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        IconBadge(
+                          Icons.chat_rounded,
+                          background: cs.secondaryContainer,
+                          foreground: cs.onSecondaryContainer,
+                        ),
+                        const SizedBox(width: 16),
+                        Text('Gửi từ Zalo', style: theme.textTheme.titleMedium),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    for (final (i, step) in steps.indexed)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            CircleAvatar(
+                              radius: 12,
+                              backgroundColor: cs.primaryContainer,
+                              foregroundColor: cs.onPrimaryContainer,
+                              child: Text(
+                                '${i + 1}',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: cs.onPrimaryContainer,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(child: Text(step)),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'ChuẩnTone không tải nhạc từ mạng — bạn dùng bài mình có.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: cs.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

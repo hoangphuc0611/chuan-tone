@@ -200,9 +200,16 @@ class _Camera {
   }
 }
 
-/// Font thật (test mặc định vẽ chữ thành ô vuông rộng 1 em): Roboto + Material Icons kèm Flutter SDK
-/// (cache `material_fonts`, có cả trên CI), đăng ký cả dưới tên font hệ thống iOS mà theme dùng.
+/// Font thật (test mặc định vẽ chữ thành ô vuông rộng 1 em): Be Vietnam Pro của app + Material
+/// Icons kèm Flutter SDK (cache `material_fonts`, có cả trên CI).
 Future<void> _loadFonts() async {
+  Future<ByteData> font(String path) async =>
+      ByteData.sublistView(File(path).readAsBytesSync());
+  final app = FontLoader('BeVietnamPro');
+  for (final f in const ['Regular', 'SemiBold', 'Bold']) {
+    app.addFont(font('assets/fonts/BeVietnamPro-$f.ttf'));
+  }
+  await app.load();
   var root = _env['FLUTTER_ROOT'];
   if (root == null) {
     // flutter_tester nằm ở <flutter>/bin/cache/artifacts/engine/<máy>/flutter_tester
@@ -212,34 +219,11 @@ Future<void> _loadFonts() async {
     }
     root = d.path;
   }
-  final dir = '$root/bin/cache/artifacts/material_fonts';
-  if (!File('$dir/Roboto-Regular.ttf').existsSync()) {
-    // ignore: avoid_print
-    print('Không thấy font Roboto ở $dir: dùng font mặc định của test.');
-    return;
+  final icons =
+      '$root/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf';
+  if (File(icons).existsSync()) {
+    await (FontLoader('MaterialIcons')..addFont(font(icons))).load();
   }
-  Future<ByteData> font(String name) async =>
-      ByteData.sublistView(File('$dir/$name').readAsBytesSync());
-  for (final family in const [
-    'Roboto',
-    'CupertinoSystemText',
-    'CupertinoSystemDisplay',
-    '.SF UI Text',
-    '.SF UI Display',
-  ]) {
-    final loader = FontLoader(family);
-    for (final f in const [
-      'Roboto-Regular.ttf',
-      'Roboto-Medium.ttf',
-      'Roboto-Bold.ttf',
-    ]) {
-      loader.addFont(font(f));
-    }
-    await loader.load();
-  }
-  await (FontLoader(
-    'MaterialIcons',
-  )..addFont(font('MaterialIcons-Regular.otf'))).load();
 }
 
 /// Bài giả 64 giây (vòng hoà âm 16 giây lặp 4 lần): đủ dài để thu 30 giây như nhiệm vụ 5 (hết
@@ -469,6 +453,20 @@ void main() {
           await tester.pump();
         }
 
+        /// Về tab Trang chủ: đóng các màn đè lên khung tab (bảng dưới thì bấm ra ngoài).
+        Future<void> toHome() async {
+          while (find.byType(NavigationBar).hitTestable().evaluate().isEmpty) {
+            if (find.byType(BackButton).hitTestable().evaluate().isEmpty) {
+              await tester.tapAt(const Offset(20, 60));
+            } else {
+              await back();
+            }
+            await idle(const Duration(milliseconds: 800));
+          }
+          await tapText('Trang chủ');
+          await wait(() => shows('Thêm bài hát'));
+        }
+
         // Thời gian thật trên máy chạy test (Mac), không phải iPhone.
         Duration elapsed(DateTime since) => DateTime.now().difference(since);
         String secs(Duration d) =>
@@ -685,10 +683,7 @@ void main() {
         expect(find.text('Tone \u22121'), findsOneWidget);
 
         // ---- Nhiệm vụ 6: về Trang chủ → mở lại bài → mở lại bản thu ----
-        while (!shows('Thêm bài hát')) {
-          await back();
-          await idle(const Duration(milliseconds: 800));
-        }
+        await toHome();
         await shot('trang-chu-co-bai');
         await tapOn(find.text('Bai hat thu').first);
         await wait(() => find.byTooltip('Hạ tone').evaluate().isNotEmpty);
@@ -709,10 +704,7 @@ void main() {
         await tapOn(find.textContaining('Bai hat thu').first);
         await wait(() => shows('Nghe lại & chỉnh'));
         await shot('mo-lai-ban-thu');
-        while (!shows('Thêm bài hát')) {
-          await back();
-          await idle(const Duration(milliseconds: 800));
-        }
+        await toHome();
 
         // ---- Cài đặt ----
         await tapTip('Cài đặt');
@@ -723,10 +715,7 @@ void main() {
           300,
         );
         await shot('cai-dat-nang-cao');
-        while (!shows('Thêm bài hát')) {
-          await back();
-          await idle(const Duration(milliseconds: 800));
-        }
+        await toHome();
 
         // ---- Tách giọng với server thật (K12, chỉ khi có CHUANTONE_SERVER) ----
         if (withServer) {
@@ -750,10 +739,7 @@ void main() {
             realMs: 10,
           );
           await shot('may-chu-tach-giong');
-          while (!shows('Thêm bài hát')) {
-            await back();
-            await idle(const Duration(milliseconds: 800));
-          }
+          await toHome();
           await tapOn(find.text('Bai hat thu').first);
           await wait(() => find.byTooltip('Hạ tone').evaluate().isNotEmpty);
           await idle(const Duration(seconds: 1));
@@ -810,14 +796,7 @@ void main() {
           await shot('tach-giong-xong');
           await slide('Giữ giọng ca sĩ gốc', 0.3);
           await shot('tach-giong-giu-giong-30');
-          while (!shows('Thêm bài hát')) {
-            if (find.byType(BackButton).hitTestable().evaluate().isEmpty) {
-              await tester.tapAt(const Offset(20, 60)); // đóng bảng dưới
-            } else {
-              await back();
-            }
-            await idle(const Duration(milliseconds: 800));
-          }
+          await toHome();
         }
 
         expect(TestLog.enabled, isTrue);

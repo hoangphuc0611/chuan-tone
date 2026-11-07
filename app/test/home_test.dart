@@ -8,6 +8,7 @@ import 'package:chuantone/data/song_prefs.dart';
 import 'package:chuantone/data/stem_store.dart';
 import 'package:chuantone/engine/separation_client.dart';
 import 'package:chuantone/engine_info.dart';
+import 'package:chuantone/widgets/app_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tonecore_flutter/tonecore_flutter.dart';
@@ -195,7 +196,7 @@ void main() {
     await closeDb(tester);
   });
 
-  testWidgets('⚙ mở Cài đặt: thông tin engine, Đo độ trễ, Phòng thử', (
+  testWidgets('tab Cài đặt: thông tin engine, Đo độ trễ, Phòng thử', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(800, 3200); // dựng cả trang Cài đặt
@@ -204,13 +205,13 @@ void main() {
     final lib = SongLibrary(baseDir: dir);
     await tester.pumpWidget(
       MaterialApp(
-        home: HomePage(engineInfo: _ok, library: lib),
+        home: MainShell(engineInfo: _ok, library: lib),
       ),
     );
     await settle(tester, () => find.text('Bài mẫu').evaluate().isNotEmpty);
     await tester.tap(find.byTooltip('Cài đặt'));
-    await tester.pumpAndSettle();
-    expect(find.text('Cài đặt'), findsOneWidget);
+    await settle(tester, () => find.text('Đo độ trễ').evaluate().isNotEmpty);
+    expect(find.text('Cài đặt'), findsNWidgets(2)); // tab + tiêu đề
     expect(find.text('ToneCore v9.9.9-test – engine OK'), findsOneWidget);
     expect(find.text('Đo độ trễ'), findsOneWidget);
     expect(find.text('Phòng thử'), findsOneWidget);
@@ -232,13 +233,7 @@ void main() {
     await settle(tester, () => find.text('Bài mẫu').evaluate().isNotEmpty);
     expect(find.text('Không khởi động được engine'), findsOneWidget);
     expect(find.text('Thiếu libtonecore'), findsOneWidget);
-    final add = tester.widget<FilledButton>(
-      find.ancestor(
-        of: find.text('Thêm bài hát'),
-        matching: find.byType(FilledButton),
-      ),
-    );
-    expect(add.onPressed, isNull);
+    expect(tester.widget<HeroCard>(find.byType(HeroCard)).onTap, isNull);
     await closeDb(tester);
   });
 

@@ -39,8 +39,8 @@ void startTestLog() {
 // ignore: unused_element
 AppLifecycleListener? _lifecycle;
 
-/// Giấy phép thư viện native không do pub quản lý (pub tự đưa giấy phép gói Dart vào trang giấy
-/// phép): Oboe (Apache-2.0) trong engine bản Android.
+/// Giấy phép không do pub quản lý (pub tự đưa giấy phép gói Dart vào trang giấy phép): Oboe
+/// (Apache-2.0) trong engine bản Android, font Be Vietnam Pro (SIL OFL 1.1).
 void registerNativeLicenses() {
   LicenseRegistry.addLicense(() async* {
     final apache = await rootBundle.loadString(
@@ -49,5 +49,9 @@ void registerNativeLicenses() {
     yield LicenseEntryWithLineBreaks(const [
       'Oboe',
     ], 'Copyright 2015 The Android Open Source Project\n\n$apache');
+    final ofl = await rootBundle.loadString(
+      'assets/licenses/ofl-1.1-be-vietnam-pro.txt',
+    );
+    yield LicenseEntryWithLineBreaks(const ['Be Vietnam Pro'], ofl);
   });
 }

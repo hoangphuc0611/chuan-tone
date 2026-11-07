@@ -12,7 +12,9 @@ import '../data/take_store.dart';
 import '../data/test_log.dart';
 import '../engine/labels.dart';
 import '../engine/sing_controller.dart';
+import '../theme.dart';
 import '../widgets/analysis_widgets.dart';
+import '../widgets/app_ui.dart';
 import '../widgets/coach_marks.dart';
 import '../widgets/correction_chips.dart';
 import '../widgets/error_text.dart';
@@ -612,12 +614,10 @@ class _GenreChips extends StatelessWidget {
               for (final g in Genre.values)
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text(genreLabel(g)),
-                    labelStyle: theme.textTheme.titleMedium,
+                  child: AppChoiceChip(
+                    label: genreLabel(g),
                     selected: g == c.service.genre,
-                    showCheckmark: false,
-                    onSelected: (_) => c.pickGenre(g),
+                    onSelected: () => c.pickGenre(g),
                   ),
                 ),
             ],
@@ -742,7 +742,7 @@ class _TransportBar extends StatelessWidget {
     final red = theme.colorScheme.error;
     // Nút thu luôn đỏ chữ trắng (màu "lỗi" của giao diện tối là hồng nhạt).
     final recordStyle = FilledButton.styleFrom(
-      backgroundColor: const Color(0xFFD32F2F),
+      backgroundColor: recordRed,
       foregroundColor: Colors.white,
       minimumSize: const Size.fromHeight(56),
       textStyle: theme.textTheme.titleMedium,

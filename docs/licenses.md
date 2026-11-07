@@ -15,6 +15,7 @@ Quy tắc (CLAUDE.md mục 0.2): chỉ MIT / BSD / Apache-2.0 / Zlib / ISC. LGPL
 | flutter_localizations | theo Flutter SDK | BSD-3-Clause | `app` – chữ có sẵn của Flutter bằng tiếng Việt (M8 B5) | Có |
 | intl | theo flutter_localizations | BSD-3-Clause | phụ thuộc của flutter_localizations | Có |
 | flutter_lints | ^6.0.0 | BSD-3-Clause | kiểm tra code (dev) | Không |
+| Font Be Vietnam Pro | bản google/fonts, 2026-11-06 | **SIL OFL 1.1** (ngoài danh sách MIT/BSD/…; bạn đã đồng ý 2026-11-06, `docs/ui/redesign-plan.md`) | `app/assets/fonts` (3 cỡ, ~410 KB). Toàn văn giấy phép ở `app/assets/licenses/ofl-1.1-be-vietnam-pro.txt`, hiện ở Cài đặt → Giấy phép thư viện | Có |
 | Oboe | 1.11.0 (Gradle prefab) | Apache-2.0 | `engine/src/io/android`. Toàn văn Apache-2.0 (`app/assets/licenses/apache-2.0.txt`) hiện ở Cài đặt → Giấy phép thư viện (`registerNativeLicenses` trong `app/lib/main.dart`; giấy phép gói Dart do Flutter tự gom) | Có (Android) |
 | dr_wav / dr_mp3 / dr_flac | commit `dfe8377` (`engine/third_party/dr_libs/COMMIT`) | Public domain / MIT-0 | giải mã cho bản host (test, CI, `tcflac` của server); dr_flac từ M6 | Không |
 | file_picker | ^13.1.0 | MIT | `app` – chọn file beat | Có |

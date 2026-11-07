@@ -78,8 +78,19 @@ flutter:
   # Bài mẫu luyện giọng tự tạo (tools/samples/make_samples.dart) + lời .lrc.
   assets:
     - assets/samples/
-    # Giấy phép của thư viện native không do pub quản lý (Oboe – Apache-2.0), hiện ở trang giấy phép.
+    # Giấy phép của thư viện native không do pub quản lý (Oboe – Apache-2.0) và font (OFL-1.1), hiện
+    # ở trang giấy phép.
     - assets/licenses/
+
+  # Font của app (giao diện Stitch, docs/ui/redesign-plan.md): SIL OFL 1.1, chép từ google/fonts.
+  fonts:
+    - family: BeVietnamPro
+      fonts:
+        - asset: assets/fonts/BeVietnamPro-Regular.ttf
+        - asset: assets/fonts/BeVietnamPro-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/BeVietnamPro-Bold.ttf
+          weight: 700
 
   # To add assets to your application, add an assets section, like this:
   # assets:

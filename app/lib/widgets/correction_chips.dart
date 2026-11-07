@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:tonecore_flutter/tonecore_flutter.dart';
 
 import '../engine/labels.dart';
+import 'app_ui.dart';
 
 /// Mức chỉnh giọng Tắt / Tự nhiên / Ca sĩ / Robot — cùng một kiểu ở Màn hát và màn Nghe lại (xuống
 /// dòng khi màn hẹp, chữ to). [hint]: dòng nhắc bên dưới (vd bật "Nghe lại giọng").
@@ -34,12 +35,10 @@ class CorrectionChips extends StatelessWidget {
           runSpacing: 8,
           children: [
             for (final (label, p) in options)
-              ChoiceChip(
-                label: Text(label),
-                labelStyle: theme.textTheme.titleMedium,
+              AppChoiceChip(
+                label: label,
                 selected: value == p,
-                showCheckmark: false,
-                onSelected: (_) => onChanged(p),
+                onSelected: () => onChanged(p),
               ),
           ],
         ),

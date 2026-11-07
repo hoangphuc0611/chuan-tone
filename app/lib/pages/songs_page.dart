@@ -5,6 +5,7 @@ import '../data/song_import.dart';
 import '../data/song_library.dart';
 import '../data/test_log.dart';
 import '../engine/labels.dart';
+import '../widgets/app_ui.dart';
 import 'analysis_page.dart';
 import 'sing_page.dart';
 
@@ -157,7 +158,14 @@ class _SongsPageState extends State<SongsPage> {
                     decoration: InputDecoration(
                       prefixIcon: const Icon(Icons.search),
                       hintText: 'Tìm bài (gõ không dấu cũng được)',
-                      border: const OutlineInputBorder(),
+                      filled: true,
+                      fillColor: Theme.of(context)
+                          .colorScheme
+                          .surfaceContainerLowest,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(999),
+                        borderSide: BorderSide.none,
+                      ),
                       isDense: true,
                       suffixIcon: _search.text.isEmpty
                           ? null
@@ -173,9 +181,9 @@ class _SongsPageState extends State<SongsPage> {
                   child: songs.isEmpty
                       ? const Center(child: Text('Không có bài nào khớp.'))
                       : ListView.separated(
-                          padding: const EdgeInsets.only(bottom: 88),
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
                           itemCount: songs.length,
-                          separatorBuilder: (_, _) => const Divider(height: 1),
+                          separatorBuilder: (_, _) => const SizedBox(height: 8),
                           itemBuilder: (context, i) => _SongTile(
                             song: songs[i],
                             onTap: () => _open(songs[i]),
@@ -219,22 +227,38 @@ class _SongTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return ListTile(
-      minVerticalPadding: 12,
-      leading: Icon(
-        song.missing ? Icons.music_off : Icons.music_note,
-        color: song.missing ? theme.colorScheme.error : null,
-      ),
-      title: Text(song.title, maxLines: 2, overflow: TextOverflow.ellipsis),
-      subtitle: Text(songSubtitle(song)),
-      onTap: onTap,
-      trailing: PopupMenuButton<String>(
-        tooltip: 'Tuỳ chọn',
-        onSelected: (v) => v == 'rename' ? onRename() : onDelete(),
-        itemBuilder: (_) => const [
-          PopupMenuItem(value: 'rename', child: Text('Đổi tên')),
-          PopupMenuItem(value: 'delete', child: Text('Xoá bài')),
-        ],
+    final cs = theme.colorScheme;
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: ListTile(
+        minVerticalPadding: 12,
+        contentPadding: const EdgeInsets.only(left: 12, right: 4),
+        leading: IconBadge(
+          song.missing ? Icons.music_off_rounded : Icons.music_note_rounded,
+          background: song.missing ? cs.errorContainer : null,
+          foreground: song.missing ? cs.onErrorContainer : null,
+        ),
+        title: Text(
+          song.title,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.titleMedium,
+        ),
+        subtitle: Text(
+          songSubtitle(song),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: cs.onSurfaceVariant,
+          ),
+        ),
+        onTap: onTap,
+        trailing: PopupMenuButton<String>(
+          tooltip: 'Tuỳ chọn',
+          onSelected: (v) => v == 'rename' ? onRename() : onDelete(),
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: 'rename', child: Text('Đổi tên')),
+            PopupMenuItem(value: 'delete', child: Text('Xoá bài')),
+          ],
+        ),
       ),
     );
   }
@@ -289,34 +313,20 @@ class _EmptyLibrary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.library_music,
-              size: 64,
-              color: theme.colorScheme.primary,
-            ),
-            const SizedBox(height: 16),
-            Text('Chưa có bài nào', style: theme.textTheme.titleLarge),
-            const SizedBox(height: 8),
-            const Text(
+        padding: const EdgeInsets.all(16),
+        child: EmptyState(
+          icon: Icons.library_music_rounded,
+          title: 'Chưa có bài nào',
+          body:
               'Thêm file nhạc từ app Tệp, hoặc mở file nhạc trong Zalo, Safari… '
               'rồi chọn "ChuẩnTone".',
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: onAdd,
-              icon: const Icon(Icons.add),
-              label: const Text('Thêm bài hát'),
-              style: FilledButton.styleFrom(minimumSize: const Size(220, 56)),
-            ),
-          ],
+          action: FilledButton.icon(
+            onPressed: onAdd,
+            icon: const Icon(Icons.add),
+            label: const Text('Thêm bài hát'),
+          ),
         ),
       ),
     );
