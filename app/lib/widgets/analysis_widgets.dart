@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:tonecore_flutter/tonecore_flutter.dart';
 
 import '../engine/labels.dart';
+import '../theme.dart';
+import 'app_ui.dart';
 
 enum StepStatus { waiting, running, done, skipped, failed }
 
@@ -38,36 +40,44 @@ class AnalysisSteps extends StatelessWidget {
       children: [
         for (final s in steps)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(width: 32, height: 32, child: _icon(s, theme)),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(s.title, style: theme.textTheme.titleMedium),
-                      if (s.subtitle != null)
-                        Text(
-                          s.subtitle!,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: s.state == StepStatus.failed
-                                ? theme.colorScheme.error
-                                : null,
-                          ),
-                        ),
-                      if (s.state == StepStatus.running)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: LinearProgressIndicator(value: s.progress),
-                        ),
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(width: 32, height: 32, child: _icon(s, theme)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(s.title, style: theme.textTheme.titleMedium),
+                          if (s.subtitle != null)
+                            Text(
+                              s.subtitle!,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: s.state == StepStatus.failed
+                                    ? theme.colorScheme.error
+                                    : null,
+                              ),
+                            ),
+                          if (s.state == StepStatus.running)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: LinearProgressIndicator(value: s.progress),
+                            ),
+                        ],
+                      ),
+                    ),
+                    if (s.action != null) ...[
+                      const SizedBox(width: 8),
+                      s.action!,
                     ],
-                  ),
+                  ],
                 ),
-                if (s.action != null) ...[const SizedBox(width: 8), s.action!],
-              ],
+              ),
             ),
           ),
       ],
@@ -85,7 +95,7 @@ class AnalysisSteps extends StatelessWidget {
     ),
     StepStatus.done => Icon(
       Icons.check_circle,
-      color: theme.colorScheme.primary,
+      color: theme.colorScheme.tertiary,
     ),
     StepStatus.skipped => Icon(
       Icons.remove_circle_outline,
@@ -117,35 +127,41 @@ class KeyResultCard extends StatelessWidget {
     final bpm = analysis.bpm;
     final modulation = manualKey == null ? modulationSummary(analysis) : null;
     final tuning = tuningNote(analysis);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+    const white = Colors.white;
+    final small = theme.textTheme.bodySmall?.copyWith(color: white);
+    return HeroCard(
+      gradient: redGradient,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            key == null ? 'Chưa dò được tone' : 'Tone: ${keyLabel(key)}',
+            style: theme.textTheme.headlineSmall?.copyWith(color: white),
+          ),
+          if (bpm != null)
             Text(
-              key == null ? 'Chưa dò được tone' : 'Tone: ${keyLabel(key)}',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+              '${bpm.round()} BPM',
+              style: theme.textTheme.titleMedium?.copyWith(color: white),
             ),
-            if (bpm != null)
-              Text('${bpm.round()} BPM', style: theme.textTheme.titleMedium),
-            if (manualKey != null)
-              Text(
-                'Đã sửa tay (máy dò: ${analysis.key == null ? 'không rõ' : keyLabel(analysis.key!)})',
-                style: theme.textTheme.bodySmall,
-              ),
-            if (modulation != null) Text('Chuyển tone: $modulation'),
-            if (tuning != null) Text(tuning, style: theme.textTheme.bodySmall),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: onEdit,
-              icon: const Icon(Icons.edit),
-              label: const Text('Sửa tone'),
+          if (manualKey != null)
+            Text(
+              'Đã sửa tay (máy dò: ${analysis.key == null ? 'không rõ' : keyLabel(analysis.key!)})',
+              style: small,
             ),
-          ],
-        ),
+          if (modulation != null)
+            Text('Chuyển tone: $modulation', style: small),
+          if (tuning != null) Text(tuning, style: small),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: onEdit,
+            icon: const Icon(Icons.edit),
+            label: const Text('Sửa tone'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: white,
+              side: const BorderSide(color: white),
+            ),
+          ),
+        ],
       ),
     );
   }

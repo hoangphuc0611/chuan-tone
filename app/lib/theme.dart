@@ -19,6 +19,11 @@ const heroGradient = LinearGradient(
   stops: [0, 0.55, 1],
 );
 
+/// Dải đỏ cho thẻ nhiều chữ (chữ trắng đọc rõ trên cả thẻ).
+const redGradient = LinearGradient(
+  colors: [Color(0xFFB1212D), Color(0xFFC62F3A)],
+);
+
 /// Nền sân khấu của Màn hát: tím đêm, sáng nhẹ từ trên xuống.
 const stageGradient = LinearGradient(
   begin: Alignment.topCenter,

@@ -6,17 +6,23 @@ import '../theme.dart';
 
 /// Thẻ lớn dải màu "ánh đèn sân khấu": việc chính của màn. Chữ trắng đặt ở phần đỏ (bên trái).
 class HeroCard extends StatelessWidget {
-  const HeroCard({super.key, required this.child, this.onTap});
+  const HeroCard({
+    super.key,
+    required this.child,
+    this.onTap,
+    this.gradient = heroGradient,
+  });
 
   final Widget child;
   final VoidCallback? onTap;
+  final Gradient gradient;
 
   @override
   Widget build(BuildContext context) {
     final radius = BorderRadius.circular(cardRadius + 4);
     return DecoratedBox(
       decoration: BoxDecoration(
-        gradient: heroGradient,
+        gradient: gradient,
         borderRadius: radius,
         boxShadow: const [
           BoxShadow(
@@ -147,6 +153,74 @@ class AppChoiceChip extends StatelessWidget {
       ),
       selected: selected,
       onSelected: onSelected == null ? null : (_) => onSelected!(),
+    );
+  }
+}
+
+/// Thẻ báo trạng thái có màu nền: icon + một câu (đúng / cảnh báo / lỗi).
+class StatusCard extends StatelessWidget {
+  const StatusCard({
+    super.key,
+    required this.icon,
+    required this.child,
+    required this.background,
+    required this.foreground,
+  });
+
+  final IconData icon;
+  final Widget child;
+  final Color background;
+  final Color foreground;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      color: background,
+      elevation: 0,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(icon, color: foreground, size: 28),
+            const SizedBox(width: 12),
+            Expanded(
+              child: DefaultTextStyle(
+                style: theme.textTheme.titleSmall!.copyWith(color: foreground),
+                child: child,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Dấu chấm các bước, bước hiện tại dài hơn.
+class StepDots extends StatelessWidget {
+  const StepDots({super.key, required this.count, required this.current});
+
+  final int count;
+  final int current;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        for (var i = 0; i < count; i++)
+          Container(
+            width: i == current ? 24 : 8,
+            height: 8,
+            margin: const EdgeInsets.symmetric(horizontal: 3),
+            decoration: BoxDecoration(
+              color: i == current ? cs.primary : cs.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+      ],
     );
   }
 }

@@ -10,6 +10,8 @@ import '../data/latency_history.dart';
 import '../data/test_log.dart';
 import '../engine/audio_service.dart';
 import '../engine/latency_measure.dart';
+import '../theme.dart';
+import '../widgets/app_ui.dart';
 import '../widgets/input_level_meter.dart';
 
 /// Người dùng chọn gì ở bước cuối của hướng dẫn.
@@ -198,6 +200,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
+        centerTitle: true,
         title: Text('Bước ${_step.index + 1}/${_Step.values.length}'),
         actions: [
           if (_step != _Step.done)
@@ -239,6 +242,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            StepDots(count: _Step.values.length, current: _step.index),
+            const SizedBox(height: 8),
             for (final w in all)
               if (w is _Action) w,
           ],
@@ -247,14 +252,31 @@ class _OnboardingPageState extends State<OnboardingPage> {
     ],
   );
 
-  Widget _icon(BuildContext context, IconData icon, {Color? color}) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 16),
-    child: Icon(
-      icon,
-      size: 80,
-      color: color ?? Theme.of(context).colorScheme.primary,
-    ),
-  );
+  /// Ô minh hoạ đầu mỗi bước: nền ấm, icon lớn trong vòng tròn.
+  Widget _icon(BuildContext context, IconData icon, {Color? color}) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 20),
+      child: Container(
+        height: 180,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [cs.primaryContainer, cs.secondaryContainer],
+          ),
+          borderRadius: BorderRadius.circular(cardRadius + 4),
+        ),
+        child: IconBadge(
+          icon,
+          size: 112,
+          background: cs.surfaceContainerLowest,
+          foreground: color ?? cs.primary,
+        ),
+      ),
+    );
+  }
 
   Widget _title(BuildContext context, String text) => Text(
     text,
@@ -268,7 +290,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
     child: Text(
       text,
       textAlign: TextAlign.center,
-      style: Theme.of(context).textTheme.bodyLarge,
+      style: Theme.of(context).textTheme.bodyLarge
+          ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
     ),
   );
 
@@ -290,33 +313,50 @@ class _OnboardingPageState extends State<OnboardingPage> {
   List<Widget> _welcome(BuildContext context) {
     final theme = Theme.of(context);
     Widget point(IconData icon, String text) => Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          Icon(icon, color: theme.colorScheme.primary, size: 32),
-          const SizedBox(width: 16),
-          Expanded(child: Text(text, style: theme.textTheme.titleMedium)),
-        ],
+      padding: const EdgeInsets.only(top: 8),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              IconBadge(icon, size: 44),
+              const SizedBox(width: 12),
+              Expanded(child: Text(text, style: theme.textTheme.titleMedium)),
+            ],
+          ),
+        ),
       ),
     );
     return [
-      const SizedBox(height: 24),
-      Text(
-        'ChuẩnTone',
-        textAlign: TextAlign.center,
-        style: theme.textTheme.displaySmall?.copyWith(
-          fontWeight: FontWeight.bold,
+      const SizedBox(height: 8),
+      HeroCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const IconBadge(
+              Icons.mic_rounded,
+              size: 56,
+              background: Colors.white,
+              foreground: brandColor,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'ChuẩnTone',
+              style: theme.textTheme.displaySmall?.copyWith(
+                color: Colors.white,
+              ),
+            ),
+            Text(
+              'Bấm bài là hát',
+              style: theme.textTheme.titleLarge?.copyWith(color: Colors.white),
+            ),
+          ],
         ),
       ),
-      Text(
-        'Bấm bài là hát',
-        textAlign: TextAlign.center,
-        style: theme.textTheme.titleLarge,
-      ),
-      const SizedBox(height: 32),
-      point(Icons.music_note, 'Tự dò tone của bài hát'),
-      point(Icons.auto_fix_high, 'Tự chỉnh giọng cho đúng nốt'),
-      point(Icons.graphic_eq, 'Tự chọn hiệu ứng theo thể loại'),
+      const SizedBox(height: 8),
+      point(Icons.music_note_rounded, 'Tự dò tone của bài hát'),
+      point(Icons.auto_fix_high_rounded, 'Tự chỉnh giọng cho đúng nốt'),
+      point(Icons.graphic_eq_rounded, 'Tự chọn hiệu ứng theo thể loại'),
       _primary('Bắt đầu', () => _go(_Step.mic)),
       _body(context, 'Mất khoảng 1 phút: cho phép micro, đo máy, thử giọng.'),
     ];
@@ -340,12 +380,13 @@ class _OnboardingPageState extends State<OnboardingPage> {
       if (mic == MicStatus.denied) ...[
         Padding(
           padding: const EdgeInsets.only(top: 16),
-          child: Text(
-            'Micro đang bị tắt cho ChuẩnTone. Vào Cài đặt của máy → ChuẩnTone → bật Micro.',
-            key: const ValueKey('onboarding-mic-denied'),
-            textAlign: TextAlign.center,
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: theme.colorScheme.error,
+          child: StatusCard(
+            icon: Icons.error_rounded,
+            background: theme.colorScheme.errorContainer,
+            foreground: theme.colorScheme.onErrorContainer,
+            child: const Text(
+              'Micro đang bị tắt cho ChuẩnTone. Vào Cài đặt của máy → ChuẩnTone → bật Micro.',
+              key: ValueKey('onboarding-mic-denied'),
             ),
           ),
         ),
@@ -407,8 +448,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
         context,
         v.level == LatencyLevel.smooth ? Icons.check_circle : Icons.info,
         color: v.level == LatencyLevel.smooth
-            ? Colors.green.shade600
-            : Colors.orange.shade800,
+            ? Theme.of(context).colorScheme.tertiary
+            : Theme.of(context).colorScheme.secondary,
       ),
       _title(context, v.title),
       _body(context, v.advice),
@@ -417,22 +458,25 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 
   List<Widget> _headphones(BuildContext context) {
-    final theme = Theme.of(context);
-    final (IconData icon, String text, Color color) = switch (_route) {
+    final cs = Theme.of(context).colorScheme;
+    final (IconData icon, String text, Color bg, Color fg) = switch (_route) {
       AudioRoute.wired || AudioRoute.usb => (
         Icons.headphones,
         'Đã cắm tai nghe có dây: bạn sẽ nghe lại giọng mình khi hát.',
-        Colors.green.shade700,
+        cs.tertiaryContainer,
+        cs.onTertiaryContainer,
       ),
       AudioRoute.bluetooth => (
         Icons.bluetooth_audio,
         'Tai nghe Bluetooth: chỉ nghe được nhạc, không nghe lại được giọng vì bị trễ.',
-        Colors.orange.shade800,
+        cs.secondaryContainer,
+        cs.onSecondaryContainer,
       ),
       _ => (
         Icons.volume_up,
         'Đang dùng loa ngoài: vẫn hát được nhưng không nghe lại giọng.',
-        theme.colorScheme.onSurfaceVariant,
+        cs.surfaceContainerHigh,
+        cs.onSurfaceVariant,
       ),
     };
     return [
@@ -445,18 +489,11 @@ class _OnboardingPageState extends State<OnboardingPage> {
       ),
       Padding(
         padding: const EdgeInsets.only(top: 20),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 32),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                text,
-                key: const ValueKey('onboarding-route'),
-                style: theme.textTheme.titleMedium?.copyWith(color: color),
-              ),
-            ),
-          ],
+        child: StatusCard(
+          icon: icon,
+          background: bg,
+          foreground: fg,
+          child: Text(text, key: const ValueKey('onboarding-route')),
         ),
       ),
       _primary('Tiếp', () => _go(_Step.voice)),
@@ -527,7 +564,11 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 
   List<Widget> _done(BuildContext context) => [
-    _icon(context, Icons.check_circle, color: Colors.green.shade600),
+    _icon(
+      context,
+      Icons.celebration_rounded,
+      color: Theme.of(context).colorScheme.primary,
+    ),
     _title(context, 'Xong! Hát thôi'),
     _body(
       context,

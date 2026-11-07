@@ -16,8 +16,8 @@ class InputLevelMeter extends StatelessWidget {
     final color = peakDb > -3
         ? theme.colorScheme.error
         : peakDb > -12
-        ? Colors.orange.shade700
-        : Colors.green.shade600;
+        ? theme.colorScheme.secondary
+        : theme.colorScheme.tertiary;
     return Semantics(
       label: 'Mức micro',
       value: '${peakDb.round()} dB',

@@ -243,45 +243,57 @@ class _AnalysisPageState extends State<AnalysisPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Phân tích bài')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
         children: [
           Text(
             songTitle(_song.name),
-            style: theme.textTheme.titleLarge,
+            style: theme.textTheme.headlineSmall,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 12),
           AnalysisSteps(steps: _steps()),
-          const SizedBox(height: 12),
-          if (a != null)
+          if (a != null) ...[
+            const SizedBox(height: 4),
             KeyResultCard(analysis: a, manualKey: _manualKey, onEdit: _editKey),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: busy && a == null
-                ? null
-                : () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => SingPage(song: _song),
-                    ),
-                  ),
-            icon: const Icon(Icons.mic),
-            label: const Text('Hát'),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(60),
-              textStyle: theme.textTheme.titleLarge,
-            ),
-          ),
-          if (_sepProgress != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                'Giữ màn hình mở trong lúc tách giọng.',
-                style: theme.textTheme.bodySmall,
-                textAlign: TextAlign.center,
-              ),
-            ),
+          ],
         ],
+      ),
+      // Nút chính luôn ở đáy màn.
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_sepProgress != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    'Giữ màn hình mở trong lúc tách giọng.',
+                    style: theme.textTheme.bodySmall,
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              FilledButton.icon(
+                onPressed: busy && a == null
+                    ? null
+                    : () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => SingPage(song: _song),
+                        ),
+                      ),
+                icon: const Icon(Icons.mic),
+                label: const Text('Hát'),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(60),
+                  textStyle: theme.textTheme.titleLarge,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

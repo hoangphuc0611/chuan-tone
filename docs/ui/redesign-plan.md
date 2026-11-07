@@ -140,4 +140,5 @@ Chưa làm: mẫu video xuất 9:16 (vẽ bằng Swift / AVFoundation), để sa
     `EmptyState`, `StageBackground`.
   - Khung 4 tab `MainShell`; Trang chủ mới; bảng "Thêm bài hát" (chọn từ Tệp, ba bước gửi từ
     Zalo); Bài hát của tôi; Bản thu của tôi (sửa câu cũ còn nhắc Phòng thử).
-
+- [x] **U3** (2026-11-07): Hướng dẫn 6 bước (ô minh hoạ, thẻ trạng thái, dấu chấm bước); Phân tích bài
+  (các bước dạng thẻ, thẻ kết quả đỏ, nút "Hát" cố định ở đáy).
