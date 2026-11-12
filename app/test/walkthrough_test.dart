@@ -473,6 +473,13 @@ void main() {
           await wait(() => shows('Thêm bài hát'));
         }
 
+        // Trang chủ đọc thư viện bài không đồng bộ: chờ dòng bài hiện ra rồi mới bấm.
+        Future<void> waitSongRow() => wait(
+          () => shows('Bai hat thu'),
+          realMs: 10,
+          reason: 'Trang chủ chưa hiện bài',
+        );
+
         // Thời gian thật trên máy chạy test (Mac), không phải iPhone.
         Duration elapsed(DateTime since) => DateTime.now().difference(since);
         String secs(Duration d) =>
@@ -713,6 +720,7 @@ void main() {
 
         // ---- Nhiệm vụ 6: về Trang chủ → mở lại bài → mở lại bản thu ----
         await toHome();
+        await waitSongRow();
         await shot('trang-chu-co-bai');
         await tapOn(find.text('Bai hat thu').first);
         await wait(() => find.byTooltip('Hạ tone').evaluate().isNotEmpty);
@@ -779,6 +787,7 @@ void main() {
           );
           await shot('may-chu-tach-giong');
           await toHome();
+          await waitSongRow();
           await tapOn(find.text('Bai hat thu').first);
           await wait(() => find.byTooltip('Hạ tone').evaluate().isNotEmpty);
           await idle(const Duration(seconds: 1));

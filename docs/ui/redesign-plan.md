@@ -163,4 +163,7 @@ Chưa làm: mẫu video xuất 9:16 (vẽ bằng Swift / AVFoundation), để sa
     là hát". Bỏ các chi tiết Figma tự nghĩ ra: "32-Bit Float", "Hi-Res Audio / Studio Master",
     "Chuẩn Tone 99.4%" (điểm số), câu lời trích. Phần tĩnh vẽ một lần; mỗi khung ~1,8 ms trên Mac
     (xem trước bằng mã vẽ iOS chạy trên macOS) — cần xem video thật trên iPhone.
+  - Bảng Tách giọng: nút chính màu chính (trước là tông vàng phụ, đục trên nền tối), nhãn "Giữ
+    giọng ca sĩ gốc" một dòng phía trên thanh trượt (vấn đề #13). Lượt chạy tự động với máy chủ
+    thật trên giao diện mới: bài 4:32 tách xong sau 58 s (máy chủ 54 s).
 

@@ -196,5 +196,5 @@ SUS trung bình: ___ · Mở app → câu hát đầu tiên (trung vị): ___ ·
 | 10 | tự động | Màn hát / Nghe lại | Cùng một thứ mà hai màn gọi khác nhau: "Chỉnh giọng" / "Tự chỉnh giọng", "Thể loại" / "Hiệu ứng giọng"; một màn dùng chip, màn kia dùng nút phân đoạn (SUS câu 6) | nhẹ | B7 (đã sửa: Nghe lại dùng "Chỉnh giọng" + "Thể loại", cùng kiểu chip, cùng thứ tự với Màn hát) |
 | 11 | tự động | engine | Engine báo "nạp bài xong" trước khi luồng âm thanh nhận bài: đọc thời lượng hay đổi tone ngay sau đó có thể hụt. Trên máy gần như không xảy ra vì app đọc CSDL xen giữa. | nhẹ | M9 |
 | 12 | tự động | Màn hát | "Lạc trôi": đoạn dạo 18 giây bị dò thành La# trưởng (độ tin cậy 0,47) nên Màn hát hiện tone sai đầu bài rồi mới đổi sang La thứ. Có thể chỉ hiện đoạn chuyển tone đủ tin cậy. | nhẹ | xem ở vòng thử / M9 |
-| 13 | tự động | Màn hát (bảng Tách giọng) | Nhãn "Giữ giọng ca sĩ gốc" xuống dòng thành 2 dòng ở cột nhãn hẹp | nhẹ | — |
-| 14 | tự động | Phân tích bài | iPhone SE, chữ to: thông báo "Đã gắn lời cho bài…" che nút "Hát" trong 4 giây | nhẹ | xem ở vòng thử |
+| 13 | tự động | Màn hát (bảng Tách giọng) | Nhãn "Giữ giọng ca sĩ gốc" xuống dòng thành 2 dòng ở cột nhãn hẹp | nhẹ | U8 (đã sửa: nhãn dài đặt một dòng phía trên thanh trượt; nút "Tách giọng ca sĩ" đổi sang màu chính) |
+| 14 | tự động | Phân tích bài | iPhone SE, chữ to: thông báo "Đã gắn lời cho bài…" che nút "Hát" trong 4 giây | nhẹ | U3 (đã hết: nút "Hát" cố định ở đáy màn, thông báo hiện phía trên nút — ảnh lượt chạy 2026-11-12) |

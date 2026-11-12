@@ -82,6 +82,7 @@ class SeparationPanel extends StatelessWidget {
             label: 'Giữ giọng ca sĩ gốc',
             value: vocalGain,
             onChanged: onVocalGain,
+            labelAbove: true,
           ),
           Text(
             vocalGain == 0
@@ -99,7 +100,7 @@ class SeparationPanel extends StatelessWidget {
         ] else if (hasPending) ...[
           const Text('Lần trước tách giọng chưa xong.'),
           const SizedBox(height: 6),
-          FilledButton.tonalIcon(
+          FilledButton.icon(
             onPressed: onResume,
             icon: const Icon(Icons.play_arrow),
             label: const Text('Tiếp tục tách'),
@@ -115,7 +116,7 @@ class SeparationPanel extends StatelessWidget {
             ),
           ),
         ] else ...[
-          FilledButton.tonalIcon(
+          FilledButton.icon(
             onPressed: hasServer ? onSeparate : null,
             icon: const Icon(Icons.record_voice_over),
             label: const Text('Tách giọng ca sĩ'),
