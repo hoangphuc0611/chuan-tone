@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:chuantone_media/chuantone_media.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +15,7 @@ import '../engine/audio_service.dart';
 import '../engine/background.dart';
 import '../engine/beat_leak.dart';
 import '../engine/labels.dart';
+import '../engine/take_waveform.dart';
 import '../engine/takes.dart';
 import '../theme.dart';
 import '../widgets/app_ui.dart';
@@ -21,6 +23,7 @@ import '../widgets/correction_chips.dart';
 import '../widgets/error_text.dart';
 import '../widgets/fx_panel.dart';
 import '../widgets/gain_slider.dart';
+import '../widgets/waveform_view.dart';
 
 /// Màn Nghe lại & chỉnh (CLAUDE.md mục 5 màn 4, M7): phát bản thu với giọng khô đi qua chuỗi giọng
 /// real-time (đổi preset / mức chỉnh giọng nghe ngay), to nhỏ giọng / nhạc, giọng sớm / muộn, cắt
@@ -45,6 +48,7 @@ class _ReviewPageState extends State<ReviewPage> with WidgetsBindingObserver {
 
   late final AudioService _service = widget.service ?? AudioService.instance;
   int _loadId = -1; // lần nạp bản thu của màn này ([AudioService.loads])
+  Float32List? _wave; // hình sóng bản thu (tính ở isolate)
   late final TakeStore _store = widget.store ?? TakeStore();
   late TakeInfo _info = widget.take.info;
   Timer? _ticker;
@@ -125,6 +129,12 @@ class _ReviewPageState extends State<ReviewPage> with WidgetsBindingObserver {
     if (again != null && mounted && _error == null) {
       unawaited(_export(again, retry: true));
     }
+    // Hình sóng để tua / thấy chỗ cắt (isolate riêng; lỗi thì giữ thanh trượt thường).
+    unawaited(
+      takeWaveform(_take).then((w) {
+        if (mounted) setState(() => _wave = w);
+      }, onError: (_) {}),
+    );
     // Bản thu qua soundcard: tìm nhạc lọt vào micro ở isolate riêng.
     if (_info.route == AudioRoute.usb) {
       unawaited(
@@ -696,15 +706,31 @@ class _ReviewPageState extends State<ReviewPage> with WidgetsBindingObserver {
             ),
           const SizedBox(height: 8),
           // ---- Phát ----
-          Slider(
-            value: (_drag ?? pos.inMilliseconds.toDouble()).clamp(0, totalMs),
-            max: totalMs > 0 ? totalMs : 1,
-            onChanged: _loading ? null : (v) => setState(() => _drag = v),
-            onChangeEnd: (v) {
-              e?.seek(Duration(milliseconds: v.round()));
-              _drag = null;
-            },
-          ),
+          if (_wave case final wave? when totalMs > 0)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: WaveformView(
+                levels: wave,
+                position: pos.inMilliseconds / totalMs,
+                trimStart: trim.start / totalMs,
+                trimEnd: trim.end / totalMs,
+                onSeek: _loading
+                    ? null
+                    : (f) => e?.seek(
+                        Duration(milliseconds: (f * totalMs).round()),
+                      ),
+              ),
+            )
+          else
+            Slider(
+              value: (_drag ?? pos.inMilliseconds.toDouble()).clamp(0, totalMs),
+              max: totalMs > 0 ? totalMs : 1,
+              onChanged: _loading ? null : (v) => setState(() => _drag = v),
+              onChangeEnd: (v) {
+                e?.seek(Duration(milliseconds: v.round()));
+                _drag = null;
+              },
+            ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [Text(formatDuration(pos)), Text(formatDuration(total))],

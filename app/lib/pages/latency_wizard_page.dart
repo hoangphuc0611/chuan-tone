@@ -8,6 +8,7 @@ import '../data/test_log.dart';
 import '../engine/audio_service.dart';
 import '../engine/labels.dart';
 import '../engine/latency_measure.dart';
+import '../widgets/latency_gauge.dart';
 
 /// Đo độ trễ từng bước cho người dùng (M8 B4, Cài đặt → Âm thanh): rút tai nghe → để máy chỗ yên
 /// tĩnh, đo qua loa → báo kết quả bằng lời ("Máy bạn hát mượt" / "Hơi trễ, nên dùng tai nghe có
@@ -298,11 +299,10 @@ class _LatencyWizardPageState extends State<LatencyWizardPage> {
       LatencyLevel.high => theme.colorScheme.error,
     };
     return [
-      Icon(
-        v.level == LatencyLevel.smooth ? Icons.check_circle : Icons.info,
-        size: 72,
-        color: color,
-      ),
+      if (_loop)
+        Icon(Icons.check_circle, size: 72, color: color)
+      else
+        Center(child: LatencyGauge(ms: r.latencyMs)),
       const SizedBox(height: 16),
       Text(
         v.title,
@@ -321,7 +321,9 @@ class _LatencyWizardPageState extends State<LatencyWizardPage> {
       ),
       const SizedBox(height: 8),
       Text(
-        'Độ trễ đo được: ${r.latencyMs.round()} ms · đã lưu để căn giọng khi thu.',
+        _loop
+            ? 'Độ trễ đo được: ${r.latencyMs.round()} ms · đã lưu để căn giọng khi thu.'
+            : 'Đã lưu số đo để căn giọng khi thu.',
         textAlign: TextAlign.center,
         style: theme.textTheme.bodySmall,
       ),

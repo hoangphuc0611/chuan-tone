@@ -150,5 +150,17 @@ Chưa làm: mẫu video xuất 9:16 (vẽ bằng Swift / AVFoundation), để sa
     Xong). Chia sẻ dùng bảng chia sẻ của máy, không có nút riêng từng app (quyết định M7).
   - Cài đặt nhóm thành thẻ; Micro, Đo độ trễ theo màu mới.
   - Lượt chạy tự động đi qua cả bảng Thêm bài, Âm lượng, Sửa tone, Lời, Micro, Đo độ trễ; hai cỡ máy.
-  - Chưa làm: đồng hồ kim ở Đo độ trễ, sóng âm ở Nghe lại (cần tính dữ liệu sóng), mẫu video 9:16.
+  - Còn lại sau U4–U7: đồng hồ kim ở Đo độ trễ, sóng âm ở Nghe lại, mẫu video 9:16 → làm ở U8.
+- [x] **U8** (2026-11-12):
+  - Nghe lại: hình sóng bản thu (96 cột, độ to giọng khô + nhạc, tính ở isolate riêng khi mở màn)
+    thay thanh tua; chạm / kéo để tua, phần đã nghe màu chính, phần bị cắt đầu / đuôi mờ đi. Chưa
+    tính xong thì vẫn hiện thanh tua cũ.
+  - Đo độ trễ: đồng hồ kim nửa vòng 0–100 ms, ba vùng xanh / cam / đỏ cùng ngưỡng với câu nhận xét
+    (35 / 60 ms).
+  - Mẫu video sóng nhạc 9:16 theo khung Figma: nền tối ngả màu thể loại, quầng sáng, đĩa nhạc,
+    32 cột đối xứng (dải trầm ở giữa), tên bài to (dài thì 2 dòng chữ nhỏ hơn, thừa thì "…"), dòng
+    phụ vàng, nhãn "Bản thu bởi ChuẩnTone", thanh thời gian mảnh, thương hiệu "ChuẩnTone · Bấm bài
+    là hát". Bỏ các chi tiết Figma tự nghĩ ra: "32-Bit Float", "Hi-Res Audio / Studio Master",
+    "Chuẩn Tone 99.4%" (điểm số), câu lời trích. Phần tĩnh vẽ một lần; mỗi khung ~1,8 ms trên Mac
+    (xem trước bằng mã vẽ iOS chạy trên macOS) — cần xem video thật trên iPhone.
 
