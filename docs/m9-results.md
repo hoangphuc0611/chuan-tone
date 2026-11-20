@@ -63,3 +63,16 @@ Cách chạy:
   ngang. Test C++ trên cùng máy có p99 chỉ 2,1%.
 
 Bảng 13 máy (M9b / M9c) điền ở đây từ file người thử gửi về (nút "Gửi kết quả").
+
+## B6 — kích thước app (CI, commit c2f0a09)
+
+| Bản | Cỡ | Chỉ tiêu mục 7 |
+|---|---|---|
+| iOS IPA (nén, chưa ký) | 9,7 MB | |
+| iOS Runner.app (giải nén) | 21,4 MB | ≤ 80 MB — **đạt** |
+| Android APK release arm64-v8a | 22,5 MB | ≤ 80 MB — **đạt** |
+
+CI ghi các số này ở tóm tắt mỗi lần build (job `ios-ipa` và job `android`). Quá 80 MB thì CI báo lỗi.
+
+Kiểm license gói Dart (CI): 64 gói. Apache-2.0 3, BSD 48, MIT 13. Một ngoại lệ đã ghi: `dbus`
+(MPL-2.0), chỉ dùng cho bản Linux desktop.

@@ -58,7 +58,7 @@
 | | Chỉ tiêu | Hiện trạng |
 |---|---|---|
 | ✅ | Dò tone ≥ 0,85 | 0,864 (M3) |
-| ✅ | Kích thước ≤ 80 MB | CI ghi cỡ IPA / app / APK mỗi lần build, quá 80 MB thì lỗi |
+| ✅ | Kích thước ≤ 80 MB | iOS 21,4 MB (giải nén), Android APK arm64 22,5 MB. CI ghi mỗi lần build, quá 80 MB thì lỗi |
 | 🟡 | CPU ≤ 25% một nhân | Mac 1,3–2,0%. Kiểm tra máy trên 13 máy (M9b / M9c) |
 | 🟡 | Độ trễ | iPhone loa ngoài 12,6 ms. Tai nghe có dây + Android: M9b / M9c |
 | 🟡 | Không xrun 30 phút | DSP đạt trên Mac (M9 B3). I/O: hát 30 phút thật trên máy |
