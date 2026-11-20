@@ -762,6 +762,23 @@ void main() {
         await shot('do-do-tre');
         await back();
         await idle(const Duration(milliseconds: 800));
+        // M9 B4: Kiểm tra máy (engine phụ ở isolate riêng, đồng hồ thật).
+        await tapText('Kiểm tra máy');
+        await idle(const Duration(seconds: 1));
+        await tapText('Kiểm tra nhanh');
+        await wait(
+          () =>
+              find.byType(LinearProgressIndicator).evaluate().isEmpty &&
+              shows('Kiểm tra nhanh'),
+          max: const Duration(seconds: 90),
+          realMs: 20,
+          reason: 'Kiểm tra máy chưa xong',
+        );
+        await scrollTo(find.text('Gửi kết quả'));
+        expect(find.textContaining('một nhân'), findsOneWidget);
+        await shot('kiem-tra-may');
+        await back();
+        await idle(const Duration(milliseconds: 800));
         await toHome();
 
         // ---- Tách giọng với server thật (K12, chỉ khi có CHUANTONE_SERVER) ----

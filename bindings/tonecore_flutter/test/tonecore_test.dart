@@ -98,6 +98,32 @@ void main() {
     expect(m.audioApi, AudioApi.none);
   });
 
+  test('khối offline dùng lại bộ đệm native (Kiểm tra máy, M9)', () {
+    final engine = ToneCoreEngine.create(maxBlockFrames: 256);
+    addTearDown(engine.dispose);
+    engine.start();
+    engine.monitorEnabled = true;
+    expect(() => engine.offlineBlock(0), throwsRangeError);
+    expect(() => engine.offlineBlock(512), throwsRangeError);
+    final block = engine.offlineBlock(240);
+    for (var i = 0; i < 240; i++) {
+      block.input[i] = 0.25 * math.sin(2 * math.pi * 1000 * i / 48000);
+    }
+    var peak = 0.0;
+    for (var k = 0; k < 40; k++) {
+      block.process();
+    }
+    for (final v in block.output) {
+      peak = math.max(peak, v.abs());
+    }
+    expect(block.output.length, 480);
+    expect(peak, closeTo(0.25, 0.005)); // như processOffline
+    expect(engine.metrics.framesProcessed, 240 * 40);
+    block.dispose();
+    expect(block.process, throwsStateError);
+    block.dispose(); // lần hai không làm gì
+  });
+
   test('tự chỉnh giọng: tone, preset, trạng thái cao độ', () {
     final engine = ToneCoreEngine.create(maxBlockFrames: 256);
     addTearDown(engine.dispose);

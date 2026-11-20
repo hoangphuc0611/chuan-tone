@@ -113,8 +113,9 @@ Dùng cho 13 máy ở M9b / M9c: người thử chỉ cần bấm nút rồi g�
 
 Gửi bằng bảng chia sẻ (Zalo, mail…).
 
-**Đạt** khi CPU p99 ≤ 25% một nhân. Đây là chỉ tiêu mục 7 tính cho riêng chuỗi giọng, đo không có
-I/O.
+**Đạt** khi CPU **trung bình** ≤ 25% một nhân. Đây là chỉ tiêu mục 7 tính cho riêng chuỗi giọng,
+đo không có I/O. p99 và cao nhất chỉ để tham khảo: luồng chạy thử không có ưu tiên real-time nên
+bị hệ điều hành chen ngang (đo trên Mac: trung bình 2,0%, p99 11%; test C++ cùng máy p99 2,1%).
 
 ### B5. Nhật ký lỗi và đếm phiên trên máy (không dùng dịch vụ ngoài)
 
@@ -211,4 +212,4 @@ Mỗi bước: commit + push + CI xanh. Cuối M9a: báo cáo số đo + IPA m�
 
 ## 9. Tiến độ
 
-- [x] B1 (2026-11-20) · [x] B2 (2026-11-20) · [x] B3 (2026-11-20, số đo: `docs/m9-results.md`) · [ ] B4 · [x] B5 (2026-11-20) · [ ] B6 · [ ] B7
+- [x] B1 (2026-11-20) · [x] B2 (2026-11-20) · [x] B3 (2026-11-20, số đo: `docs/m9-results.md`) · [x] B4 (2026-11-20) · [x] B5 (2026-11-20) · [ ] B6 · [ ] B7

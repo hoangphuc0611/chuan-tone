@@ -1218,6 +1218,16 @@ class ToneCoreEngine implements Finalizable {
     });
   }
 
+  /// (M9) Bộ đệm native dùng lại cho xử lý offline từng khối [frames] frame — không cấp phát, không
+  /// chép qua Dart mỗi lần (công cụ "Kiểm tra máy" đo đúng thời gian của engine). Gọi
+  /// [OfflineBlock.dispose] khi xong (trước [dispose] của engine).
+  OfflineBlock offlineBlock(int frames) {
+    if (frames <= 0 || frames > maxBlockFrames) {
+      throw RangeError.range(frames, 1, maxBlockFrames, 'frames');
+    }
+    return OfflineBlock._(this, frames);
+  }
+
   // ---- Đo lường ----
 
   EngineMetrics get metrics {
@@ -1774,5 +1784,37 @@ class TakeRenderer implements Finalizable {
     _disposed = true;
     _finalizer.detach(this);
     _bindings.tc_renderer_destroy(_handle);
+  }
+}
+
+/// Một khối xử lý offline với bộ đệm native cố định ([ToneCoreEngine.offlineBlock]): ghi đầu vào vào
+/// [input] (interleaved), gọi [process], đọc [output].
+final class OfflineBlock {
+  OfflineBlock._(this._engine, this.frames)
+    : _in = calloc<Float>(frames * _engine.inputChannels),
+      _out = calloc<Float>(frames * _engine.outputChannels);
+
+  final ToneCoreEngine _engine;
+  final int frames;
+  final Pointer<Float> _in;
+  final Pointer<Float> _out;
+  bool _freed = false;
+
+  Float32List get input => _in.asTypedList(frames * _engine.inputChannels);
+  Float32List get output => _out.asTypedList(frames * _engine.outputChannels);
+
+  void process() {
+    if (_freed) throw StateError('OfflineBlock đã bị dispose');
+    _check(
+      'tc_engine_process_offline',
+      _bindings.tc_engine_process_offline(_engine._h, _in, _out, frames),
+    );
+  }
+
+  void dispose() {
+    if (_freed) return;
+    _freed = true;
+    calloc.free(_in);
+    calloc.free(_out);
   }
 }

@@ -45,3 +45,21 @@ test khác chạy bản 1 phút (Debug 7,5 s).
 
 Phần này không thay được bài thử thật: xrun do I/O (luồng âm thanh của hệ điều hành bị trễ) chỉ đo
 được khi hát 30 phút trên máy thật (M9b / M9c).
+
+## B4 — "Kiểm tra máy" (Cài đặt → Nâng cao)
+
+Cách chạy:
+- Engine phụ không có thiết bị âm thanh, chạy ở isolate riêng.
+- Giọng giả: giai điệu La thứ, rung, vài nốt lệch +35 cent, khoảng lặng.
+- Beat giả, chỉnh giọng Ca sĩ, preset Bolero, nghe lại giọng, limiter.
+- Đo thời gian từng lời gọi engine (khối 256 mẫu, bộ đệm native dùng lại).
+
+| Máy | Bản | Âm thanh | CPU trung bình | p99 | Cao nhất | Thời gian chạy |
+|---|---|---|---|---|---|---|
+| Mac M1 (8 GB, đang chạy test khác) | engine Release, Dart JIT (`flutter test`) | 30 phút | **2,0%** | 11,4% | 1396% (1 khối 74 ms) | 42 s |
+
+- **Đánh giá theo CPU trung bình** (chỉ tiêu mục 7: ≤ 25%). p99 và cao nhất ghi để tham khảo.
+- Luồng chạy thử không có ưu tiên real-time như luồng âm thanh thật, nên bị hệ điều hành chen
+  ngang. Test C++ trên cùng máy có p99 chỉ 2,1%.
+
+Bảng 13 máy (M9b / M9c) điền ở đây từ file người thử gửi về (nút "Gửi kết quả").

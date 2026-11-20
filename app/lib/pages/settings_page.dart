@@ -18,6 +18,7 @@ import '../engine_info.dart';
 import '../widgets/app_ui.dart';
 import '../widgets/separation_panel.dart';
 import '../widgets/soundcard_prompt.dart';
+import 'device_check_page.dart';
 import 'latency_page.dart';
 import 'latency_wizard_page.dart';
 import 'mic_page.dart';
@@ -474,6 +475,14 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
               ),
             ),
+          ListTile(
+            leading: const Icon(Icons.speed),
+            title: const Text('Kiểm tra máy'),
+            subtitle: const Text(
+              'Đo máy có đủ khoẻ để chỉnh giọng mượt không, gửi kết quả cho nhóm phát triển',
+            ),
+            onTap: () => _push(const DeviceCheckPage()),
+          ),
           ListTile(
             leading: const Icon(Icons.bug_report_outlined),
             title: const Text('Nhật ký lỗi'),
