@@ -25,11 +25,18 @@ import 'mic_page.dart';
 import 'onboarding_page.dart';
 import 'test_room_page.dart';
 
-/// Phiên bản app (flutter tool truyền tên bản build lúc biên dịch).
-const appVersion = String.fromEnvironment(
+/// Phiên bản app: tên bản build (flutter tool truyền lúc biên dịch); bản build bằng CI (có
+/// CHUANTONE_COMMIT) kèm số build và commit — "1.0.0 (build 57 · c2f0a09)" — để báo cáo người thử
+/// gửi về biết từ bản nào (M9).
+const appVersion = _commit == ''
+    ? _buildName
+    : '$_buildName (build $_buildNumber · $_commit)';
+const _buildName = String.fromEnvironment(
   'FLUTTER_BUILD_NAME',
   defaultValue: '1.0.0',
 );
+const _buildNumber = String.fromEnvironment('FLUTTER_BUILD_NUMBER');
+const _commit = String.fromEnvironment('CHUANTONE_COMMIT');
 
 /// Mốc phiên của nhật ký thử nghiệm: phiên bản app, tên máy (không có gì định danh người dùng).
 Future<Map<String, Object?>> testLogSession() async {

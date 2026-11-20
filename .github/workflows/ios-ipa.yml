@@ -29,9 +29,14 @@ jobs:
       - name: Build tonecore.xcframework (engine C++ cho iPhone + Simulator)
         run: engine/scripts/build_xcframework.sh
 
+      # Số build = số lượt chạy CI; mã commit hiện trong app (Cài đặt, báo cáo Kiểm tra máy) để biết
+      # báo cáo người thử gửi về từ bản nào (M9).
       - name: Build app iOS release (không ký)
         working-directory: app
-        run: flutter build ios --release --no-codesign
+        run: |
+          flutter build ios --release --no-codesign \
+            --build-number=${{ github.run_number }} \
+            --dart-define=CHUANTONE_COMMIT=${GITHUB_SHA::7}
 
       - name: Đóng gói IPA
         run: |

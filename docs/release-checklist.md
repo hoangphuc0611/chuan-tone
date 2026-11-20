@@ -32,11 +32,11 @@
 |---|---|---|
 | ✅ | Câu xin quyền tiếng Việt | Micro, camera, lưu vào Ảnh, mạng cục bộ (`ios/Runner/Info.plist`) |
 | ⬜ | Bỏ quyền mạng cục bộ nếu máy chủ tách giọng không còn ở Wi-Fi nhà | `NSLocalNetworkUsageDescription` chỉ cần cho máy chủ trên Mac (M6) |
-| ⬜ | `ITSAppUsesNonExemptEncryption = NO` | Chỉ dùng HTTPS của hệ điều hành; thêm để không bị hỏi mỗi lần tải lên |
-| ⬜ | Privacy manifest của app (`PrivacyInfo.xcprivacy`) | Plugin `chuantone_media` đã có; app chưa có. Kiểm các "required reason API" (ngày giờ file, dung lượng ổ đĩa, UserDefaults) |
+| ✅ | `ITSAppUsesNonExemptEncryption = NO` | Đã thêm vào `Info.plist` (chỉ dùng HTTPS của hệ điều hành) |
+| 🟡 | Privacy manifest của app (`PrivacyInfo.xcprivacy`) | Đã rà (2026-11-20): Flutter tự khai FileTimestamp / SystemBootTime cho Dart VM; engine iOS chỉ đọc `mHostTime` + `mach_timebase_info` (không thuộc danh sách); plugin `chuantone_media` có manifest rỗng. Manifest của app (mục "dữ liệu thu thập") viết khi chốt tách giọng |
 | ⬜ | Nhãn quyền riêng tư (App Privacy) | Không có tách giọng: "Không thu thập dữ liệu". Có tách giọng: "Âm thanh — chức năng app, không gắn danh tính, không theo dõi" |
 | ⬜ | Ký app (chứng chỉ phân phối, provisioning) | Hiện chỉ có IPA chưa ký để thử (Sideloadly) |
-| ⬜ | Số phiên bản / số build | `app/pubspec.yaml` đang là `1.0.0+1`. CI nên tự tăng số build |
+| ✅ | Số phiên bản / số build | CI: số build = số lượt chạy, app hiện "1.0.0 (build N · commit)" ở Cài đặt và báo cáo. Tên bản (`1.0.0`) đổi tay ở `app/pubspec.yaml` khi phát hành |
 | ⬜ | Giữ ký hiệu gỡ lỗi (dSYM, `--split-debug-info`) | Để đọc được báo cáo crash |
 | ⬜ | Ảnh màn hình 6,9" (1320 × 2868) và 6,5" | Lượt chạy tự động chụp được. Cần thêm cấu hình máy cỡ đó (hiện có iPhone 13 và SE) |
 | ⬜ | Phân loại tuổi | Dự kiến 4+ (không có nội dung do người khác đăng trong app) |
