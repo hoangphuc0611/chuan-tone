@@ -107,8 +107,7 @@ class BeatPlayer {
   bool pushLoad(const Track* track, bool unload);
   // [RT] Audio thread đã nhận lệnh đổi beat mới nhất (được ghi trạng thái phát).
   bool current() const noexcept {
-    return adoptedGen_.load(std::memory_order_relaxed) ==
-           loadGen_.load(std::memory_order_acquire);
+    return adoptedGen_.load(std::memory_order_relaxed) == loadGen_.load(std::memory_order_acquire);
   }
   void retire(const Track* track, TransposedTrack* tt) noexcept;
   bool available(const TransposedTrack* src, uint64_t frame) const noexcept;

@@ -211,4 +211,4 @@ Mỗi bước: commit + push + CI xanh. Cuối M9a: báo cáo số đo + IPA m�
 
 ## 9. Tiến độ
 
-- [x] B1 (2026-11-20) · [x] B2 (2026-11-20) · [ ] B3 · [ ] B4 · [ ] B5 · [ ] B6 · [ ] B7
+- [x] B1 (2026-11-20) · [x] B2 (2026-11-20) · [x] B3 (2026-11-20, số đo: `docs/m9-results.md`) · [ ] B4 · [ ] B5 · [ ] B6 · [ ] B7

@@ -83,8 +83,19 @@ jobs:
           cmake --preset host-release
           cmake --build --preset host-release
           ./build/host-release/bench/tonecore_bench --benchmark_min_time=0.1s --benchmark_format=console | tee bench.txt
+      # M9 B3: "hát 30 phút" qua cả chuỗi (không NaN / vượt trần / cấp phát, không chậm dần).
+      - name: Hát 30 phút (DSP)
+        working-directory: engine
+        run: |
+          set -o pipefail
+          TC_SOAK_MINUTES=30 ./build/host-release/tests/tonecore_tests \
+            --gtest_filter=RealTime.LongSessionSoak | tee soak.txt
       - uses: actions/upload-artifact@v4
-        with: { name: bench-linux, path: engine/bench.txt }
+        with:
+          name: bench-linux
+          path: |
+            engine/bench.txt
+            engine/soak.txt
 
   # Chấm điểm dò cao độ trên vocadito (CC BY 4.0, 58 MB, cache theo SHA-256 trong script).
   pitch-eval:
