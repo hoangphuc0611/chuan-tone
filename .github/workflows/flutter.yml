@@ -52,11 +52,18 @@ jobs:
         run: echo "version=$(jq -r .flutter .fvmrc)" >> "$GITHUB_OUTPUT"
       - uses: subosito/flutter-action@v2
         with: { flutter-version: "${{ steps.fvm.outputs.version }}", cache: true }
+      # Thử lại tới 3 lần: plugins.gradle.org thỉnh thoảng không trả về kotlin-stdlib cho bản build
+      # Gradle của Flutter SDK (lỗi "Error resolving plugin dev.flutter.flutter-plugin-loader",
+      # 2026-11-20) — không sửa được từ phía dự án.
       - name: Build APK debug (Gradle tự build engine bằng NDK + CMake)
         working-directory: app
         run: |
-          flutter build apk --debug --build-number=${{ github.run_number }} \
-            --dart-define=CHUANTONE_COMMIT=${GITHUB_SHA::7}
+          for i in 1 2 3; do
+            flutter build apk --debug --build-number=${{ github.run_number }} \
+              --dart-define=CHUANTONE_COMMIT=${GITHUB_SHA::7} && break
+            [ "$i" = 3 ] && exit 1
+            echo "Build lỗi, thử lại sau 60 s (lần $i)"; sleep 60
+          done
       - name: Kiểm tra libtonecore.so có trong APK
         run: |
           unzip -l app/build/app/outputs/flutter-apk/app-debug.apk | grep -E "lib/arm64-v8a/libtonecore.so"
@@ -66,8 +73,13 @@ jobs:
         working-directory: app
         run: |
           set -euo pipefail
-          flutter build apk --release --split-per-abi --target-platform android-arm64 \
-            --build-number=${{ github.run_number }} --dart-define=CHUANTONE_COMMIT=${GITHUB_SHA::7}
+          for i in 1 2 3; do
+            flutter build apk --release --split-per-abi --target-platform android-arm64 \
+              --build-number=${{ github.run_number }} \
+              --dart-define=CHUANTONE_COMMIT=${GITHUB_SHA::7} && break
+            [ "$i" = 3 ] && exit 1
+            echo "Build lỗi, thử lại sau 60 s (lần $i)"; sleep 60
+          done
           APK=build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           SIZE=$(stat -c %s "$APK")
           {
