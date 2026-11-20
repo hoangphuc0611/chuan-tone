@@ -40,7 +40,12 @@ Thao tác trong lúc chạy:
 | Mẫu NaN / Inf / vượt 0,99 | 0 (đỉnh 0,982; trần limiter 0,98, cho phép vượt < 1%) |
 | Phát lại khi hết bài | 19 lần |
 
-CI chạy bản 30 phút ở job `bench` (Linux), kết quả trong artifact `bench-linux/soak.txt`. Mọi lần chạy
+CI Linux (job `bench`, runner ubuntu-24.04), 30 phút:
+- CPU trung bình 1,62%, p99 2,36%;
+- trung vị đầu / cuối 88,0 / 89,8 µs, không chậm dần;
+- đỉnh 0,982; phát lại 19 lần.
+
+Kết quả từng lần chạy ở artifact `bench-linux/soak.txt`. Mọi lần chạy
 test khác chạy bản 1 phút (Debug 7,5 s).
 
 Phần này không thay được bài thử thật: xrun do I/O (luồng âm thanh của hệ điều hành bị trễ) chỉ đo
