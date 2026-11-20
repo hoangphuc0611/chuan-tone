@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:chuantone_media/chuantone_media.dart';
 import 'package:flutter/material.dart';
 import 'package:tonecore_flutter/tonecore_flutter.dart';
 
+import '../data/app_health.dart';
 import '../data/app_settings.dart';
 import '../data/song_library.dart';
 import '../data/storage_usage.dart';
@@ -67,6 +69,7 @@ class _SettingsPageState extends State<SettingsPage> {
   InputKind _input = InputKind.auto;
   bool _testLog = TestLog.enabled;
   int _logBytes = 0;
+  AppHealthStats _health = AppHealth.stats;
   String? _server;
   StorageUsage? _usage;
 
@@ -87,6 +90,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final input = await _settings.inputPreference();
     final server = await _settings.separationServer();
     final logBytes = await TestLog.size();
+    await AppHealth.flush();
     if (!mounted) return;
     setState(() {
       _export = export;
@@ -96,6 +100,7 @@ class _SettingsPageState extends State<SettingsPage> {
       _input = input;
       _server = server;
       _logBytes = logBytes;
+      _health = AppHealth.stats;
     });
     await _measure();
   }
@@ -151,6 +156,23 @@ class _SettingsPageState extends State<SettingsPage> {
     await TestLog.flush();
     final f = TestLog.file;
     if (!await f.exists()) return;
+    final ok = await ChuanToneMedia.share(f.path);
+    if (ok == null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Máy này chưa chia sẻ được. File: ${f.path}')),
+      );
+    }
+  }
+
+  /// Nhật ký lỗi + số phiên (M9 B5) → file chữ → bảng chia sẻ.
+  Future<void> _shareHealth() async {
+    final d = await testLogSession();
+    final text =
+        'ChuẩnTone – nhật ký lỗi\n'
+        'Phiên bản ${d['version']} · ${d['model']} · ${d['os']}\n'
+        '${await AppHealth.report()}';
+    final f = File('${Directory.systemTemp.path}/chuantone-nhat-ky-loi.txt');
+    await f.writeAsString(text);
     final ok = await ChuanToneMedia.share(f.path);
     if (ok == null && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -452,6 +474,28 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
               ),
             ),
+          ListTile(
+            leading: const Icon(Icons.bug_report_outlined),
+            title: const Text('Nhật ký lỗi'),
+            subtitle: Text(
+              '${_health.summary} — chỉ lưu trên máy, bấm để gửi nhóm phát triển',
+            ),
+            onTap: _shareHealth,
+            trailing: _health.errors == 0 && _health.abnormalExits == 0
+                ? null
+                : IconButton(
+                    tooltip: 'Xoá nhật ký lỗi',
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () => _confirmDelete(
+                      title: 'Xoá nhật ký lỗi?',
+                      body: 'Xoá các lỗi đã ghi và đếm lại số phiên từ đầu.',
+                      delete: () async {
+                        await AppHealth.clear();
+                        if (mounted) setState(() => _health = AppHealth.stats);
+                      },
+                    ),
+                  ),
+          ),
           ListTile(
             leading: const Icon(Icons.science_outlined),
             title: const Text('Phòng thử'),
