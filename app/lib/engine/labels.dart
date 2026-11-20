@@ -138,19 +138,44 @@ String? tuningNote(SongAnalysis a) {
 }
 
 /// Đoạn đầu / cuối bài ngắn hơn mức này (dạo đầu, phần kết của MV…) không kể là chuyển tone.
-const _edgeSegmentMin = Duration(seconds: 20);
+const edgeSegmentMin = Duration(seconds: 20);
 
-/// "0:00 Am → 1:35 A → 2:40 Am"; null nếu bài không chuyển tone. Đoạn ngắn ở đầu / cuối bài
-/// chỉ bỏ khi hiển thị (bài gốc Lạc Trôi: dạo đầu 18 s, phần kết MV 12 s).
+/// Timeline tone để DÙNG (M9 B2, vấn đề #12): đoạn đầu / cuối bài ngắn hơn [edgeSegmentMin] gộp vào
+/// đoạn kề bên. Bài gốc "Lạc trôi": dạo đầu 18 s dò thành La# trưởng (độ tin cậy 0,47) — trước đây
+/// Màn hát hiện và chỉnh giọng theo tone đó rồi mới sang La thứ. Dùng chung cho chỉnh giọng theo
+/// bài (engine), bản thu và dòng "chuyển tone"; bộ dò giữ nguyên (điểm MIREX M3 không đổi).
+List<KeySegment> effectiveTimeline(List<KeySegment> timeline) {
+  var segs = timeline;
+  if (segs.length > 1 && segs.first.end - segs.first.start < edgeSegmentMin) {
+    final next = segs[1];
+    segs = [
+      KeySegment(
+        start: segs.first.start,
+        end: next.end,
+        key: next.key,
+        confidence: next.confidence,
+      ),
+      ...segs.sublist(2),
+    ];
+  }
+  if (segs.length > 1 && segs.last.end - segs.last.start < edgeSegmentMin) {
+    final prev = segs[segs.length - 2];
+    segs = [
+      ...segs.sublist(0, segs.length - 2),
+      KeySegment(
+        start: prev.start,
+        end: segs.last.end,
+        key: prev.key,
+        confidence: prev.confidence,
+      ),
+    ];
+  }
+  return segs;
+}
+
+/// "0:00 Am → 1:35 A → 2:40 Am"; null nếu bài không chuyển tone (theo [effectiveTimeline]).
 String? modulationSummary(SongAnalysis a) {
-  if (!a.hasModulation) return null;
-  var segs = a.timeline;
-  if (segs.length > 1 && segs.first.end - segs.first.start < _edgeSegmentMin) {
-    segs = segs.sublist(1);
-  }
-  if (segs.length > 1 && segs.last.end - segs.last.start < _edgeSegmentMin) {
-    segs = segs.sublist(0, segs.length - 1);
-  }
+  final segs = effectiveTimeline(a.timeline);
   if (segs.length < 2) return null;
   return [
     for (final (i, s) in segs.indexed)

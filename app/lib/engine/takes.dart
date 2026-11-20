@@ -7,6 +7,7 @@ import '../data/latency_history.dart';
 import '../data/song_ref.dart';
 import '../data/take_store.dart';
 import 'audio_service.dart';
+import 'labels.dart';
 import 'take_alignment.dart';
 
 /// Thông số chuỗi giọng / trộn chụp lúc bấm Thu (Phòng thử) — đưa vào [TakeInfo] khi dừng.
@@ -40,8 +41,11 @@ class TakeSnapshot {
       correction: s.correction,
       retuneMs: s.correctionRetuneMs,
       key: s.currentKey,
-      songTimeline: s.followSong && analysis != null && analysis.hasModulation
-          ? analysis.timeline
+      songTimeline: s.followSong && analysis != null
+          ? switch (effectiveTimeline(analysis.timeline)) {
+              final t when t.length > 1 => t,
+              _ => const [],
+            }
           : const [],
       tuningCents: analysis?.tuningCents ?? 0,
       tempoBpm: e.tempo,

@@ -96,6 +96,42 @@ void main() {
   }
 
   test(
+    'chỉnh giọng theo bài: đoạn dạo ngắn đầu bài không kéo tone (#12)',
+    () async {
+      expect(await service.ensureStarted(), isTrue);
+      const am = MusicKey(9, MusicScale.naturalMinor);
+      KeySegment seg(int a, int b, MusicKey k, double c) => KeySegment(
+        start: Duration(seconds: a),
+        end: Duration(seconds: b),
+        key: k,
+        confidence: c,
+      );
+      // "Lạc trôi": dạo đầu 18 s dò thành La# trưởng (độ tin cậy 0,47).
+      service.applySongAnalysis(
+        SongAnalysis(
+          duration: const Duration(seconds: 260),
+          sampleRate: 48000,
+          channels: 2,
+          key: am,
+          keyConfidence: 0.9,
+          tuningCents: 0,
+          bpm: 75,
+          bpmConfidence: 0.8,
+          integratedLufs: -14,
+          samplePeakDb: -1,
+          timeline: [
+            seg(0, 18, const MusicKey(10, MusicScale.major), 0.47),
+            seg(18, 260, am, 0.9),
+          ],
+        ),
+      );
+      run(4);
+      expect(engine.key, am); // ngay từ 0:00, không phải La# trưởng
+    },
+    skip: skip,
+  );
+
+  test(
     'mở bài: nạp nhạc, thể loại theo tên, dò tone rồi chỉnh giọng theo bài',
     () async {
       final c = make();

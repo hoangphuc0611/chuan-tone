@@ -286,7 +286,7 @@ class AudioService extends ChangeNotifier {
     e.tuningCents = a?.tuningCents ?? 0;
     e.tempo = a?.bpm ?? 0; // delay theo nhịp bài; chưa rõ → engine dùng 100 BPM
     if (followSong && a != null && a.timeline.isNotEmpty) {
-      e.setKeyTimeline(a.timeline);
+      e.setKeyTimeline(effectiveTimeline(a.timeline));
     } else {
       e.key = key;
     }

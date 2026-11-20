@@ -104,6 +104,39 @@ void main() {
       );
     });
 
+    test('timeline dùng: gộp đoạn ngắn ở đầu / cuối bài (#12)', () {
+      const aSharp = MusicKey(10, MusicScale.major);
+      const bm = MusicKey(11, MusicScale.naturalMinor);
+      KeySegment seg(int a, int b, MusicKey k, [double c = 0.9]) => KeySegment(
+        start: Duration(seconds: a),
+        end: Duration(seconds: b),
+        key: k,
+        confidence: c,
+      );
+      // Lạc trôi: dạo đầu 18 s La# trưởng (0,47), phần kết 12 s → cả bài La thứ, từ 0:00 tới hết.
+      final t = effectiveTimeline([
+        seg(0, 18, aSharp, 0.47),
+        seg(18, 260, _am),
+        seg(260, 272, bm),
+      ]);
+      expect(t, hasLength(1));
+      expect(t.single.key, _am);
+      expect(t.single.start, Duration.zero);
+      expect(t.single.end, const Duration(seconds: 272));
+      // Chuyển tone thật ở giữa vẫn giữ; chỉ đoạn đầu ngắn gộp vào.
+      final m = effectiveTimeline([
+        seg(0, 15, aSharp),
+        seg(15, 95, _am),
+        seg(95, 210, _a),
+      ]);
+      expect([for (final s in m) s.key], [_am, _a]);
+      expect(m.first.start, Duration.zero);
+      expect(m.last.start, const Duration(seconds: 95));
+      // Một đoạn / không có gì: giữ nguyên.
+      expect(effectiveTimeline([seg(0, 10, _am)]), hasLength(1));
+      expect(effectiveTimeline(const []), isEmpty);
+    });
+
     test('tuning chỉ nhắc khi lệch rõ', () {
       expect(tuningNote(_analysis()), contains('+18 cent'));
       expect(tuningNote(_analysis(tuning: -7.6)), contains('−8 cent'));
