@@ -166,4 +166,21 @@ Chưa làm: mẫu video xuất 9:16 (vẽ bằng Swift / AVFoundation), để sa
   - Bảng Tách giọng: nút chính màu chính (trước là tông vàng phụ, đục trên nền tối), nhãn "Giữ
     giọng ca sĩ gốc" một dòng phía trên thanh trượt (vấn đề #13). Lượt chạy tự động với máy chủ
     thật trên giao diện mới: bài 4:32 tách xong sau 58 s (máy chủ 54 s).
-
+- [x] **Rà toàn bộ giao diện** (2026-11-20). Lượt chạy tự động chụp thêm: tab Bài hát, tab Bản thu,
+  đếm ngược khi thu, kết quả đo độ trễ (đồng hồ kim), Phòng thử, Đo độ trễ (kỹ thuật) — 48 màn × 2 cỡ
+  máy. Đã sửa:
+  - **Màn hát:** dòng tone + nút tone ± luôn ghim ở trên, không bị cuộn đi. Màn đủ cao (6,1" chữ
+    thường) ghim cả đồng hồ cao độ và lời; màn thấp / chữ to thì hai phần này đứng đầu vùng cuộn.
+    Tên tone luôn một dòng (tự thu nhỏ). Trước đây: chỉnh Vang là đẩy mất tone; iPhone SE chữ 130%
+    mất hẳn tone và đồng hồ cao độ.
+  - **Hướng dẫn:** ô minh hoạ cao ~20% màn hình (110–180). iPhone SE chữ to không còn cắt chữ bước 4
+    / bước 6.
+  - **Nút "tonal" còn sót** (vàng ô-liu đục trên nền tối): "Chọn / Đổi file lời" → nút chính;
+    "Chia sẻ" ở thẻ đã xuất, "Tách" ở Phân tích bài → nút viền.
+  - **Đo độ trễ (kỹ thuật):** lịch sử hiện tên đường âm thanh tiếng Việt, số có dấu phẩy.
+  - Không phải lỗi trên máy thật:
+    - "→" và "⋮" không có trong font Be Vietnam Pro: iOS / Android tự lấy từ font hệ thống, chỉ
+      ảnh test (không có font dự phòng) thấy ô trống.
+    - Viền đen quanh nút nổi / thông báo trong ảnh test: cách trình vẽ của test vẽ bóng đổ.
+  - Chưa xem được bằng ảnh, cần iPhone: chế độ quay video (camera), video xuất thật, các hộp thoại
+    lỗi của hệ điều hành (quyền micro / ảnh bị từ chối).

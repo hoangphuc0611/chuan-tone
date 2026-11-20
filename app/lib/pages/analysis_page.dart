@@ -203,7 +203,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
                 child: const Text('Huỷ'),
               )
             : _vocals == null && _server != null
-            ? FilledButton.tonal(
+            ? OutlinedButton(
                 onPressed: _analyzing ? null : _separate,
                 child: const Text('Tách'),
               )

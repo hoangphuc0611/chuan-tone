@@ -252,13 +252,18 @@ class _OnboardingPageState extends State<OnboardingPage> {
     ],
   );
 
-  /// Ô minh hoạ đầu mỗi bước: nền ấm, icon lớn trong vòng tròn.
+  /// Ô minh hoạ đầu mỗi bước: nền ấm, icon lớn trong vòng tròn. Cao ~20% màn hình (110–180): iPhone SE
+  /// chữ to vẫn đủ chỗ cho chữ của bước, không bị cắt ngang ở mép vùng cuộn.
   Widget _icon(BuildContext context, IconData icon, {Color? color}) {
     final cs = Theme.of(context).colorScheme;
+    final height = (MediaQuery.sizeOf(context).height * 0.2).clamp(
+      110.0,
+      180.0,
+    );
     return Padding(
       padding: const EdgeInsets.only(top: 8, bottom: 20),
       child: Container(
-        height: 180,
+        height: height,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -270,7 +275,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
         ),
         child: IconBadge(
           icon,
-          size: 112,
+          size: height * 0.62,
           background: cs.surfaceContainerLowest,
           foreground: color ?? cs.primary,
         ),

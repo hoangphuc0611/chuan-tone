@@ -28,6 +28,7 @@ import 'package:chuantone/widgets/analysis_widgets.dart';
 import 'package:chuantone/widgets/error_text.dart';
 import 'package:chuantone/widgets/gain_slider.dart';
 import 'package:chuantone/widgets/separation_panel.dart';
+import 'package:chuantone/widgets/latency_gauge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -396,6 +397,9 @@ void main() {
                 f,
                 delta,
                 maxScrolls: 30,
+                // Vùng cuộn dọc trên cùng (sau cùng trong cây): bảng dưới đang mở, hoặc phần nút
+                // chỉnh của Màn hát (phần ghim tone ở trên cũng là vùng cuộn nhưng không phải chỗ cần
+                // tìm).
                 scrollable: find
                     .byWidgetPredicate(
                       (w) =>
@@ -403,7 +407,7 @@ void main() {
                           w.axisDirection == AxisDirection.down,
                     )
                     .hitTestable()
-                    .first,
+                    .last,
               );
             } on StateError {
               // hết chỗ cuộn theo chiều này
@@ -623,8 +627,13 @@ void main() {
         await shot('man-hat-bolero-vang');
 
         // ---- Nhiệm vụ 5: thu 30 giây → nghe lại → nhạc nhỏ đi → xuất video → lưu Ảnh ----
+        // Dừng nhạc rồi mới Thu: app đếm ngược 3 giây (nhạc đang phát thì thu ngay).
+        await tapTip('Tạm dừng');
+        await idle(const Duration(milliseconds: 500));
         await tapText('Thu');
         final recStart = DateTime.now();
+        await tester.pump(const Duration(milliseconds: 300));
+        await camera.shot(tester, 'dem-nguoc'); // số đếm ngược to giữa màn
         await wait(() => showsPart('Dừng'), reason: 'không bắt đầu thu');
         notes.add('Bấm Thu → bắt đầu thu: ${secs(elapsed(recStart))}');
         await idle(const Duration(seconds: 5));
@@ -742,6 +751,13 @@ void main() {
         await wait(() => shows('Nghe lại & chỉnh'));
         await shot('mo-lai-ban-thu');
         await toHome();
+        await tapTip('Bài hát');
+        await idle(const Duration(seconds: 1));
+        await shot('tab-bai-hat');
+        await tapTip('Bản thu');
+        await idle(const Duration(seconds: 1));
+        await shot('tab-ban-thu');
+        await toHome();
 
         // ---- Cài đặt ----
         await tapTip('Cài đặt');
@@ -757,11 +773,37 @@ void main() {
         await shot('micro');
         await back();
         await idle(const Duration(milliseconds: 800));
+        // Rút tai nghe (giả lập) để đo qua loa: tiếng loa lọt lại vào micro.
+        phone.leak = 0.25;
+        service.engine!.setRouteHint(AudioRoute.speaker);
         await tapText('Đo độ trễ');
         await idle(const Duration(seconds: 1));
         await shot('do-do-tre');
-        await back();
+        await tapText(
+          shows('Vẫn đo với thiết bị này') ? 'Vẫn đo với thiết bị này' : 'Tiếp',
+        );
+        await wait(() => shows('Bắt đầu đo'));
+        await tapText('Bắt đầu đo');
+        await wait(
+          () => shows('Xong') || shows('Chưa đo được'),
+          max: const Duration(seconds: 30),
+          reason: 'đo độ trễ chưa xong',
+        );
+        await shot('do-do-tre-ket-qua');
+        expect(
+          find.byType(LatencyGauge),
+          findsOneWidget,
+          reason: 'đo qua loa phải ra kết quả có đồng hồ kim',
+        );
+        if (shows('Xong')) {
+          await tapText('Xong');
+        } else {
+          await back();
+        }
         await idle(const Duration(milliseconds: 800));
+        // Cắm lại tai nghe như trước.
+        phone.leak = 0;
+        service.engine!.setRouteHint(AudioRoute.wired);
         // M9 B4: Kiểm tra máy (engine phụ ở isolate riêng, đồng hồ thật).
         await tapText('Kiểm tra máy');
         await idle(const Duration(seconds: 1));
@@ -777,6 +819,16 @@ void main() {
         await scrollTo(find.text('Gửi kết quả'));
         expect(find.textContaining('một nhân'), findsOneWidget);
         await shot('kiem-tra-may');
+        await back();
+        await idle(const Duration(milliseconds: 800));
+        await tapText('Phòng thử');
+        await idle(const Duration(seconds: 2));
+        await shot('phong-thu');
+        await back();
+        await idle(const Duration(milliseconds: 800));
+        await tapText('Đo độ trễ (kỹ thuật)');
+        await idle(const Duration(seconds: 1));
+        await shot('do-do-tre-ky-thuat');
         await back();
         await idle(const Duration(milliseconds: 800));
         await toHome();

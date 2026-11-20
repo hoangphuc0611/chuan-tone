@@ -391,6 +391,55 @@ class _SingPageState extends State<_SingScreen> with WidgetsBindingObserver {
     final pb = c.playback;
     final sep = c.sepProgress;
     final countdown = c.countdown;
+    // Phần ghim (luôn thấy khi hát — CLAUDE.md mục 5: tone hiện tại thật to, đồng hồ cao độ, lời):
+    // tone, nút tone ±, đồng hồ cao độ, lời. Phần dưới (chỉnh giọng, thể loại, vang, tách giọng) cuộn
+    // riêng. Trước đây cả màn cuộn chung: màn 6,1" cao hơn màn hình một chút nên chỉnh Vang là đẩy
+    // mất dòng tone; iPhone SE chữ to thì mất hẳn tone và đồng hồ cao độ.
+    final tone = [
+      KeyedSubtree(
+        key: _toneKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _KeyHeader(c: c),
+            const SizedBox(height: 8),
+            TransposeControl(
+              label: null,
+              value: pb?.transpose ?? 0,
+              audible: pb?.audibleTranspose ?? 0,
+              progress: pb?.transposeProgress ?? 1,
+              onChanged: c.setTranspose,
+              enabled: pb != null && pb.hasBeat && !c.recording,
+            ),
+            if (c.recording)
+              Text(
+                'Đang thu: tone được giữ nguyên.',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall,
+              ),
+          ],
+        ),
+      ),
+    ];
+    // Đồng hồ cao độ + lời: ghim khi màn đủ cao, không thì đứng đầu vùng cuộn (mặc định vẫn thấy).
+    final live = [
+      const SizedBox(height: 8),
+      ValueListenableBuilder(
+        valueListenable: c.pitch,
+        builder: (context, pitch, _) => PitchMeter(state: pitch, compact: true),
+      ),
+      if (c.lyrics case final lyrics?)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: _StageCard(
+            child: LyricsView(
+              lyrics: lyrics,
+              offsetMs: c.lyricsOffsetMs,
+              position: c.position,
+            ),
+          ),
+        ),
+    ];
     return Column(
       children: [
         if (c.loading) const LinearProgressIndicator(),
@@ -398,159 +447,173 @@ class _SingPageState extends State<_SingScreen> with WidgetsBindingObserver {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (c.cameraOn) ...[
-                      Center(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(cardRadius),
-                          child: const SizedBox(
-                            height: 280,
-                            child: AspectRatio(
-                              aspectRatio: 9 / 16,
-                              child: CameraPreviewView(),
-                            ),
+              LayoutBuilder(
+                builder: (context, box) {
+                  // Màn đủ cao (iPhone 6,1" chữ thường: ~590 pt) ghim cả đồng hồ cao độ và lời; màn
+                  // thấp / chữ to chỉ ghim tone (iPhone SE chữ 130%: phần ghim đủ cả sẽ chiếm > 2/3).
+                  final roomy =
+                      box.maxHeight >=
+                      520 * MediaQuery.textScalerOf(context).scale(1);
+                  return Column(
+                    children: [
+                      // Cao tự nhiên, có trần (chữ rất to: phần ghim tự cuộn bên trong, không tràn).
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: box.maxHeight * (roomy ? 0.7 : 0.5),
+                        ),
+                        child: SingleChildScrollView(
+                          key: const ValueKey('sing-pinned'),
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [...tone, if (roomy) ...live],
                           ),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                    ],
-                    KeyedSubtree(
-                      key: _toneKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _KeyHeader(c: c),
-                          const SizedBox(height: 8),
-                          TransposeControl(
-                            label: null,
-                            value: pb?.transpose ?? 0,
-                            audible: pb?.audibleTranspose ?? 0,
-                            progress: pb?.transposeProgress ?? 1,
-                            onChanged: c.setTranspose,
-                            enabled: pb != null && pb.hasBeat && !c.recording,
-                          ),
-                          if (c.recording)
-                            Text(
-                              'Đang thu: tone được giữ nguyên.',
-                              textAlign: TextAlign.center,
-                              style: theme.textTheme.bodySmall,
-                            ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    ValueListenableBuilder(
-                      valueListenable: c.pitch,
-                      builder: (context, pitch, _) =>
-                          PitchMeter(state: pitch, compact: true),
-                    ),
-                    if (c.lyrics case final lyrics?)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: _StageCard(
-                          child: LyricsView(
-                            lyrics: lyrics,
-                            offsetMs: c.lyricsOffsetMs,
-                            position: c.position,
-                          ),
-                        ),
-                      ),
-                    const SizedBox(height: 8),
-                    _StageCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          KeyedSubtree(
-                            key: _correctionKey,
-                            child: _CorrectionPicker(c: c),
-                          ),
-                          const SizedBox(height: 16),
-                          if (c.service.usingSoundcardFx)
-                            _SoundcardFx(c: c)
-                          else ...[
-                            _GenreChips(c: c),
-                            GainSlider(
-                              label: 'Vang',
-                              value: c.service.fxMix,
-                              max: 2,
-                              onChanged: c.service.genre == Genre.dry
-                                  ? null
-                                  : c.setFxMix,
-                            ),
-                          ],
-                          if (c.hasStems)
-                            GainSlider(
-                              label: 'Giữ giọng ca sĩ gốc',
-                              value: c.service.vocalGain,
-                              onChanged: c.setVocalGain,
-                            ),
-                        ],
-                      ),
-                    ),
-                    if (sep == null && c.sepPending != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Card(
-                          key: const ValueKey('sing-sep-pending'),
-                          color: theme.colorScheme.secondaryContainer,
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Text(
-                                  'Tách giọng ca sĩ chưa xong.',
-                                  style: theme.textTheme.titleSmall?.copyWith(
-                                    color:
-                                        theme.colorScheme.onSecondaryContainer,
+                      Expanded(
+                        child: SingleChildScrollView(
+                          key: const ValueKey('sing-controls'),
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (!roomy) ...[
+                                ...live,
+                                const SizedBox(height: 8),
+                              ],
+                              if (c.cameraOn) ...[
+                                Center(
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(
+                                      cardRadius,
+                                    ),
+                                    child: const SizedBox(
+                                      height: 280,
+                                      child: AspectRatio(
+                                        aspectRatio: 9 / 16,
+                                        child: CameraPreviewView(),
+                                      ),
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(height: 8),
-                                Wrap(
-                                  alignment: WrapAlignment.end,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  spacing: 8,
+                              ],
+                              _StageCard(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
                                   children: [
-                                    TextButton(
-                                      onPressed: c.discardSeparation,
-                                      child: const Text('Bỏ'),
+                                    KeyedSubtree(
+                                      key: _correctionKey,
+                                      child: _CorrectionPicker(c: c),
                                     ),
-                                    FilledButton(
-                                      onPressed: c.resumeSeparation,
-                                      child: const Text('Tiếp tục tách'),
-                                    ),
+                                    const SizedBox(height: 16),
+                                    if (c.service.usingSoundcardFx)
+                                      _SoundcardFx(c: c)
+                                    else ...[
+                                      _GenreChips(c: c),
+                                      GainSlider(
+                                        label: 'Vang',
+                                        value: c.service.fxMix,
+                                        max: 2,
+                                        onChanged: c.service.genre == Genre.dry
+                                            ? null
+                                            : c.setFxMix,
+                                      ),
+                                    ],
+                                    if (c.hasStems)
+                                      GainSlider(
+                                        label: 'Giữ giọng ca sĩ gốc',
+                                        value: c.service.vocalGain,
+                                        onChanged: c.setVocalGain,
+                                      ),
                                   ],
                                 ),
-                              ],
-                            ),
+                              ),
+                              if (sep == null && c.sepPending != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: Card(
+                                    key: const ValueKey('sing-sep-pending'),
+                                    color: theme.colorScheme.secondaryContainer,
+                                    child: Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                        16,
+                                        12,
+                                        8,
+                                        8,
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.stretch,
+                                        children: [
+                                          Text(
+                                            'Tách giọng ca sĩ chưa xong.',
+                                            style: theme.textTheme.titleSmall
+                                                ?.copyWith(
+                                                  color: theme
+                                                      .colorScheme
+                                                      .onSecondaryContainer,
+                                                ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Wrap(
+                                            alignment: WrapAlignment.end,
+                                            crossAxisAlignment:
+                                                WrapCrossAlignment.center,
+                                            spacing: 8,
+                                            children: [
+                                              TextButton(
+                                                onPressed: c.discardSeparation,
+                                                child: const Text('Bỏ'),
+                                              ),
+                                              FilledButton(
+                                                onPressed: c.resumeSeparation,
+                                                child: const Text(
+                                                  'Tiếp tục tách',
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              if (sep != null)
+                                _StageCard(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    12,
+                                    12,
+                                    4,
+                                    4,
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      Text(separationStageLabel(sep)),
+                                      const SizedBox(height: 6),
+                                      LinearProgressIndicator(
+                                        value: sep.fraction,
+                                      ),
+                                      Align(
+                                        alignment: Alignment.centerRight,
+                                        child: TextButton(
+                                          onPressed: c.cancelSeparation,
+                                          child: const Text('Huỷ tách giọng'),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
                       ),
-                    if (sep != null)
-                      _StageCard(
-                        padding: const EdgeInsets.fromLTRB(12, 12, 4, 4),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Text(separationStageLabel(sep)),
-                            const SizedBox(height: 6),
-                            LinearProgressIndicator(value: sep.fraction),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: TextButton(
-                                onPressed: c.cancelSeparation,
-                                child: const Text('Huỷ tách giọng'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
+                    ],
+                  );
+                },
               ),
               if (countdown != null) _CountdownOverlay(count: countdown),
             ],
@@ -595,19 +658,24 @@ class _KeyHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          opening
-              ? 'Đang mở bài…'
-              : detecting
-              ? 'Đang dò tone…'
-              : keyLabel(c.currentKey),
-          key: const ValueKey('sing-key'),
-          textAlign: TextAlign.center,
-          style:
-              (opening || detecting
-                      ? theme.textTheme.headlineSmall
-                      : theme.textTheme.displaySmall)
-                  ?.copyWith(fontWeight: FontWeight.w700),
+        // Luôn một dòng (màn hẹp / chữ to: thu nhỏ thay vì xuống dòng, đỡ chiếm chỗ phần ghim).
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            opening
+                ? 'Đang mở bài…'
+                : detecting
+                ? 'Đang dò tone…'
+                : keyLabel(c.currentKey),
+            key: const ValueKey('sing-key'),
+            maxLines: 1,
+            textAlign: TextAlign.center,
+            style:
+                (opening || detecting
+                        ? theme.textTheme.headlineSmall
+                        : theme.textTheme.displaySmall)
+                    ?.copyWith(fontWeight: FontWeight.w700),
+          ),
         ),
         if (!opening && !detecting)
           Text(
@@ -961,7 +1029,7 @@ class _LyricsSheet extends StatelessWidget {
                   : 'Đã có lời: ${lyrics.lines.length} dòng.',
             ),
             const SizedBox(height: 12),
-            FilledButton.tonalIcon(
+            FilledButton.icon(
               onPressed: onPick,
               icon: const Icon(Icons.file_open_outlined),
               label: Text(lyrics == null ? 'Chọn file lời' : 'Đổi file lời'),

@@ -199,6 +199,12 @@ class _LatencyPageState extends State<LatencyPage> {
     final date = parts[0].length >= 16
         ? parts[0].substring(0, 16).replaceFirst('T', ' ')
         : parts[0];
-    return '$date · ${parts[4]} · ${parts[9]} ms';
+    // Tên đường âm thanh tiếng Việt, số có dấu phẩy (như các màn khác); file sao chép vẫn là CSV gốc.
+    final route = AudioRoute.values.asNameMap()[parts[4]];
+    final ms = double.tryParse(parts[9]);
+    final msText = ms == null
+        ? parts[9]
+        : ms.toStringAsFixed(1).replaceAll('.', ',');
+    return '$date · ${route == null ? parts[4] : routeLabel(route)} · $msText ms';
   }
 }

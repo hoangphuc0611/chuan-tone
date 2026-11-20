@@ -1048,7 +1048,7 @@ class _ExportResult extends StatelessWidget {
                     icon: const Icon(Icons.photo_library),
                     label: const Text('Lưu vào Ảnh'),
                   ),
-                FilledButton.tonalIcon(
+                OutlinedButton.icon(
                   onPressed: onShare,
                   icon: const Icon(Icons.ios_share),
                   label: const Text('Chia sẻ'),
