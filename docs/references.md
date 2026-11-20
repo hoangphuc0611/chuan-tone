@@ -52,6 +52,7 @@ Mọi thuật toán trong ToneCore được viết từ các nguồn công khai 
 - Z. Průša, N. Holighaus, *Phase vocoder done right* (PGHI), EUSIPCO 2017 (ứng viên B4).
 - J. Driedger, M. Müller, S. Ewert, *Improving Time-Scale Modification of Music Signals Using Harmonic-Percussive Separation*, IEEE Signal Processing Letters 2014 — đã thử ở B4 (HPSS cuốn chiếu + OLA cho phần bộ gõ), không dùng (xem `docs/stretch-results.md`).
 - F. J. Harris, *On the Use of Windows for Harmonic Analysis with the Discrete Fourier Transform*, Proc. IEEE 1978 — cửa sổ Blackman–Harris trong chỉ số đo phổ (`tests/util/stretch_eval.cpp`).
+- A. H. Gray, J. D. Markel, *Distance measures for speech processing*, IEEE TASSP 1976 — khoảng cách phổ log (RMS chênh dB) dùng làm thước đo "phơ" so với đáp án dựng sẵn (`tests/util/stretch_eval.cpp`, M9 B7).
 
 ## Dò tone, BPM, loudness (M3)
 

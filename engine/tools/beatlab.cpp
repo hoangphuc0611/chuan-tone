@@ -36,14 +36,16 @@ using namespace tonecore;
 namespace {
 
 int usage() {
-  std::fprintf(stderr,
-               "Cách dùng:\n"
-               "  beatlab render <file> -o out.wav --semitones N [--algo pv|pv-basic|signalsmith]\n"
-               "                 [--start giây] [--dur giây] [--fft 4096] [--hop 1024]\n"
-               "  (cả ba lệnh) --transients on|off  --anchor-up 0.5  --anchor-down 1\n"
-               "  beatlab eval [--algo pv,signalsmith] [--levels -6,-4,-2,2,4,6]\n"
-               "               [--fft 4096] [--hop 1024]\n"
-               "  beatlab suite <thư mục> [--algo pv,signalsmith] [--levels -6,…]\n");
+  std::fprintf(
+      stderr,
+      "Cách dùng:\n"
+      "  beatlab render <file> -o out.wav --semitones N [--algo pv|pv-basic|signalsmith]\n"
+      "                 [--start giây] [--dur giây] [--fft 4096] [--hop 1024]\n"
+      "  (cả ba lệnh) --transients on|off  --anchor-up 0.5  --anchor-down 1\n"
+      "  beatlab eval [--algo pv,signalsmith] [--levels -6,-4,-2,2,4,6]\n"
+      "               [--fft 4096] [--hop 1024]\n"
+      "  beatlab suite <thư mục> [--algo pv,signalsmith] [--levels -6,…]\n"
+      "  beatlab phasiness [--algo pv,signalsmith] [--levels 2,4,6] [--fft …] [--hop …]\n");
   return 2;
 }
 
@@ -337,10 +339,64 @@ int cmdEval(int argc, char** argv) {
 
 }  // namespace
 
+// (M9 B7) Độ "phơ" trên tín hiệu có cao độ di động (rung, chorus, lướt nốt): khoảng cách phổ log
+// so với đáp án dựng sẵn ở đúng mức tone (test::movingPitchSignal). Càng nhỏ càng sát đáp án.
+int cmdPhasiness(int argc, char** argv) {
+  std::vector<std::string> algos = {"pv"};
+  if (haveSignalsmith()) algos.push_back("signalsmith");
+  std::vector<double> levels = {2, 4, 6};
+  PitchShiftConfig cfg;
+  for (int i = 2; i < argc; ++i) {
+    const std::string a = argv[i];
+    const bool hasVal = i + 1 < argc;
+    if (a == "--algo" && hasVal) {
+      algos = splitList(argv[++i]);
+    } else if (a == "--levels" && hasVal) {
+      levels.clear();
+      for (const auto& s : splitList(argv[++i])) levels.push_back(std::atof(s.c_str()));
+    } else if (a == "--fft" && hasVal) {
+      cfg.fftSize = std::atoi(argv[++i]);
+    } else if (a == "--hop" && hasVal) {
+      cfg.synthesisHop = std::atoi(argv[++i]);
+    } else if (a == "--transients" && hasVal) {
+      cfg.transients = std::strcmp(argv[++i], "off") != 0;
+    } else {
+      return usage();
+    }
+  }
+  const char* names[] = {"hợp âm rung + chorus", "giai điệu lướt nốt + pad"};
+  std::printf("PitchShifter: fft %d, hop %d\n\n", cfg.fftSize, cfg.synthesisHop);
+  std::printf(
+      "| Thuật toán, mức | %s (dB) | %s (dB) | dưới 1,2 kHz / trên (dB, hai tín hiệu) |\n"
+      "|---|---|---|---|\n",
+      names[0], names[1]);
+  for (const auto& algo : algos) {
+    for (const double n : levels) {
+      const double beta = std::pow(2.0, n / 12.0);
+      double d[2];
+      double bands[2][2];
+      for (int kind = 0; kind < 2; ++kind) {
+        const auto src = test::movingPitchSignal(kind, 1.0);
+        const auto ideal = test::movingPitchSignal(kind, beta);
+        const auto y = shift(algo, src.data(), src.size() / 2, 2, 48000.0, n, cfg);
+        d[kind] = y.empty() ? test::kNaN : test::logSpectralDistanceDb(y, ideal);
+        bands[kind][0] = test::logSpectralDistanceDb(y, ideal, 48000.0, 60.0, 1200.0);
+        bands[kind][1] = test::logSpectralDistanceDb(y, ideal, 48000.0, 1200.0, 8000.0);
+      }
+      std::printf("| %s %+g | %s | %s | %s / %s · %s / %s |\n", algo.c_str(), n,
+                  fmt(d[0], "%.2f").c_str(), fmt(d[1], "%.2f").c_str(),
+                  fmt(bands[0][0], "%.2f").c_str(), fmt(bands[0][1], "%.2f").c_str(),
+                  fmt(bands[1][0], "%.2f").c_str(), fmt(bands[1][1], "%.2f").c_str());
+    }
+  }
+  return 0;
+}
+
 int main(int argc, char** argv) {
   if (argc < 2) return usage();
   if (std::strcmp(argv[1], "render") == 0) return cmdRender(argc, argv);
   if (std::strcmp(argv[1], "eval") == 0) return cmdEval(argc, argv);
   if (std::strcmp(argv[1], "suite") == 0) return cmdSuite(argc, argv);
+  if (std::strcmp(argv[1], "phasiness") == 0) return cmdPhasiness(argc, argv);
   return usage();
 }

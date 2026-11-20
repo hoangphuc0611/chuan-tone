@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <complex>
+#include <functional>
 
 #include "decode/decoder.h"
 #include "dsp/fft.h"
@@ -481,6 +482,126 @@ std::vector<int> misplacedNotes(const MelodySignal& sig, const std::vector<float
     if (!ok) bad.push_back(static_cast<int>(k));
   }
   return bad;
+}
+
+std::vector<float> movingPitchSignal(int kind, double ratio, double seconds, double rate) {
+  const auto frames = static_cast<std::size_t>(seconds * rate);
+  std::vector<double> l(frames, 0.0);
+  std::vector<double> r(frames, 0.0);
+  // Một giọng: f0(t) Hz (trước khi nhân ratio), biên độ, pan (0 = trái, 1 = phải).
+  auto voice = [&](const std::function<double(double)>& f0, double amp, double pan,
+                   const std::function<double(double)>& env) {
+    constexpr int kMaxH = 24;
+    double phase[kMaxH] = {};
+    const double gl = amp * std::cos(0.5 * kPi * pan);
+    const double gr = amp * std::sin(0.5 * kPi * pan);
+    for (std::size_t i = 0; i < frames; ++i) {
+      const double t = static_cast<double>(i) / rate;
+      const double f = f0(t);
+      const double e = env(t);
+      double v = 0.0;
+      for (int h = 1; h <= kMaxH; ++h) {
+        if (f * h > 5500.0) break;  // chỉ hoạ âm gốc ≤ 5,5 kHz (giống nhau ở mọi ratio)
+        phase[h - 1] += 2.0 * kPi * f * h * ratio / rate;
+        v += std::sin(phase[h - 1]) / std::pow(h, 1.2);
+      }
+      l[i] += gl * e * v;
+      r[i] += gr * e * v;
+    }
+  };
+  auto cents = [](double c) { return std::pow(2.0, c / 1200.0); };
+  auto fadeIo = [seconds](double t) { return std::min({1.0, t / 0.05, (seconds - t) / 0.05}); };
+  if (kind == 0) {
+    const int notes[] = {45, 52, 57, 61};  // La – Mi – La – Đô#
+    for (int k = 0; k < 4; ++k) {
+      const double base = midiToHz(notes[k]);
+      const double rate5 = 5.0 + 0.3 * k;
+      const double ph = 1.7 * k;
+      for (int chorus = 0; chorus < 2; ++chorus) {
+        const double det = chorus == 0 ? 1.0 : cents(7.0);
+        voice(
+            [=](double t) { return base * det * cents(35.0 * std::sin(2 * kPi * rate5 * t + ph)); },
+            chorus == 0 ? 0.07 : 0.05, k % 2 == 0 ? 0.35 : 0.65, fadeIo);
+      }
+    }
+  } else {
+    // Pad Rê – La (đứng yên) + giai điệu: mỗi 0,5 s một nốt, lướt 60 ms sang nốt kế, rung sau 150
+    // ms.
+    for (const int m : {50, 57}) {
+      const double base = midiToHz(m);
+      voice([=](double) { return base; }, 0.06, 0.5, fadeIo);
+    }
+    const int mel[] = {69, 72, 74, 76, 74, 72, 71, 69};
+    voice(
+        [&](double t) {
+          const double pos = t / 0.5;
+          const auto k = static_cast<std::size_t>(pos);
+          const double a = midiToHz(mel[k % 8]);
+          const double b = midiToHz(mel[(k + 1) % 8]);
+          const double into = (pos - static_cast<double>(k)) * 0.5;  // giây trong nốt
+          const double glide = std::clamp((into - 0.44) / 0.06, 0.0, 1.0);
+          const double f = a * std::pow(b / a, glide);
+          const double vib = into > 0.15 ? 30.0 * std::sin(2 * kPi * 5.5 * t) : 0.0;
+          return f * cents(vib);
+        },
+        0.12, 0.5, fadeIo);
+  }
+  std::vector<float> out(2 * frames);
+  for (std::size_t i = 0; i < frames; ++i) {
+    out[2 * i] = static_cast<float>(l[i]);
+    out[2 * i + 1] = static_cast<float>(r[i]);
+  }
+  return out;
+}
+
+double logSpectralDistanceDb(const std::vector<float>& out, const std::vector<float>& ideal,
+                             double rate, double lowHz, double highHz) {
+  const std::vector<float> a = monoOf(out);
+  const std::vector<float> b = monoOf(ideal);
+  const std::size_t len = std::min(a.size(), b.size());
+  constexpr std::size_t kN = 2048;
+  constexpr std::size_t kHop = 512;
+  RealFft fft(kN);
+  std::vector<float> win(kN);
+  for (std::size_t i = 0; i < kN; ++i) {
+    win[i] = static_cast<float>(0.5 - 0.5 * std::cos(2.0 * kPi * static_cast<double>(i) / kN));
+  }
+  const auto lo = static_cast<std::size_t>(lowHz / rate * kN);
+  const auto hi = static_cast<std::size_t>(highHz / rate * kN);
+  const auto skip = static_cast<std::size_t>(0.3 * rate);
+  std::vector<float> buf(kN);
+  std::vector<std::complex<float>> spec(fft.bins());
+  std::vector<std::vector<double>> pa;
+  std::vector<std::vector<double>> pb;
+  double peak = 0.0;
+  for (std::size_t s = skip; s + kN + skip <= len; s += kHop) {
+    for (int which = 0; which < 2; ++which) {
+      const std::vector<float>& x = which == 0 ? a : b;
+      for (std::size_t i = 0; i < kN; ++i) buf[i] = win[i] * x[s + i];
+      fft.forward(buf.data(), spec.data());
+      std::vector<double> p(hi - lo);
+      for (std::size_t k = lo; k < hi; ++k) p[k - lo] = std::norm(std::complex<double>(spec[k]));
+      if (which == 1) {
+        for (double v : p) peak = std::max(peak, v);
+        pb.push_back(std::move(p));
+      } else {
+        pa.push_back(std::move(p));
+      }
+    }
+  }
+  const double floor = peak * 1e-6;  // −60 dB
+  const double eps = peak * 1e-9;
+  double sum = 0.0;
+  std::size_t count = 0;
+  for (std::size_t f = 0; f < pb.size(); ++f) {
+    for (std::size_t k = 0; k < pb[f].size(); ++k) {
+      if (pb[f][k] < floor) continue;
+      const double d = 10.0 * std::log10((pa[f][k] + eps) / (pb[f][k] + eps));
+      sum += d * d;
+      ++count;
+    }
+  }
+  return count == 0 ? kNaN : std::sqrt(sum / static_cast<double>(count));
 }
 
 }  // namespace tonecore::test

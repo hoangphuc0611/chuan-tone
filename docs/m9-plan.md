@@ -212,4 +212,4 @@ Mỗi bước: commit + push + CI xanh. Cuối M9a: báo cáo số đo + IPA m�
 
 ## 9. Tiến độ
 
-- [x] B1 (2026-11-20) · [x] B2 (2026-11-20) · [x] B3 (2026-11-20, số đo: `docs/m9-results.md`) · [x] B4 (2026-11-20) · [x] B5 (2026-11-20) · [x] B6 (2026-11-20: `docs/release-checklist.md`, `docs/privacy-policy.md`, `docs/store-listing.md`, `docs/patent-review.md`; CI kiểm license + đo kích thước) · [ ] B7 (để lại: không bắt buộc, cần bạn nghe A/B mù — làm khi bạn muốn; hướng dẫn thử máy thật: `docs/m9-device-test.md`)
+- [x] B1 (2026-11-20) · [x] B2 (2026-11-20) · [x] B3 (2026-11-20, số đo: `docs/m9-results.md`) · [x] B4 (2026-11-20) · [x] B5 (2026-11-20) · [x] B6 (2026-11-20: `docs/release-checklist.md`, `docs/privacy-policy.md`, `docs/store-listing.md`, `docs/patent-review.md`; CI kiểm license + đo kích thước) · [x] B7 (2026-11-20: thử 6 cấu hình / biến thể bằng thước đo mới, không cái nào tốt hơn → giữ nguyên engine; `docs/stretch-results.md` mục M9). Hướng dẫn thử máy thật: `docs/m9-device-test.md`

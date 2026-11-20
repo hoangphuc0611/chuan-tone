@@ -274,3 +274,40 @@ mới.)
 Chỉ tiêu tốc độ hạ từ 100× xuống 80× ở B3: luồng nền render đi trước đầu phát nên người dùng chỉ chờ
 đoạn đầu, tổng thời gian chỉ ảnh hưởng pin. Nếu đo trên iPhone vượt 4 s / bài: FFT nhanh hơn (vDSP /
 PFFFT). Bỏ chỉ tiêu "Δ LUFS ≤ 0,5 trên beat tổng hợp" của B1 (xem B2).
+
+## M9 B7 — thử làm nâng tone +4…+6 bớt "phơ" (2026-11-20)
+
+**Mục tiêu.** Việc để lại từ M4: nghe A/B lần 2 thấy nâng tone "hơi méo / phơ" nhiều hơn Signalsmith
+một chút.
+
+**Thước đo mới** (`beatlab phasiness`, `test::movingPitchSignal` + `test::logSpectralDistanceDb`).
+Bộ tín hiệu M4 toàn nốt đứng yên, nên không bắt được tiếng phơ: ở đó ToneCore đã hơn Signalsmith
+nhiều, năng lượng ngoài hoạ âm −67 / −41 dB so với −50 / −19 dB ở +4. Bộ mới có cao độ di động:
+- hợp âm 4 nốt có rung ±35 cent kèm chorus +7 cent;
+- giai điệu lướt nốt có rung trên nền pad.
+
+Đáp án dựng sẵn ở đúng mức tone (tổng hợp lại với mọi tần số × β). Chỉ số là khoảng cách phổ log
+(dB, RMS) giữa bản ra và đáp án, STFT 2048, dải 60 Hz – 8 kHz; không phụ thuộc pha. Càng nhỏ càng tốt.
+
+| Cấu hình (+4 / +6) | Hợp âm rung + chorus | Giai điệu lướt + pad | Ghi chú |
+|---|---|---|---|
+| **Hiện tại** (FFT 4096, bước 1024, khoá pha identity) | **7,59 / 8,07** | **3,77 / 4,26** | |
+| Signalsmith Stretch (mốc) | 7,69 / 7,95 | 3,96 / 4,43 | ToneCore hơn ở dải < 1,2 kHz, ngang ở dải cao |
+| FFT 2048, bước 512 (cửa sổ ngắn — hướng ghi ở M4) | 8,18 / 9,02 | 5,77 / 7,95 | tệ hơn ở cả dải thấp lẫn dải cao |
+| FFT 2048, bước 256 | 8,25 / 9,24 | 6,19 / 8,33 | tệ hơn |
+| FFT 4096, bước 512 (chồng khung ×8) | 7,65 / 8,22 | 4,06 / 4,67 | tệ hơn chút |
+| FFT 8192, bước 1024 | 7,59 / 7,88 | 4,59 / 5,04 | hợp âm nhích tốt hơn, giai điệu tệ hơn |
+| Khoá pha "scaled", s = β (Laroche & Dolson 1999) | 7,65 / 8,28 | 4,91 / 6,04 | tệ hơn |
+| Khoá pha "scaled", s = 1,15 | 7,56 / 8,01 | 4,28 / 4,60 | lẫn lộn |
+
+**Kết luận.**
+- Không cấu hình nào tốt hơn cấu hình hiện tại, nên engine giữ nguyên. Đã gỡ phần thử khoá pha
+  "scaled".
+- Trên tín hiệu có cao độ di động, ToneCore ngang hoặc hơn Signalsmith. Chỗ Signalsmith được chọn
+  hơn khi nghe beat thật (2 / 8 mục, còn lại "như nhau") chưa có thước đo khách quan nào bắt được.
+- Muốn đi tiếp phải đổi hẳn cách tính pha. Ứng viên: PGHI (Průša & Holighaus 2017), tích phân
+  gradient pha thay cho khoá theo đỉnh. Việc lớn, lợi ích chưa chắc, và chỉ chấm được bằng tai —
+  chỉ làm khi có vòng nghe A/B mới.
+- Giữ lại thước đo làm test chặn hồi quy: `PitchShifter.MovingPitchCloseToIdeal`, ±4, tín hiệu
+  2,5 s, ngưỡng 8,0 / 4,4 dB.
+

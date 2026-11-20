@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <cstdio>
 
 #include "util/stretch_eval.h"
 #include "util/synth_music.h"
@@ -138,6 +139,23 @@ TEST(PitchShifter, LowSpectralClutter) {
             .offPartialDb,
         -35.0)
         << n;
+  }
+}
+
+// (M9 B7) Cao độ di động — hợp âm có rung + chorus, giai điệu lướt nốt — gần đáp án dựng sẵn:
+// khoảng cách phổ log ≤ 8,0 / 4,4 dB ở ±4 (2026-11-20: 7,3–7,6 / 3,8; Signalsmith 7,2–7,7 /
+// 3,8–4,0; cửa sổ 2048 tệ hơn: 8,2 / 5,8 ở +4 — docs/stretch-results.md mục M9).
+TEST(PitchShifter, MovingPitchCloseToIdeal) {
+  for (const int n : {-4, 4}) {
+    const double beta = std::pow(2.0, n / 12.0);
+    for (int kind = 0; kind < 2; ++kind) {
+      const auto src = test::movingPitchSignal(kind, 1.0, 2.5);
+      const auto ideal = test::movingPitchSignal(kind, beta, 2.5);
+      const auto y = pitchShiftBuffer(src.data(), src.size() / 2, 2, n);
+      const double d = test::logSpectralDistanceDb(y, ideal);
+      std::printf("[moving-pitch] mức %+d, tín hiệu %d: %.2f dB\n", n, kind, d);
+      EXPECT_LE(d, kind == 0 ? 8.0 : 4.4) << "mức " << n << ", tín hiệu " << kind;
+    }
   }
 }
 

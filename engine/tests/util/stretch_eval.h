@@ -73,4 +73,18 @@ MelodySignal melodySignal(double seconds, double rate = 48000.0, uint32_t seed =
 std::vector<int> misplacedNotes(const MelodySignal& sig, const std::vector<float>& out,
                                 double semitones, uint64_t outStart = 0);
 
+// (M9 B7) Tín hiệu có cao độ KHÔNG đứng yên — tiếng "phơ" của phase vocoder lộ ra ở đây (bộ trên
+// toàn nốt đứng yên nên không thấy): kind 0 = hợp âm 4 nốt có rung (5–6 Hz, ±35 cent, lệch pha) +
+// bản chorus lệch +7 cent mỗi nốt; kind 1 = giai điệu lướt nốt có rung trên nền pad hai nốt. Tổng
+// hợp cộng hoạ âm với pha tích phân. `ratio` nhân mọi tần số (giữ nhịp rung, đường bao) → ratio =
+// 2^(n/12) dựng luôn đáp án của mức n. Chỉ có hoạ âm gốc ≤ 5,5 kHz (đáp án ≤ 8 kHz tới +6).
+std::vector<float> movingPitchSignal(int kind, double ratio, double seconds = 4.0,
+                                     double rate = 48000.0);
+
+// Khoảng cách phổ log (dB, RMS) giữa `out` và `ideal` (stereo interleaved, cùng độ dài): STFT Hann
+// 2048 / bước 512 của bản mono, bin 60 Hz – 8 kHz mà đáp án ≥ đỉnh − 60 dB, bỏ 0,3 s đầu / cuối.
+// Không phụ thuộc pha → đo đúng độ "nhoè / rung / phơ" của biên độ phổ.
+double logSpectralDistanceDb(const std::vector<float>& out, const std::vector<float>& ideal,
+                             double rate = 48000.0, double lowHz = 60.0, double highHz = 8000.0);
+
 }  // namespace tonecore::test
