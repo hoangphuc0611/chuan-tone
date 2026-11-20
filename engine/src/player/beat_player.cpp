@@ -23,37 +23,45 @@ BeatPlayer::BeatPlayer(uint32_t sampleRate)
 // Audio thread đã dừng: mọi con trỏ thô đều thuộc liveTracks_ / liveTransposed_, tự huỷ theo.
 BeatPlayer::~BeatPlayer() = default;
 
+bool BeatPlayer::pushLoad(const Track* track, bool unload) {
+  // Trạng thái chờ đặt TRƯỚC khi tăng thế hệ: hàm đọc thấy "đang chờ" là thấy luôn vị trí 0.
+  playing_.store(false, std::memory_order_relaxed);
+  seekRequest_.store(-1, std::memory_order_relaxed);
+  pendingPos_.store(0, std::memory_order_relaxed);
+  const uint32_t prev = loadGen_.load(std::memory_order_relaxed);  // chỉ luồng này ghi
+  loadGen_.store(prev + 1, std::memory_order_release);
+  if (!incoming_.push(Command{track, nullptr, unload, prev + 1})) {
+    loadGen_.store(prev, std::memory_order_release);
+    return false;
+  }
+  // position_ / ended_ / audible_ của beat mới do audio thread ghi lúc nhận lệnh (adoptCommands);
+  // tới lúc đó hàm đọc trả trạng thái chờ.
+  return true;
+}
+
 bool BeatPlayer::setTrack(std::shared_ptr<const Track> track) {
   collectGarbage();
   if (!track) return false;
-  if (!incoming_.push(Command{track.get(), nullptr, false})) return false;
+  if (!pushLoad(track.get(), false)) return false;
   const uint64_t frames = track->frames;
   liveTracks_.push_back(std::move(track));
-  playing_.store(false, std::memory_order_relaxed);
-  seekRequest_.store(-1, std::memory_order_relaxed);
-  position_.store(0, std::memory_order_relaxed);
   hasVocal_.store(liveTracks_.back()->hasVocal(), std::memory_order_relaxed);
   duration_.store(frames, std::memory_order_relaxed);
-  ended_.store(false, std::memory_order_relaxed);
   return true;
 }
 
 bool BeatPlayer::setTransposed(std::shared_ptr<TransposedTrack> track) {
   collectGarbage();
-  if (!incoming_.push(Command{nullptr, track.get(), false})) return false;
+  if (!incoming_.push(Command{nullptr, track.get(), false, 0})) return false;
   if (track) liveTransposed_.push_back(std::move(track));
   return true;
 }
 
 bool BeatPlayer::unload() {
   collectGarbage();
-  if (!incoming_.push(Command{nullptr, nullptr, true})) return false;
-  playing_.store(false, std::memory_order_relaxed);
-  seekRequest_.store(-1, std::memory_order_relaxed);
-  position_.store(0, std::memory_order_relaxed);
+  if (!pushLoad(nullptr, true)) return false;
   hasVocal_.store(false, std::memory_order_relaxed);
   duration_.store(0, std::memory_order_relaxed);
-  ended_.store(false, std::memory_order_relaxed);
   return true;
 }
 
@@ -71,6 +79,7 @@ void BeatPlayer::pause() noexcept {
 void BeatPlayer::seekFrames(uint64_t frame) noexcept {
   const uint64_t clamped = std::min(frame, durationFrames());
   seekRequest_.store(static_cast<int64_t>(clamped), std::memory_order_relaxed);
+  pendingPos_.store(clamped, std::memory_order_relaxed);
   position_.store(clamped, std::memory_order_relaxed);
 }
 
@@ -123,7 +132,13 @@ void BeatPlayer::adoptCommands() noexcept {
       xfade_ = 0;
       cursor_ = 0;
       fade_ = 0.0f;
+      // Trạng thái công bố của beat mới, ghi xong rồi mới công bố thế hệ (hàm đọc thôi trả trạng
+      // thái chờ đúng lúc các giá trị này đã đúng). Cờ hết bài của beat cũ bị xoá ở đây.
       audible_.store(0, std::memory_order_relaxed);
+      starved_.store(false, std::memory_order_relaxed);
+      ended_.store(false, std::memory_order_relaxed);
+      position_.store(pendingPos_.load(std::memory_order_relaxed), std::memory_order_relaxed);
+      adoptedGen_.store(cmd.gen, std::memory_order_release);
       continue;
     }
     // Đổi tone: bản chờ cũ (chưa kịp nghe) bị thay luôn.
@@ -187,7 +202,9 @@ void BeatPlayer::render(float* outStereo, float* voiceOut, uint32_t frames) noex
     }
     active_ = next_;
     hasNext_ = false;
-    audible_.store(active_ != nullptr ? active_->semitones : 0, std::memory_order_relaxed);
+    if (current()) {
+      audible_.store(active_ != nullptr ? active_->semitones : 0, std::memory_order_relaxed);
+    }
   }
 
   const bool wantPlay = playing_.load(std::memory_order_relaxed) && track_ != nullptr;
@@ -195,6 +212,7 @@ void BeatPlayer::render(float* outStereo, float* voiceOut, uint32_t frames) noex
   if (voiceOut != nullptr) std::fill(voiceOut, voiceOut + frames, 0.0f);
   if (track_ == nullptr || (!wantPlay && fade_ <= 0.0f)) {
     std::fill(outStereo, outStereo + 2 * static_cast<std::size_t>(frames), 0.0f);
+    if (!current()) return;  // beat mới vừa đưa tới giữa block: không ghi trạng thái beat cũ
     starved_.store(false, std::memory_order_relaxed);
     if (track_ != nullptr && seekRequest_.load(std::memory_order_relaxed) < 0) {
       position_.store(cursor_, std::memory_order_relaxed);
@@ -253,6 +271,8 @@ void BeatPlayer::render(float* outStereo, float* voiceOut, uint32_t frames) noex
     }
     ++cursor_;
   }
+  // Beat mới vừa đưa tới trong lúc block này chạy: trạng thái dưới đây là của beat cũ → bỏ.
+  if (!current()) return;
   starved_.store(starved, std::memory_order_relaxed);
 
   if (cursor_ >= total && wantPlay) {

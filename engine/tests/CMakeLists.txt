@@ -38,6 +38,7 @@ add_executable(tonecore_tests
   unit/pitch_shifter_test.cpp
   unit/transient_detector_test.cpp
   unit/beat_transpose_test.cpp
+  unit/beat_player_load_test.cpp
   unit/engine_m4_test.cpp
   unit/engine_m5_test.cpp
   unit/engine_m8_test.cpp

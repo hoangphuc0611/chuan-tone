@@ -27,6 +27,10 @@ namespace tonecore {
 //    tone 0 = về beat gốc (luôn sẵn) → chuyển ngay.
 //  - Vị trí phát rơi vào khối chưa render (vừa tua tới vùng mới): phát im lặng, vị trí đứng yên
 //    (như đang tải) tới khi khối xong, rồi fade vào 5 ms.
+//  - (M9, vấn đề #11) Mỗi lần đổi / gỡ beat có một số thế hệ (`loadGen_`). Audio thread ghi lại thế
+//    hệ đã nhận (`adoptedGen_`). Còn lệch (beat mới chưa được nhận — engine báo "nạp xong" ngay khi
+//    đưa lệnh) thì các hàm đọc trả trạng thái của beat mới (vị trí 0 / chỗ vừa tua, tone 0, không
+//    chờ khối, chưa hết bài), và audio thread không ghi trạng thái của beat cũ đè lên.
 class BeatPlayer {
  public:
   explicit BeatPlayer(uint32_t sampleRate);
@@ -51,15 +55,26 @@ class BeatPlayer {
   void pause() noexcept;
   void seekFrames(uint64_t frame) noexcept;
   bool isPlaying() const noexcept { return playing_.load(std::memory_order_relaxed); }
-  uint64_t positionFrames() const noexcept { return position_.load(std::memory_order_relaxed); }
+  uint64_t positionFrames() const noexcept {
+    return pending() ? pendingPos_.load(std::memory_order_relaxed)
+                     : position_.load(std::memory_order_relaxed);
+  }
   uint64_t durationFrames() const noexcept { return duration_.load(std::memory_order_relaxed); }
   bool hasTrack() const noexcept { return duration_.load(std::memory_order_relaxed) > 0; }
   // true một lần sau khi phát hết bài (đọc xong thì xoá cờ).
-  bool consumeEnded() noexcept { return ended_.exchange(false, std::memory_order_acq_rel); }
+  bool consumeEnded() noexcept {
+    return !pending() && ended_.exchange(false, std::memory_order_acq_rel);
+  }
   // Số nửa cung của bản đang NGHE (đổi lúc bắt đầu crossfade sang bản mới).
-  int audibleSemitones() const noexcept { return audible_.load(std::memory_order_relaxed); }
+  int audibleSemitones() const noexcept {
+    return pending() ? 0 : audible_.load(std::memory_order_relaxed);
+  }
   // true khi đang chờ khối chưa render tại vị trí phát.
-  bool starved() const noexcept { return starved_.load(std::memory_order_relaxed); }
+  bool starved() const noexcept { return !pending() && starved_.load(std::memory_order_relaxed); }
+  // Beat vừa đổi / gỡ mà audio thread chưa nhận.
+  bool pending() const noexcept {
+    return adoptedGen_.load(std::memory_order_acquire) != loadGen_.load(std::memory_order_acquire);
+  }
   // (M6) Beat có stem giọng: phát phần nhạc + k · giọng; k 0…1 trượt 20 ms (0 = karaoke).
   void setVocalGain(float k) noexcept { vocalGain_.setTarget(k); }
   float vocalGain() const noexcept { return vocalGain_.target(); }
@@ -80,6 +95,7 @@ class BeatPlayer {
     const Track* track;   // != nullptr: beat mới
     TransposedTrack* tt;  // bản đổi tone (nullptr = beat gốc)
     bool unload;          // gỡ beat (track / tt bỏ qua)
+    uint32_t gen;         // beat mới / gỡ: số thế hệ
   };
   struct Retired {
     const Track* track;
@@ -87,6 +103,13 @@ class BeatPlayer {
   };
 
   void adoptCommands() noexcept;
+  // Luồng nền: đặt trạng thái chờ của beat mới / gỡ beat rồi đưa lệnh cho audio thread.
+  bool pushLoad(const Track* track, bool unload);
+  // [RT] Audio thread đã nhận lệnh đổi beat mới nhất (được ghi trạng thái phát).
+  bool current() const noexcept {
+    return adoptedGen_.load(std::memory_order_relaxed) ==
+           loadGen_.load(std::memory_order_acquire);
+  }
   void retire(const Track* track, TransposedTrack* tt) noexcept;
   bool available(const TransposedTrack* src, uint64_t frame) const noexcept;
   // Phần nhạc (+ g · giọng nếu có stem giọng) tại `frame`.
@@ -127,6 +150,11 @@ class BeatPlayer {
   std::atomic<int> audible_{0};
   std::atomic<bool> starved_{false};
   std::atomic<bool> hasVocal_{false};
+  // Số thế hệ beat: luồng nền tăng khi đổi / gỡ beat; audio thread ghi lại khi nhận (#11).
+  std::atomic<uint32_t> loadGen_{0};
+  std::atomic<uint32_t> adoptedGen_{0};
+  // Vị trí trả về khi beat mới chưa được nhận (0, hoặc chỗ vừa tua tới).
+  std::atomic<uint64_t> pendingPos_{0};
   SmoothedParam vocalGain_{0.0f, 0.0f, 1.0f};
 };
 
