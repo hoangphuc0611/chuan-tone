@@ -45,6 +45,23 @@ jobs:
           (cd ipa && zip -qry ../ChuanTone.ipa Payload)
           ls -la ChuanTone.ipa
 
+      # M9 B6: kích thước app (chỉ tiêu mục 7: ≤ 80 MB). App Store nén lại theo từng máy nên số tải
+      # về thật nằm giữa cỡ IPA và cỡ đã giải nén.
+      - name: Kích thước app
+        run: |
+          set -euo pipefail
+          IPA=$(stat -f %z ChuanTone.ipa)
+          APP=$(du -sk ipa/Payload/Runner.app | cut -f1)
+          {
+            echo "### Kích thước bản iOS"
+            echo "| | MB |"
+            echo "|---|---|"
+            echo "| IPA (nén) | $(echo "scale=1; $IPA/1048576" | bc) |"
+            echo "| Runner.app (giải nén) | $(echo "scale=1; $APP/1024" | bc) |"
+            echo "| Chỉ tiêu (mục 7) | 80 |"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          test "$APP" -le $((80 * 1024)) || { echo "Vượt 80 MB"; exit 1; }
+
       - uses: actions/upload-artifact@v4
         with:
           name: ChuanTone-ipa

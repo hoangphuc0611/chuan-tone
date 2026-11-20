@@ -35,6 +35,11 @@ jobs:
           flutter pub get
           flutter analyze
           TONECORE_LIB=$GITHUB_WORKSPACE/engine/build/host/libtonecore.so flutter test
+      # M9 B6: license mọi gói Dart (MIT / BSD / Apache-2.0 / Zlib / ISC, ngoại lệ ghi ở docs/licenses.md).
+      - name: Kiểm license gói Dart
+        run: |
+          python3 -m unittest discover -v tools/licenses/tests
+          python3 tools/licenses/check_dart_licenses.py
 
   android:
     name: build APK
@@ -54,6 +59,22 @@ jobs:
         run: |
           unzip -l app/build/app/outputs/flutter-apk/app-debug.apk | grep -E "lib/arm64-v8a/libtonecore.so"
           unzip -l app/build/app/outputs/flutter-apk/app-debug.apk | grep -E "lib/arm64-v8a/liboboe.so"
+      # M9 B6: cỡ bản release arm64 (bản debug có thêm mã gỡ lỗi Dart, to hơn nhiều — không dùng để so).
+      - name: Kích thước APK release (arm64)
+        working-directory: app
+        run: |
+          set -euo pipefail
+          flutter build apk --release --split-per-abi --target-platform android-arm64
+          APK=build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          SIZE=$(stat -c %s "$APK")
+          {
+            echo "### Kích thước bản Android"
+            echo "| | MB |"
+            echo "|---|---|"
+            echo "| APK release arm64-v8a | $(echo "scale=1; $SIZE/1048576" | bc) |"
+            echo "| Chỉ tiêu (mục 7) | 80 |"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          test "$SIZE" -le $((80 * 1048576)) || { echo "Vượt 80 MB"; exit 1; }
       - uses: actions/upload-artifact@v4
         with: { name: chuantone-debug-apk, path: app/build/app/outputs/flutter-apk/app-debug.apk }
 

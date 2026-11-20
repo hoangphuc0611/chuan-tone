@@ -58,6 +58,8 @@ Lịch sử đo độ trễ lưu bằng file JSON (`app/lib/data/latency_history
 
 Quyền micro tự làm trong plugin (Java + AVAudioSession), không dùng `permission_handler`: bản mới nhất đòi Android SDK 37 mà bộ build hiện tại (AGP 9.1) chưa hỗ trợ.
 
+**Kiểm tự động (M9 B6):** CI chạy `tools/licenses/check_dart_licenses.py`. Script đọc `app/pubspec.lock`, nhận dạng license của từng gói trong pub cache, báo lỗi nếu ngoài MIT / BSD / Apache-2.0 / Zlib / ISC (trừ ngoại lệ dưới đây) hoặc gói phụ thuộc trực tiếp chưa có tên trong file này.
+
 **Phụ thuộc gián tiếp cần lưu ý:** `dbus` (MPL-2.0) bị kéo vào bởi `file_picker_linux` – chỉ dùng cho bản Linux desktop, **không** được build vào app Android/iOS. Toàn bộ phụ thuộc Dart khác là MIT/BSD/Apache-2.0 (kiểm tra ngày 2026-10-20).
 
 ## Nội dung đóng gói trong app
